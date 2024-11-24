@@ -47,3 +47,4 @@ def delete_domain(key: str):
     domain.active = False
     db.update_domain(domain)
     return "OK"
+

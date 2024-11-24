@@ -1,9 +1,14 @@
 import socket
 import idna
 import uuid
+import re
+import time
+from datetime import datetime
 
 import requests
 from bs4 import BeautifulSoup
+
+from modules.qwhois import WhoisEntry
 
 
 class Domain:
@@ -91,13 +96,32 @@ class Domain:
             "exp_time": self.exp_time
         }
 
-    def parse_whois(self, whois_data: str):
+    @staticmethod
+    def convert_to_timestamp(date_str: str) -> int:
+        date_formats = [
+            "%Y-%m-%d %H:%M:%S",
+        ]
+
+        for date_format in date_formats:
+            try:
+                dt = datetime.strptime(date_str, date_format)
+                return int(time.mktime(dt.timetuple()))
+            except ValueError:
+                continue
+
+        raise ValueError(f"Unknown date format: {date_str}")
+
+    def parse_whois(self) -> dict:
         """
         解析WHOIS数据
         :param whois_data:
         :return:
         """
+        # TODO: 解析WHOIS数据
+        whois_data: str = self.query_whois()
+        whois_p: WhoisEntry = WhoisEntry.load(self.domain, whois_data)
+        return whois_p
 
 if __name__ == "__main__":
-    domain = Domain("原神.org")
-    print(domain.query_whois())
+    domain = Domain("m.us")
+    print(domain.parse_whois())
