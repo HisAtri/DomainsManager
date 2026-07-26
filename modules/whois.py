@@ -1,8 +1,6 @@
 import socket
-import idna
 
-import requests
-from bs4 import BeautifulSoup
+from abc import ABC, abstractmethod
 
 
 def query_whois(domain: str, whois_server: str) -> str:
@@ -20,30 +18,9 @@ def query_whois(domain: str, whois_server: str) -> str:
     s.close()
     return response.decode()
 
+class Whois(ABC):
+    """
+    WHOIS报文解析基类；子类需要按照对应后缀 WHOIS 报文的格式，解码出对应信息
+    """
+    ...
 
-def get_whois_server(tld: str) -> str:
-    url = f"https://www.iana.org/domains/root/db/{tld}.html"
-    response = requests.get(url)
-    if response.status_code != 200:
-        raise Exception(f"Failed to retrieve data for TLD {tld}")
-    soup = BeautifulSoup(response.text, 'html.parser')
-    whois_server_tag = soup.find("b", string="WHOIS Server:")
-
-    if whois_server_tag:
-        whois_server = whois_server_tag.next_sibling.strip()
-        return whois_server
-    else:
-        raise Exception(f"WHOIS Server information not found for TLD {tld}")
-
-
-def get_tld(domain: str) -> str|None:
-    try:
-        # 尝试将域名解码为IDNA格式
-        _domain = idna.encode(domain).decode('utf-8')
-    except idna.IDNAError:
-        return None
-
-    return _domain.split('.')[-1]
-
-if __name__ == "__main__":
-    print(get_tld("app.中国"))

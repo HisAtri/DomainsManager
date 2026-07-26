@@ -1,127 +1,105 @@
-import socket
-import idna
-import uuid
-import re
-import time
 from datetime import datetime
+from typing import Literal
 
-import requests
-from bs4 import BeautifulSoup
-
-from modules.qwhois import WhoisEntry
-
-
-class Domain:
-    def __init__(self, domain_name: str):
-        # 主要数据，储存于 domains 表
-        self.name = domain_name.lower()
-        self.whois_server: str = None
-        self.uuid: str = None
-        self.active: bool = True
-        # 常量，自动生成，不可更改
-        self.domain: str = None
-        self.idn_domain: str = None
-        self.tld: str = None
-        self.idn_tld: str = None
-        # 可变数据，储存于 datas 表
-        self.reg_time: int = None
-        self.upd_time: int = None
-        self.exp_time: int = None
-        self.datas: dict = dict()
-        # 初始化
-        self.get_tld()
-        self.get_whois_server()
-        self.uuid: str = uuid.uuid5(uuid.NAMESPACE_DNS, self.domain).hex
+import tldextract
+from pydantic import BaseModel, ConfigDict, Field
 
 
-    def __str__(self):
-        return self.name
+class RegistrarInfo(BaseModel):
+    """注册商信息"""
 
-    def query_whois(self) -> str:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect((self.whois_server, 43))
-        s.send((self.domain + "\r\n").encode())
-        response = b""
-        while True:
-            data = s.recv(4096)
-            if not data:
-                break
-            response += data
-        s.close()
-        return response.decode()
+    name: str | None = None
+    iana_id: int | None = None
+    url: str | None = None
 
-    def get_tld(self):
-        _domain = self.name
-        idn_domain = idna.encode(_domain).decode('utf-8')
-        punycode_domain = idn_domain
+    abuse_email: str | None = None
+    abuse_phone: str | None = None
 
-        idn_parts = _domain.split('.')
-        idn_tld = idn_parts[-1]
-        punycode_parts = punycode_domain.split('.')
-        punycode_tld = punycode_parts[-1]
+    def __str__(self) -> str:
+        return (f"Registrar: {self.name}\n"
+        f"IANA ID: {self.iana_id}\n"
+        f"Registrar URL: {self.url}\n"
+        f"Abuse Email: {self.abuse_email}\n"
+        f"Abuse Phone: {self.abuse_phone}\n")
 
-        # Punycode: 纯ASCII字符
-        # IDN: 国际化域名
-        # 内部逻辑默认使用前者
-        self.domain = punycode_domain
-        self.tld = punycode_tld
-        self.idn_domain = idn_domain
-        self.idn_tld = idn_tld
 
-    def get_whois_server(self):
-        url = f"https://www.iana.org/domains/root/db/{self.tld}.html"
-        response = requests.get(url)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        whois_server_tag = soup.find("b", string="WHOIS Server:")
-        if whois_server_tag:
-            self.whois_server = whois_server_tag.next_sibling.strip()
-        else:
-            print(f"WHOIS Server information not found for TLD {self.tld}")
+class DomainDates(BaseModel):
+    """域名生命周期时间"""
 
-    def update(self, data: dict):
-        for key, value in data.items():
-            setattr(self, key, value)
+    registered_at: datetime | None = None
+    expires_at: datetime | None = None
+    updated_at: datetime | None = None
 
-    def dump(self) -> dict:
-        return {
-            "name": self.name,
-            "whois_server": self.whois_server,
-            "uuid": self.uuid,
-            "active": self.active,
-            "domain": self.domain,
-            "idn_domain": self.idn_domain,
-            "tld": self.tld,
-            "idn_tld": self.idn_tld,
-            "reg_time": self.reg_time,
-            "exp_time": self.exp_time
-        }
+    def __str__(self) -> str:
+        return (f"Registered At: {self.registered_at}\n"
+        f"Expires At: {self.expires_at}\n"
+        f"Updated At: {self.updated_at}\n")
 
-    @staticmethod
-    def convert_to_timestamp(date_str: str) -> int:
-        date_formats = [
-            "%Y-%m-%d %H:%M:%S",
-        ]
 
-        for date_format in date_formats:
-            try:
-                dt = datetime.strptime(date_str, date_format)
-                return int(time.mktime(dt.timetuple()))
-            except ValueError:
-                continue
+class DNSSECInfo(BaseModel):
+    """DNSSEC 信息"""
 
-        raise ValueError(f"Unknown date format: {date_str}")
+    enabled: bool | None = None
+    
+    def __str__(self) -> str:
+        return (f"DNSSEC: {self.enabled}\n")
 
-    def parse_whois(self) -> dict:
+
+class DomainInfo(BaseModel):
+    """规范化后的域名核心信息"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    domain: str
+
+    registry_handle: str | None = None
+
+    registrar: RegistrarInfo | None = None
+
+    statuses: list[str] = Field(default_factory=list)
+
+    dates: DomainDates = Field(default_factory=DomainDates)
+
+    nameservers: list[str] = Field(default_factory=list)
+
+    dnssec: DNSSECInfo = Field(default_factory=DNSSECInfo)
+
+    source: Literal["rdap", "whois", "unknown"] = "unknown"
+    source_url: str | None = None
+    fetched_at: datetime | None = None
+
+    def __str__(self) -> str:
         """
-        解析WHOIS数据
-        :param whois_data:
-        :return:
+        返回标准的域名信息文本内容
         """
-        # TODO: 解析WHOIS数据
-        whois_data: str = self.query_whois()
-        whois_p: WhoisEntry = WhoisEntry.load(self.domain, whois_data)
-        return whois_p
+        return (f"Domain: {self.domain}\n"
+        f"Registry Handle: {self.registry_handle}\n"
+        f"Registrar\n {self.registrar}\n"
+        f"Statuses: {self.statuses}\n"
+        f"{self.dates}\n"
+        f"Nameservers:\n {'  \n'.join(self.nameservers)}\n"
+        f"{self.dnssec}\n"
+        f"Source: {self.source}\n"
+        f"Source URL: {self.source_url}\n"
+        f"Fetched At: {self.fetched_at}\n")
 
-if __name__ == "__main__":
-    domain = Domain("m.us")
-    print(domain.parse_whois())
+
+class Domain(BaseModel):
+    name: str
+    punycode: str | None = Field(None, description="Punycode 域名")
+    idn: str | None = Field(None, description="IDN 域名")
+    public_suffix: str | None = Field(None, description="公共后缀；如 com")
+    private_suffix: str | None = Field(None, description="私有后缀；如 example.com")
+    subdomain: str | None = Field(None, description="子域名；如 www")
+    domain: str | None = Field(None, description="域名；如 example")
+
+    def resolve_suffix(self) -> "Domain":
+        """解析域名的子域、主体、公共后缀和可注册域名。"""
+        extracted = tldextract.extract(self.name)
+
+        self.public_suffix = extracted.suffix or None
+        self.private_suffix = extracted.top_domain_under_public_suffix or None
+        self.subdomain = extracted.subdomain or None
+        self.domain = extracted.domain or None
+
+        return self
