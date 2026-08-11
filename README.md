@@ -17,27 +17,30 @@
 ```python
 import asyncio
 
-from modules.services import DomainLookupService
+from domainsmanager_lookup import DomainLookup, LookupOptions
 
 
 async def main() -> None:
-    service = DomainLookupService()
-    result = await service.lookup("www.example.com")
+    lookup = DomainLookup()
+    results = await lookup.lookup(["www.example.com"])
+    result = results[0]
 
-    print(result.domain)
-    print(result.info)
-    print(result.response_cache_hit)
+    if result.succeeded:
+        print(result.identity)
+        print(result.snapshot)
+    else:
+        print(result.error_code, result.error_message)
 
 
 asyncio.run(main())
 ```
 
-批量查询：
+批量查询使用同一个方法，并按输入顺序逐项返回成功或失败：
 
 ```python
-results = await service.lookup_many(
+results = await lookup.lookup(
     ["example.com", "example.net"],
-    concurrency=10,
+    options=LookupOptions(concurrency=10),
 )
 ```
 
@@ -46,12 +49,14 @@ results = await service.lookup_many(
 - [架构与本次重构说明](docs/architecture.md)
 - [ccTLD WHOIS Profile 扩展指南](docs/whois-profiles.md)
 - [数据库缓存接入指南](docs/cache-backends.md)
+- [数据库设计](docs/database-design.md)
 
 ## 测试
 
 ```powershell
-.venv\Scripts\python.exe -m unittest discover -v
+uv run pytest -m "not network" -ra
 ```
 
-当前缓存默认使用内存实现。后续接入数据库时，实现 `DomainResponseCache` 与
-`RegistryEndpointCache` 并注入 `DomainLookupService` 即可。
+`DomainLookup` 是业务层稳定入口，只公开域名标准化和批量查询两个方法。缓存、客户端、
+解析器和原始响应属于包内实现；高级缓存适配器通过 `domainsmanager_lookup.spi` 接入。
+旧 `modules.*` 导入路径暂时保留为兼容层。

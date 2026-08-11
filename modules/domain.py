@@ -1,30 +1,27 @@
-"""域名模型兼容入口；新代码优先从 ``modules.models`` 导入。"""
+"""Legacy domain model compatibility entry point."""
 
 from pydantic import BaseModel, Field
 
-from modules.models.domain import (
+from domainsmanager_lookup._internal.models.domain import (
     DNSSECInfo,
     DomainDates,
     DomainInfo,
     NormalizedDomain,
     RegistrarInfo,
 )
-from modules.normalization.domain import DomainNormalizer
+from domainsmanager_lookup._internal.normalization.domain import DomainNormalizer
 
 
 class Domain(BaseModel):
-    """旧版可变模型，保留用于兼容现有调用。"""
+    """Legacy mutable domain model retained for compatibility."""
 
     name: str
-    punycode: str | None = Field(None, description="Punycode 域名")
-    idn: str | None = Field(None, description="IDN 域名")
-    public_suffix: str | None = Field(None, description="公共后缀；如 com")
-    private_suffix: str | None = Field(
-        None,
-        description="可注册域名；如 example.com",
-    )
-    subdomain: str | None = Field(None, description="子域名；如 www")
-    domain: str | None = Field(None, description="域名主体；如 example")
+    punycode: str | None = Field(None, description="Punycode domain")
+    idn: str | None = Field(None, description="IDN domain")
+    public_suffix: str | None = None
+    private_suffix: str | None = None
+    subdomain: str | None = None
+    domain: str | None = None
 
     def resolve_suffix(self) -> "Domain":
         normalized = DomainNormalizer().normalize(self.name)

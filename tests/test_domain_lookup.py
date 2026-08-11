@@ -5,14 +5,17 @@ from datetime import datetime, timedelta, timezone
 
 import httpx
 
-from modules.cache.memory import MemoryDomainResponseCache, MemoryRegistryEndpointCache
-from modules.clients.iana import IanaClient
-from modules.models.registry import RegistryEndpoint
-from modules.models.response import RawLookupResponse
-from modules.normalization.domain import DomainNormalizer
-from modules.parsers.rdap import RdapParser
-from modules.parsers.whois import WhoisParser
-from modules.services.domain_lookup import DomainLookupService
+from domainsmanager_lookup._internal.cache.memory import (
+    MemoryDomainResponseCache,
+    MemoryRegistryEndpointCache,
+)
+from domainsmanager_lookup._internal.clients.iana import IanaClient
+from domainsmanager_lookup._internal.models.registry import RegistryEndpoint
+from domainsmanager_lookup._internal.models.response import RawLookupResponse
+from domainsmanager_lookup._internal.normalization.domain import DomainNormalizer
+from domainsmanager_lookup._internal.parsers.rdap import RdapParser
+from domainsmanager_lookup._internal.parsers.whois import WhoisParser
+from domainsmanager_lookup._internal.services.domain_lookup import DomainLookupService
 
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)

@@ -1,3 +1,1 @@
-from modules.normalization.domain import DomainNormalizer
-
-__all__ = ["DomainNormalizer"]
+from domainsmanager_lookup._internal.normalization import *  # noqa: F403

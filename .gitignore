@@ -164,3 +164,7 @@ appdata
 
 # uv
 uv.lock
+
+# ide
+.vscode/
+.zcode/

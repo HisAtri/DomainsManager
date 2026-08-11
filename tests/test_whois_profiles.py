@@ -1,15 +1,15 @@
 import unittest
 from datetime import datetime, timezone
 
-from modules.models.response import RawLookupResponse
-from modules.normalization.domain import DomainNormalizer
-from modules.parsers.whois import ProfiledWhoisParser
-from modules.whois_profiles.base import WhoisProfile
-from modules.whois_profiles.builtin.cn import create_cn_profile
-from modules.whois_profiles.key_value import KeyValueWhoisParser
-from modules.whois_profiles.models import WhoisResponseStatus
-from modules.whois_profiles.query import StandardWhoisQuery
-from modules.whois_profiles.registry import WhoisProfileRegistry
+from domainsmanager_lookup._internal.models.response import RawLookupResponse
+from domainsmanager_lookup._internal.normalization.domain import DomainNormalizer
+from domainsmanager_lookup._internal.parsers.whois import ProfiledWhoisParser
+from domainsmanager_lookup._internal.whois_profiles.base import WhoisProfile
+from domainsmanager_lookup._internal.whois_profiles.builtin.cn import create_cn_profile
+from domainsmanager_lookup._internal.whois_profiles.key_value import KeyValueWhoisParser
+from domainsmanager_lookup._internal.whois_profiles.models import WhoisResponseStatus
+from domainsmanager_lookup._internal.whois_profiles.query import StandardWhoisQuery
+from domainsmanager_lookup._internal.whois_profiles.registry import WhoisProfileRegistry
 
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)

@@ -26,42 +26,29 @@
 
 ## 2. 目录结构
 
+稳定业务入口位于 `domainsmanager_lookup` 包根，内部实现收在 `_internal`；原来的
+`modules` 路径仅作为迁移期兼容层：
+
 ```text
-modules/
-├── models/                 # 纯 Pydantic 数据模型
-│   ├── domain.py
-│   ├── registry.py
-│   └── response.py
-├── normalization/          # IDNA 与 Public Suffix 标准化
-│   └── domain.py
-├── cache/                  # 缓存抽象与临时内存实现
-│   ├── base.py
-│   └── memory.py
-├── clients/                # IANA、RDAP、WHOIS 网络客户端
-│   ├── base.py
-│   ├── iana.py
-│   ├── rdap.py
-│   └── whois.py
-├── parsers/                # RDAP 和 WHOIS 响应解析入口
-│   ├── base.py
-│   ├── rdap.py
-│   └── whois.py
-├── whois_profiles/         # 可插拔 ccTLD WHOIS 处理框架
-│   ├── base.py
-│   ├── registry.py
-│   ├── query.py
-│   ├── key_value.py
-│   ├── models.py
-│   ├── defaults.py
-│   └── builtin/
-├── services/
-│   └── domain_lookup.py    # 查询编排服务
-├── errors.py               # 统一异常类型
-├── domain.py               # 旧导入路径兼容入口
-├── rdap.py                 # 兼容入口
-├── suffix.py               # 兼容入口
-└── whois.py                # 兼容入口
+domainsmanager_lookup/
+├── __init__.py              # DomainLookup 与稳定 DTO/异常
+├── facade.py                # normalize、lookup 两个业务方法
+├── types.py
+├── exceptions.py
+├── spi.py                   # 高级缓存与组件协议
+└── _internal/
+    ├── models/
+    ├── normalization/
+    ├── cache/
+    ├── clients/
+    ├── parsers/
+    ├── whois_profiles/
+    └── services/
+modules/                     # 旧导入路径的薄兼容层
 ```
+
+业务代码不得导入 `_internal` 或 `modules`。`modules/qwhois.py` 不属于新包，继续作为
+待弃用代码保留。
 
 ## 3. 完整查询流程
 

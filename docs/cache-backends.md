@@ -2,12 +2,18 @@
 
 ## 1. 当前状态
 
-查询服务不直接依赖数据库。缓存通过两个抽象接口提供：
+查询核心不依赖数据库或 ORM。对外持久化边界是
+`domainsmanager_lookup.store.LookupStore`，只传递公开、不可变的
+`StoredLookupRecord` 和 `RefreshLease`。内部 adapter 负责将记录转换为端点和原始响应，
+数据库 adapter 不需要也不得导入 `_internal` 类型。
 
-- `DomainResponseCache`：缓存原始 RDAP/WHOIS 报文；
-- `RegistryEndpointCache`：缓存 IANA 发现的 WHOIS/RDAP 端点。
+默认 `MemoryLookupStore` 适用于开发和测试；生产使用
+`domainsmanager_persistence.SqlAlchemyLookupStore`。数据库将不可变历史
+`lookup_record` 与当前指针 `lookup_cache_head` 分开，损坏或解析失败的响应可以留作证据，
+但不会进入可复用 current head。
 
-默认实现是进程内内存缓存，仅适合开发和测试。
+旧 `DomainResponseCache` 和 `RegistryEndpointCache` 暂时保留为查询包内部 application
+ports 和兼容接口，不再建议由业务项目直接实现。
 
 ## 2. 原始报文缓存接口
 

@@ -1,3 +1,7 @@
+[build-system]
+requires = ["hatchling>=1.31.0"]
+build-backend = "hatchling.build"
+
 [project]
 name = "domainsmanager"
 version = "0.1.0"
@@ -12,6 +16,51 @@ dependencies = [
     "tldextract>=5.3.1",
 ]
 
+[project.optional-dependencies]
+persistence = [
+    "alembic>=1.19.0",
+    "asyncpg>=0.31.0",
+    "sqlalchemy[asyncio]>=2.0.51",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["domainsmanager_lookup", "domainsmanager_persistence", "modules"]
+exclude = ["modules/qwhois.py"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = ["--strict-markers", "--timeout=15"]
+markers = [
+    "unit: isolated unit tests",
+    "contract: public and adapter contract tests",
+    "integration: offline component integration tests",
+    "compat: legacy import compatibility tests",
+    "package: package boundary tests",
+    "network: tests that explicitly require external network access",
+    "concurrency: asynchronous concurrency tests",
+    "regression: tests for previously observed behavior",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["domainsmanager_lookup"]
+omit = ["*/__pycache__/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+
 [[tool.uv.index]]
 url="https://pypi.tuna.tsinghua.edu.cn/simple"
 default=true
+
+[dependency-groups]
+dev = [
+    "aiosqlite>=0.22.1",
+    "hatchling>=1.31.0",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "pytest-cov>=7.1.0",
+    "pytest-socket>=0.8.0",
+    "pytest-timeout>=2.4.0",
+]

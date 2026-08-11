@@ -2,10 +2,10 @@ import json
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from modules.errors import ResponseParseError
-from modules.models.response import RawLookupResponse
-from modules.normalization.domain import DomainNormalizer
-from modules.parsers.rdap import RdapParser
+from domainsmanager_lookup._internal.errors import ResponseParseError
+from domainsmanager_lookup._internal.models.response import RawLookupResponse
+from domainsmanager_lookup._internal.normalization.domain import DomainNormalizer
+from domainsmanager_lookup._internal.parsers.rdap import RdapParser
 
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
