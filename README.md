@@ -50,6 +50,7 @@ results = await lookup.lookup(
 - [ccTLD WHOIS Profile 扩展指南](docs/whois-profiles.md)
 - [数据库缓存接入指南](docs/cache-backends.md)
 - [数据库设计](docs/database-design.md)
+- [后端 API 规范](docs/api/README.md)
 
 ## 测试
 

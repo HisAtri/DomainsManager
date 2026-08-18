@@ -1,0 +1,1186 @@
+openapi: 3.1.0
+info:
+  title: DomainsManager API
+  version: 0.1.0
+  summary: DomainsManager 后端 API 初版契约
+  description: |
+    本文档定义计划中的 FastAPI HTTP 接口。当前仓库尚未实现这些路由。
+    所有时间均为 UTC RFC 3339 时间；除公开认证端点外均使用 Bearer Access Token。
+servers:
+  - url: /api/v1
+tags:
+  - name: Authentication
+  - name: Current user
+  - name: OAuth2
+  - name: Domains
+  - name: Tasks
+  - name: Admin users
+  - name: Admin domains
+security:
+  - bearerAuth: []
+paths:
+  /auth/register:
+    post:
+      tags: [Authentication]
+      operationId: registerUser
+      summary: 注册本地用户
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: 注册成功
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResult' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/login:
+    post:
+      tags: [Authentication]
+      operationId: login
+      summary: 使用用户名和密码登录
+      description: 采用 OAuth2 Password 风格表单。账号不存在、密码错误或账号不可用统一返回 `invalid_credentials`。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResult' }
+        '401': { $ref: '#/components/responses/AuthenticationFailed' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      operationId: logout
+      summary: 撤销当前会话
+      description: 使用 Refresh Token 标识待撤销会话；重复请求仍然成功。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshTokenRequest' }
+      responses:
+        '204': { description: 会话已撤销或原本不存在 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /auth/token/refresh:
+    post:
+      tags: [Authentication]
+      operationId: refreshToken
+      summary: 轮换 Refresh Token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshTokenRequest' }
+      responses:
+        '200':
+          description: Token 已轮换，原 Refresh Token 立即失效
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '401': { $ref: '#/components/responses/AuthenticationFailed' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/me:
+    get:
+      tags: [Current user]
+      operationId: getCurrentUser
+      summary: 获取当前用户
+      responses:
+        '200':
+          description: 当前用户
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    patch:
+      tags: [Current user]
+      operationId: updateCurrentUser
+      summary: 修改当前用户非安全资料
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema: { $ref: '#/components/schemas/UpdateCurrentUserRequest' }
+      responses:
+        '200':
+          description: 修改后的用户
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /auth/me/password:
+    post:
+      tags: [Current user]
+      operationId: changePassword
+      summary: 修改当前用户密码
+      description: 成功后撤销当前会话之外的全部会话，并写入安全审计。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePasswordRequest' }
+      responses:
+        '204': { description: 密码已修改 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/me/settings:
+    get:
+      tags: [Current user]
+      operationId: getCurrentUserSettings
+      summary: 获取白名单用户设置
+      responses:
+        '200':
+          description: 用户设置
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserSettings' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      tags: [Current user]
+      operationId: updateCurrentUserSettings
+      summary: 修改白名单用户设置
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema: { $ref: '#/components/schemas/UserSettingsPatch' }
+      responses:
+        '200':
+          description: 修改后的设置
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UserSettings' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /auth/oauth2/providers:
+    get:
+      tags: [OAuth2]
+      operationId: listOAuth2Providers
+      summary: 列出启用的第三方登录 Provider
+      security: []
+      responses:
+        '200':
+          description: Provider 列表，未配置时为空
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/OAuth2Provider' }
+  /auth/oauth2/{provider}/authorize:
+    get:
+      tags: [OAuth2]
+      operationId: beginOAuth2Authorization
+      summary: 开始第三方登录授权
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+        - name: redirect_uri
+          in: query
+          required: true
+          schema: { type: string, format: uri }
+      responses:
+        '200':
+          description: 短时有效的授权地址和一次性 state
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuth2Authorization' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/oauth2/{provider}/callback:
+    get:
+      tags: [OAuth2]
+      operationId: completeOAuth2Authorization
+      summary: 处理第三方登录回调
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+        - { name: code, in: query, required: true, schema: { type: string, minLength: 1 } }
+        - { name: state, in: query, required: true, schema: { type: string, minLength: 16 } }
+      responses:
+        '200':
+          description: 第三方登录成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuthResult' }
+        '401': { $ref: '#/components/responses/AuthenticationFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/me/oauth2/{provider}:
+    post:
+      tags: [OAuth2]
+      operationId: bindOAuth2Identity
+      summary: 绑定第三方身份
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OAuth2BindRequest' }
+      responses:
+        '201':
+          description: 绑定成功
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuth2Identity' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [OAuth2]
+      operationId: unbindOAuth2Identity
+      summary: 解绑第三方身份
+      description: 若解绑后用户没有任何可用登录方式，则返回冲突。
+      parameters:
+        - $ref: '#/components/parameters/Provider'
+      responses:
+        '204': { description: 已解绑或原本未绑定 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /admin/users:
+    get:
+      tags: [Admin users]
+      operationId: listUsers
+      summary: 查询用户
+      description: 需要 `admin` 角色。
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - { name: query, in: query, schema: { type: string, maxLength: 320 } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/UserStatus' } }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [created_at, -created_at, username, -username, last_login_at, -last_login_at]
+            default: -created_at
+      responses:
+        '200':
+          description: 用户分页结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUserPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/users/{user_id}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [Admin users]
+      operationId: getUserAsAdmin
+      summary: 查看用户详情
+      responses:
+        '200':
+          description: 管理员用户视图
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUser' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Admin users]
+      operationId: updateUserAsAdmin
+      summary: 修改用户资料
+      description: 不在本接口中修改角色、密码或账号封禁状态。
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema: { $ref: '#/components/schemas/AdminUpdateUserRequest' }
+      responses:
+        '200':
+          description: 修改后的用户
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUser' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /admin/users/{user_id}/ban:
+    post:
+      tags: [Admin users]
+      operationId: banUser
+      summary: 封禁用户并撤销其全部会话
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BanUserRequest' }
+      responses:
+        '200':
+          description: 已封禁的用户
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUser' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /admin/users/{user_id}/unban:
+    post:
+      tags: [Admin users]
+      operationId: unbanUser
+      summary: 解封用户
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: 已解封的用户
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminUser' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /admin/users/{user_id}/reset-password:
+    post:
+      tags: [Admin users]
+      operationId: beginPasswordResetAsAdmin
+      summary: 创建一次性密码重置流程
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminPasswordResetRequest' }
+      responses:
+        '202':
+          description: 重置流程已创建，不返回明文密码或重置 Token
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PasswordResetStatus' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /domains:
+    get:
+      tags: [Domains]
+      operationId: listDomains
+      summary: 查询当前用户管理的域名
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - { name: query, in: query, schema: { type: string, maxLength: 253 } }
+        - { name: monitor_enabled, in: query, schema: { type: boolean } }
+        - { name: expires_from, in: query, schema: { type: string, format: date-time } }
+        - { name: expires_to, in: query, schema: { type: string, format: date-time } }
+        - { name: last_outcome, in: query, schema: { $ref: '#/components/schemas/CheckOutcome' } }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [created_at, -created_at, name, -name, expires_at, -expires_at, last_check_at, -last_check_at]
+            default: name
+      responses:
+        '200':
+          description: 当前用户域名分页结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DomainPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Domains]
+      operationId: createDomain
+      summary: 新增管理域名
+      description: 输入通过 `DomainLookup.normalize()` 标准化；同一用户的 ASCII 域名唯一。`check_now` 仅创建异步刷新任务。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateDomainRequest' }
+      responses:
+        '201':
+          description: 域名已创建
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateDomainResult' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /domains/{domain_id}:
+    parameters:
+      - $ref: '#/components/parameters/DomainId'
+    get:
+      tags: [Domains]
+      operationId: getDomain
+      summary: 查看当前用户域名
+      responses:
+        '200':
+          description: 域名详情
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ManagedDomain' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Domains]
+      operationId: updateDomain
+      summary: 修改域名的本地管理属性
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema: { $ref: '#/components/schemas/UpdateDomainRequest' }
+      responses:
+        '200':
+          description: 修改后的域名
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ManagedDomain' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+    delete:
+      tags: [Domains]
+      operationId: deleteDomain
+      summary: 软删除当前用户域名
+      description: 从默认列表隐藏，保留历史检查和安全审计；重复删除仍然成功。
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204': { description: 域名已软删除或原本已删除 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /domains/{domain_id}/refresh:
+    post:
+      tags: [Domains]
+      operationId: refreshDomain
+      summary: 创建域名刷新任务
+      parameters:
+        - $ref: '#/components/parameters/DomainId'
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshDomainRequest' }
+      responses:
+        '202':
+          description: 刷新任务已接受
+          headers:
+            Location: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RefreshTask' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /domains/{domain_id}/checks:
+    get:
+      tags: [Domains]
+      operationId: listDomainChecks
+      summary: 查询域名检查历史
+      parameters:
+        - $ref: '#/components/parameters/DomainId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - { name: outcome, in: query, schema: { $ref: '#/components/schemas/CheckOutcome' } }
+        - { name: checked_from, in: query, schema: { type: string, format: date-time } }
+        - { name: checked_to, in: query, schema: { type: string, format: date-time } }
+      responses:
+        '200':
+          description: 检查历史分页结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DomainCheckPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /domains/{domain_id}/checks/{check_id}:
+    get:
+      tags: [Domains]
+      operationId: getDomainCheck
+      summary: 查看单次域名检查
+      description: 不暴露原始 WHOIS/RDAP 报文。
+      parameters:
+        - $ref: '#/components/parameters/DomainId'
+        - $ref: '#/components/parameters/CheckId'
+      responses:
+        '200':
+          description: 检查详情
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DomainCheck' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /tasks/{task_id}:
+    get:
+      tags: [Tasks]
+      operationId: getTask
+      summary: 查询当前用户的异步任务
+      parameters:
+        - $ref: '#/components/parameters/TaskId'
+      responses:
+        '200':
+          description: 任务状态
+          headers:
+            Retry-After:
+              description: 未完成时建议的轮询间隔（秒）
+              schema: { type: integer, minimum: 1 }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RefreshTask' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /admin/domains:
+    get:
+      tags: [Admin domains]
+      operationId: listDomainsAsAdmin
+      summary: 全局查询管理域名
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - { name: query, in: query, schema: { type: string, maxLength: 253 } }
+        - { name: user_id, in: query, schema: { type: string, format: uuid } }
+        - { name: public_suffix, in: query, schema: { type: string, maxLength: 253 } }
+        - { name: monitor_enabled, in: query, schema: { type: boolean } }
+        - { name: expires_from, in: query, schema: { type: string, format: date-time } }
+        - { name: expires_to, in: query, schema: { type: string, format: date-time } }
+        - { name: last_outcome, in: query, schema: { $ref: '#/components/schemas/CheckOutcome' } }
+        - name: deleted
+          in: query
+          schema: { type: string, enum: [exclude, include, only], default: exclude }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [created_at, -created_at, name, -name, expires_at, -expires_at, last_check_at, -last_check_at]
+            default: -created_at
+      responses:
+        '200':
+          description: 全局域名分页结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminDomainPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/domains/{domain_id}:
+    parameters:
+      - $ref: '#/components/parameters/DomainId'
+    get:
+      tags: [Admin domains]
+      operationId: getDomainAsAdmin
+      summary: 查看全局域名详情
+      responses:
+        '200':
+          description: 管理员域名视图
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminManagedDomain' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Admin domains]
+      operationId: updateDomainAsAdmin
+      summary: 修改全局域名本地属性或归属
+      description: "`owner_user_id` 变更必须单独记录审计事件。"
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/merge-patch+json:
+            schema: { $ref: '#/components/schemas/AdminUpdateDomainRequest' }
+      responses:
+        '200':
+          description: 修改后的域名
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminManagedDomain' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+    delete:
+      tags: [Admin domains]
+      operationId: deleteDomainAsAdmin
+      summary: 管理员软删除域名
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+        - name: X-Confirm-Action
+          in: header
+          required: true
+          schema: { type: string, const: soft-delete }
+      responses:
+        '204': { description: 域名已软删除或原本已删除 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /admin/domains/{domain_id}/refresh:
+    post:
+      tags: [Admin domains]
+      operationId: refreshDomainAsAdmin
+      summary: 管理员创建强制刷新任务
+      parameters:
+        - $ref: '#/components/parameters/DomainId'
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminRefreshDomainRequest' }
+      responses:
+        '202':
+          description: 刷新任务已接受并记录操作者
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RefreshTask' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+  /admin/domain-checks:
+    get:
+      tags: [Admin domains]
+      operationId: listDomainChecksAsAdmin
+      summary: 全局查询域名检查历史
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+        - { name: domain_id, in: query, schema: { type: string, format: uuid } }
+        - { name: user_id, in: query, schema: { type: string, format: uuid } }
+        - { name: outcome, in: query, schema: { $ref: '#/components/schemas/CheckOutcome' } }
+        - { name: protocol, in: query, schema: { type: string, enum: [rdap, whois] } }
+        - { name: checked_from, in: query, schema: { type: string, format: date-time } }
+        - { name: checked_to, in: query, schema: { type: string, format: date-time } }
+      responses:
+        '200':
+          description: 全局检查历史及本页统计
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminDomainCheckPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 短时有效的 Access Token。Refresh Token 不通过此方案传递。
+  parameters:
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PageSize: { name: page_size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+    UserId: { name: user_id, in: path, required: true, schema: { type: string, format: uuid } }
+    DomainId: { name: domain_id, in: path, required: true, schema: { type: string, format: uuid } }
+    CheckId: { name: check_id, in: path, required: true, schema: { type: string, format: uuid } }
+    TaskId: { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
+    Provider: { name: provider, in: path, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9_-]{1,31}$' } }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: 同一用户和操作范围内的幂等键，建议使用 UUID。
+      schema: { type: string, minLength: 8, maxLength: 128 }
+    IdempotencyKeyRequired:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: 同一用户和操作范围内的幂等键，建议使用 UUID。
+      schema: { type: string, minLength: 8, maxLength: 128 }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: 使用资源 ETag（由 `version` 生成）实施乐观并发控制。
+      schema: { type: string, pattern: '^"[1-9][0-9]*"$' }
+  responses:
+    Unauthorized:
+      description: Access Token 缺失、无效或过期
+      headers:
+        WWW-Authenticate: { schema: { type: string, default: Bearer } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    AuthenticationFailed:
+      description: 认证信息无效或 Refresh Token 不可用
+      headers:
+        WWW-Authenticate: { schema: { type: string, default: Bearer } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: 权限不足或账号被禁用
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: 资源不存在；用户资源不泄露其他用户的资源归属
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: 唯一性、业务状态、幂等参数或资源版本冲突
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: 请求格式或字段校验失败
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: API 或上游注册局限流
+      headers:
+        Retry-After: { schema: { type: integer, minimum: 1 } }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    PreconditionRequired:
+      description: 缺少 `If-Match` 并发控制头
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      required: [code, message, request_id]
+      properties:
+        code: { type: string, examples: [invalid_request] }
+        message: { type: string }
+        details:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [location, message]
+            properties:
+              location: { type: string }
+              message: { type: string }
+              code: { type: string }
+        request_id: { type: string }
+    UserRole: { type: string, enum: [user, admin] }
+    UserStatus: { type: string, enum: [active, banned] }
+    User:
+      type: object
+      additionalProperties: false
+      required: [id, username, role, status, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        email: { type: [string, 'null'], format: email }
+        role: { $ref: '#/components/schemas/UserRole' }
+        status: { $ref: '#/components/schemas/UserStatus' }
+        last_login_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    RegisterRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 3, maxLength: 128, pattern: '^[A-Za-z0-9_.-]+$' }
+        password: { type: string, format: password, minLength: 12, maxLength: 256 }
+        email: { type: [string, 'null'], format: email, maxLength: 320 }
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 1, maxLength: 320 }
+        password: { type: string, format: password, minLength: 1, maxLength: 256 }
+        scope: { type: string, default: '' }
+    TokenPair:
+      type: object
+      additionalProperties: false
+      required: [access_token, refresh_token, token_type, expires_in]
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        token_type: { type: string, const: bearer }
+        expires_in: { type: integer, minimum: 1, description: Access Token 有效秒数 }
+    AuthResult:
+      type: object
+      additionalProperties: false
+      required: [user, tokens]
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        tokens: { $ref: '#/components/schemas/TokenPair' }
+    RefreshTokenRequest:
+      type: object
+      additionalProperties: false
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string, minLength: 32 }
+    UpdateCurrentUserRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        email: { type: [string, 'null'], format: email, maxLength: 320 }
+    ChangePasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [current_password, new_password]
+      properties:
+        current_password: { type: string, format: password, minLength: 1, maxLength: 256 }
+        new_password: { type: string, format: password, minLength: 12, maxLength: 256 }
+    UserSettings:
+      type: object
+      additionalProperties: false
+      required: [locale, timezone, default_monitor_enabled]
+      properties:
+        locale: { type: string, enum: [zh-CN, en-US], default: zh-CN }
+        timezone: { type: string, default: UTC, description: IANA timezone name }
+        default_monitor_enabled: { type: boolean, default: true }
+        expiration_warning_days:
+          type: array
+          uniqueItems: true
+          maxItems: 10
+          items: { type: integer, minimum: 0, maximum: 365 }
+    UserSettingsPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        locale: { type: string, enum: [zh-CN, en-US] }
+        timezone: { type: string, minLength: 1, maxLength: 64 }
+        default_monitor_enabled: { type: boolean }
+        expiration_warning_days:
+          type: array
+          uniqueItems: true
+          maxItems: 10
+          items: { type: integer, minimum: 0, maximum: 365 }
+    OAuth2Provider:
+      type: object
+      additionalProperties: false
+      required: [key, display_name]
+      properties:
+        key: { type: string }
+        display_name: { type: string }
+    OAuth2Authorization:
+      type: object
+      additionalProperties: false
+      required: [authorization_url, state, expires_at]
+      properties:
+        authorization_url: { type: string, format: uri }
+        state: { type: string }
+        expires_at: { type: string, format: date-time }
+    OAuth2BindRequest:
+      type: object
+      additionalProperties: false
+      required: [code, state]
+      properties:
+        code: { type: string, minLength: 1 }
+        state: { type: string, minLength: 16 }
+    OAuth2Identity:
+      type: object
+      additionalProperties: false
+      required: [provider, provider_username, bound_at]
+      properties:
+        provider: { type: string }
+        provider_username: { type: [string, 'null'] }
+        bound_at: { type: string, format: date-time }
+    AdminUser:
+      allOf:
+        - $ref: '#/components/schemas/User'
+        - type: object
+          required: [domain_count]
+          properties:
+            domain_count: { type: integer, minimum: 0 }
+            banned_at: { type: [string, 'null'], format: date-time }
+            ban_reason: { type: [string, 'null'] }
+    AdminUserPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/AdminUser' } }
+    AdminUpdateUserRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        email: { type: [string, 'null'], format: email, maxLength: 320 }
+        settings: { $ref: '#/components/schemas/UserSettingsPatch' }
+    BanUserRequest:
+      type: object
+      additionalProperties: false
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 3, maxLength: 512 }
+    AdminPasswordResetRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        delivery: { type: string, enum: [email], default: email }
+    PasswordResetStatus:
+      type: object
+      additionalProperties: false
+      required: [status, expires_at]
+      properties:
+        status: { type: string, const: pending }
+        expires_at: { type: string, format: date-time }
+    DomainIdentity:
+      type: object
+      additionalProperties: false
+      required: [ascii_name, unicode_name, registrable_domain, public_suffix, tld]
+      properties:
+        ascii_name: { type: string, maxLength: 253 }
+        unicode_name: { type: string, maxLength: 253 }
+        registrable_domain: { type: string, maxLength: 253 }
+        public_suffix: { type: string, maxLength: 253 }
+        tld: { type: string, maxLength: 63 }
+    RegistrarSnapshot:
+      type: object
+      additionalProperties: false
+      properties:
+        name: { type: [string, 'null'] }
+        iana_id: { type: [integer, 'null'] }
+        url: { type: [string, 'null'], format: uri }
+        abuse_email: { type: [string, 'null'], format: email }
+        abuse_phone: { type: [string, 'null'] }
+    DomainSnapshot:
+      type: object
+      additionalProperties: false
+      required: [domain, statuses, nameservers, source]
+      properties:
+        domain: { type: string }
+        registrar: { anyOf: [{ $ref: '#/components/schemas/RegistrarSnapshot' }, { type: 'null' }] }
+        statuses: { type: array, items: { type: string } }
+        registered_at: { type: [string, 'null'], format: date-time }
+        expires_at: { type: [string, 'null'], format: date-time }
+        updated_at: { type: [string, 'null'], format: date-time }
+        nameservers: { type: array, items: { type: string } }
+        dnssec_enabled: { type: [boolean, 'null'] }
+        source: { type: string, enum: [rdap, whois] }
+        source_url: { type: [string, 'null'] }
+        fetched_at: { type: [string, 'null'], format: date-time }
+    CheckOutcome:
+      type: string
+      enum: [success, invalid_domain, not_found, unsupported, rate_limited, temporary_failure, unexpected_response, cancelled]
+    CheckSummary:
+      type: object
+      additionalProperties: false
+      required: [id, checked_at, outcome]
+      properties:
+        id: { type: string, format: uuid }
+        checked_at: { type: string, format: date-time }
+        outcome: { $ref: '#/components/schemas/CheckOutcome' }
+        duration_ms: { type: [integer, 'null'], minimum: 0 }
+        changed_fields: { type: array, items: { type: string } }
+    RenewalMode: { type: [string, 'null'], enum: [automatic, manual, unknown, null] }
+    ManagedDomain:
+      type: object
+      additionalProperties: false
+      required: [id, identity, monitor_enabled, version, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        identity: { $ref: '#/components/schemas/DomainIdentity' }
+        snapshot: { anyOf: [{ $ref: '#/components/schemas/DomainSnapshot' }, { type: 'null' }] }
+        latest_check: { anyOf: [{ $ref: '#/components/schemas/CheckSummary' }, { type: 'null' }] }
+        monitor_enabled: { type: boolean }
+        renewal_mode: { $ref: '#/components/schemas/RenewalMode' }
+        notes: { type: [string, 'null'], maxLength: 5000 }
+        next_check_at: { type: [string, 'null'], format: date-time }
+        version: { type: integer, minimum: 1 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    CreateDomainRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 253 }
+        monitor_enabled: { type: boolean, default: true }
+        renewal_mode: { $ref: '#/components/schemas/RenewalMode' }
+        notes: { type: [string, 'null'], maxLength: 5000 }
+        check_now: { type: boolean, default: true }
+    CreateDomainResult:
+      type: object
+      additionalProperties: false
+      required: [domain]
+      properties:
+        domain: { $ref: '#/components/schemas/ManagedDomain' }
+        refresh_task: { anyOf: [{ $ref: '#/components/schemas/RefreshTask' }, { type: 'null' }] }
+    UpdateDomainRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        monitor_enabled: { type: boolean }
+        renewal_mode: { $ref: '#/components/schemas/RenewalMode' }
+        notes: { type: [string, 'null'], maxLength: 5000 }
+    PageMetadata:
+      type: object
+      additionalProperties: false
+      required: [page, page_size, total]
+      properties:
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+    DomainPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/ManagedDomain' } }
+    RefreshDomainRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        force_refresh: { type: boolean, default: false }
+    AdminRefreshDomainRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        force_refresh: { type: boolean, default: true }
+        refresh_endpoint: { type: boolean, default: false }
+    TaskStatus: { type: string, enum: [queued, running, succeeded, failed, cancelled] }
+    RefreshTask:
+      type: object
+      additionalProperties: false
+      required: [id, kind, status, domain_id, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        kind: { type: string, const: domain_refresh }
+        status: { $ref: '#/components/schemas/TaskStatus' }
+        domain_id: { type: string, format: uuid }
+        check_id: { type: [string, 'null'], format: uuid }
+        error: { anyOf: [{ $ref: '#/components/schemas/TaskError' }, { type: 'null' }] }
+        created_at: { type: string, format: date-time }
+        started_at: { type: [string, 'null'], format: date-time }
+        completed_at: { type: [string, 'null'], format: date-time }
+        updated_at: { type: string, format: date-time }
+    TaskError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        retryable: { type: boolean, default: false }
+    DomainCheck:
+      type: object
+      additionalProperties: false
+      required: [id, domain_id, checked_at, outcome, changed_fields, is_stale, created_at]
+      properties:
+        id: { type: string, format: uuid }
+        domain_id: { type: string, format: uuid }
+        checked_at: { type: string, format: date-time }
+        duration_ms: { type: [integer, 'null'], minimum: 0 }
+        outcome: { $ref: '#/components/schemas/CheckOutcome' }
+        error_code: { type: [string, 'null'] }
+        error_message: { type: [string, 'null'] }
+        protocol: { type: [string, 'null'], enum: [rdap, whois, null] }
+        source: { type: [string, 'null'] }
+        snapshot: { anyOf: [{ $ref: '#/components/schemas/DomainSnapshot' }, { type: 'null' }] }
+        changed_fields: { type: array, items: { type: string } }
+        parser_key: { type: [string, 'null'] }
+        parser_version: { type: [string, 'null'] }
+        is_stale: { type: boolean }
+        created_at: { type: string, format: date-time }
+    DomainCheckPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/DomainCheck' } }
+    AdminManagedDomain:
+      allOf:
+        - $ref: '#/components/schemas/ManagedDomain'
+        - type: object
+          required: [owner, deleted_at]
+          properties:
+            owner: { $ref: '#/components/schemas/UserReference' }
+            deleted_at: { type: [string, 'null'], format: date-time }
+            deleted_by_user_id: { type: [string, 'null'], format: uuid }
+    UserReference:
+      type: object
+      additionalProperties: false
+      required: [id, username]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+    AdminUpdateDomainRequest:
+      allOf:
+        - $ref: '#/components/schemas/UpdateDomainRequest'
+        - type: object
+          properties:
+            owner_user_id: { type: string, format: uuid }
+    AdminDomainPage:
+      allOf:
+        - $ref: '#/components/schemas/PageMetadata'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/AdminManagedDomain' } }
+    CheckStatistics:
+      type: object
+      additionalProperties: false
+      required: [count_by_outcome]
+      properties:
+        count_by_outcome:
+          type: object
+          additionalProperties: { type: integer, minimum: 0 }
+    AdminDomainCheckPage:
+      allOf:
+        - $ref: '#/components/schemas/DomainCheckPage'
+        - type: object
+          required: [statistics]
+          properties:
+            statistics: { $ref: '#/components/schemas/CheckStatistics' }
