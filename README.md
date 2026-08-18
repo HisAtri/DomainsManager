@@ -44,6 +44,20 @@ results = await lookup.lookup(
 )
 ```
 
+## FastAPI 服务器（阶段性）
+
+当前已提供 FastAPI 应用骨架和健康检查，业务路由将按
+[后端 API 规范](docs/api/README.md) 逐步实现。开发环境启动：
+
+```powershell
+uv sync --extra api
+$env:DOMAINSMANAGER_DATABASE_URL = "postgresql+asyncpg://user:password@localhost/domainsmanager"
+uv run domainsmanager-api
+```
+
+服务默认监听 `http://127.0.0.1:7920`，健康检查为 `/health/live` 和
+`/health/ready`。数据库迁移应在部署阶段单独执行，不会在服务启动时自动运行。
+
 ## 文档
 
 - [架构与本次重构说明](docs/architecture.md)

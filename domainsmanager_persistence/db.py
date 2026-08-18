@@ -29,6 +29,10 @@ def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSessi
 
 
 async def run_migrations(url: str, revision: str = "head") -> None:
-    config = Config(str(Path(__file__).parents[1] / "alembic.ini"))
+    package_root = Path(__file__).parent
+    config_path = package_root / "alembic.ini"
+    if not config_path.exists():
+        config_path = package_root.parent / "alembic.ini"
+    config = Config(str(config_path))
     config.set_main_option("sqlalchemy.url", url)
     await asyncio.to_thread(command.upgrade, config, revision)

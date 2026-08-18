@@ -1,7 +1,7 @@
 # 后端 API 规范
 
-[openapi.yaml](openapi.yaml) 是计划中的 FastAPI 后端初版契约，采用 OpenAPI 3.1，统一前缀为
-`/api/v1`。本文档描述契约边界和实施前提；当前仓库尚未实现对应路由。
+[openapi.yaml](openapi.yaml) 是 FastAPI 后端的初版契约，采用 OpenAPI 3.1，统一前缀为
+`/api/v1`。当前已实现应用骨架和根级健康检查；其余业务路由按本文档约定逐步交付。
 
 ## 1. 资源和权限边界
 
@@ -136,6 +136,7 @@ WHOIS/RDAP 请求延迟和上游限流不适合占用普通 HTTP 请求，所以
 
 ## 9. 当前状态
 
-该版本是 FastAPI 实现契约，不是可运行服务器。FastAPI 应用入口、路由、认证、Repository、
-后台 Worker、OAuth Provider 集成和上述数据库迁移仍待实现。后续实现应以
-[openapi.yaml](openapi.yaml) 为行为基线，并在修改 HTTP 行为时同步更新规范和契约测试。
+FastAPI 应用工厂、配置、资源生命周期、请求 ID、统一错误边界和 `/health/live`、
+`/health/ready` 已实现。认证、用户/域名业务路由、Repository、后台 Worker、OAuth Provider
+集成和上述数据库迁移仍待后续阶段实现。后续实现应以 [openapi.yaml](openapi.yaml) 为行为基线，
+并在修改 HTTP 行为时同步更新规范和契约测试。

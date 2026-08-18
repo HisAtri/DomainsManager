@@ -1,13 +1,5 @@
-import logging
+"""Compatibility ASGI entry point."""
 
-from waitress import serve
+from domainsmanager_api.main import app
 
-from modules.server import *
-from db import db
-
-if __name__ == '__main__':
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    logger = logging.getLogger('')
-    logger.info("正在启动...")
-    app.register_blueprint(v1_bp)
-    serve(app, host='*', port=7920, threads=16, channel_timeout=30)
+__all__ = ["app"]

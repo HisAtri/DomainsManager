@@ -16,7 +16,18 @@ dependencies = [
     "tldextract>=5.3.1",
 ]
 
+[project.scripts]
+domainsmanager-api = "domainsmanager_api.cli:main"
+
 [project.optional-dependencies]
+api = [
+    "alembic>=1.19.0",
+    "asyncpg>=0.31.0",
+    "fastapi>=0.116.0",
+    "pydantic-settings>=2.10.0",
+    "sqlalchemy[asyncio]>=2.0.51",
+    "uvicorn[standard]>=0.35.0",
+]
 persistence = [
     "alembic>=1.19.0",
     "asyncpg>=0.31.0",
@@ -24,8 +35,18 @@ persistence = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["domainsmanager_lookup", "domainsmanager_persistence", "modules"]
+packages = [
+    "domainsmanager_api",
+    "domainsmanager_application",
+    "domainsmanager_lookup",
+    "domainsmanager_persistence",
+    "modules",
+]
 exclude = ["modules/qwhois.py"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"alembic.ini" = "domainsmanager_persistence/alembic.ini"
+"migrations" = "domainsmanager_persistence/migrations"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -39,11 +60,17 @@ markers = [
     "network: tests that explicitly require external network access",
     "concurrency: asynchronous concurrency tests",
     "regression: tests for previously observed behavior",
+    "api: FastAPI HTTP interface tests",
 ]
 
 [tool.coverage.run]
 branch = true
-source = ["domainsmanager_lookup"]
+source = [
+    "domainsmanager_api",
+    "domainsmanager_application",
+    "domainsmanager_lookup",
+    "domainsmanager_persistence",
+]
 omit = ["*/__pycache__/*"]
 
 [tool.coverage.report]
@@ -57,7 +84,10 @@ default=true
 [dependency-groups]
 dev = [
     "aiosqlite>=0.22.1",
+    "fastapi>=0.116.0",
     "hatchling>=1.31.0",
+    "pydantic-settings>=2.10.0",
+    "pyyaml>=6.0.2",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
