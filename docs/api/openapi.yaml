@@ -73,7 +73,16 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthResult' }
-        '409': { $ref: '#/components/responses/Conflict' }
+        '403':
+          description: 注册功能已关闭（`registration_disabled`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: 用户名已存在（`username_taken`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '422': { $ref: '#/components/responses/ValidationError' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /auth/login:
@@ -102,15 +111,16 @@ paths:
       tags: [Authentication]
       operationId: logout
       summary: 撤销当前会话
-      description: 使用 Refresh Token 标识待撤销会话；重复请求仍然成功。
+      description: 使用 Refresh Token 标识待撤销会话；无效、已撤销或重复请求仍然成功。
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/RefreshTokenRequest' }
       responses:
-        '204': { description: 会话已撤销或原本不存在 }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        '204': { description: 会话已撤销、不可用或原本不存在 }
+        '422': { $ref: '#/components/responses/ValidationError' }
   /auth/token/refresh:
     post:
       tags: [Authentication]
@@ -872,7 +882,7 @@ components:
       required: [username, password]
       properties:
         username: { type: string, minLength: 3, maxLength: 128, pattern: '^[A-Za-z0-9_.-]+$' }
-        password: { type: string, format: password, minLength: 12, maxLength: 256 }
+        password: { type: string, format: password, minLength: 6, maxLength: 256 }
         email: { type: [string, 'null'], format: email, maxLength: 320 }
     LoginRequest:
       type: object
@@ -916,7 +926,7 @@ components:
       required: [current_password, new_password]
       properties:
         current_password: { type: string, format: password, minLength: 1, maxLength: 256 }
-        new_password: { type: string, format: password, minLength: 12, maxLength: 256 }
+        new_password: { type: string, format: password, minLength: 6, maxLength: 256 }
     UserSettings:
       type: object
       additionalProperties: false

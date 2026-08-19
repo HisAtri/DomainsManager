@@ -32,6 +32,15 @@ API 分为以下资源组：
 5. 登录失败不区分用户名不存在、密码错误和账号被禁用，避免账号枚举；
 6. 密码使用 Argon2id 保存，日志不得记录密码、Token、TOTP Secret 或 OAuth 授权码。
 
+密码策略只要求长度为 6-256 字符，不检查大小写、数字、符号或常见密码。JWT Secret 和
+Refresh Token Pepper 由部署环境提供，应用只要求非空，不检查长度或熵值；生产部署负责使用
+符合自身安全要求的 Secret。
+
+首次管理员可通过成对的 `DOMAINSMANAGER_BOOTSTRAP_ADMIN_USERNAME` 和
+`DOMAINSMANAGER_BOOTSTRAP_ADMIN_PASSWORD` 引导创建。只有 `app_user` 表没有任何用户时才会
+读取并应用这两个值；数据库一旦存在任意用户，后续启动不得用环境变量创建、修改或提权账号。
+除这一首次引导外，用户和管理员操作优先通过 HTTP API 完成。
+
 OAuth2 仅预留 GitHub、Google 等第三方登录和账号绑定，不把 DomainsManager 定义为 OAuth2
 Authorization Server。`state` 必须高熵、一次性、短时有效并与回调地址绑定；支持 OIDC 的
 Provider 还应验证 `nonce`、issuer 和 audience。解绑前必须确认用户仍有其他可用登录方式。
