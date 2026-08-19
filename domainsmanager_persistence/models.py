@@ -38,15 +38,85 @@ class TimestampMixin:
 
 class AppUser(TimestampMixin, Base):
     __tablename__ = "app_user"
+    __table_args__ = (
+        CheckConstraint("role IN ('user', 'admin')", name="valid_role"),
+        CheckConstraint(
+            "NOT totp_enabled OR totp_secret_ciphertext IS NOT NULL",
+            name="totp_secret_when_enabled",
+        ),
+        CheckConstraint(
+            "banned_at IS NULL OR ban_reason IS NOT NULL",
+            name="ban_reason_when_banned",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     username: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    username_normalized: Mapped[str] = mapped_column(
+        String(128), unique=True, nullable=False
+    )
     password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
     email: Mapped[str | None] = mapped_column(String(320))
+    role: Mapped[str] = mapped_column(String(16), default="user", nullable=False)
     totp_secret_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
+    totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     preferences: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    banned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ban_reason: Mapped[str | None] = mapped_column(String(512))
+    banned_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+    password_changed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AuthSession(Base):
+    __tablename__ = "auth_session"
+    __table_args__ = (
+        Index("ix_auth_session_user_revoked", "user_id", "revoked_at"),
+        Index("ix_auth_session_expires_at", "absolute_expires_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("app_user.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    absolute_expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoke_reason: Mapped[str | None] = mapped_column(String(64))
+    ip_hash: Mapped[str | None] = mapped_column(String(64))
+    user_agent: Mapped[str | None] = mapped_column(String(512))
+
+
+class AuthRefreshToken(Base):
+    __tablename__ = "auth_refresh_token"
+    __table_args__ = (
+        Index("ix_auth_refresh_token_session_issued", "session_id", "issued_at"),
+        Index("ix_auth_refresh_token_expires_at", "expires_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    session_id: Mapped[UUID] = mapped_column(
+        ForeignKey("auth_session.id", ondelete="CASCADE"), nullable=False
+    )
+    parent_token_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("auth_refresh_token.id", ondelete="SET NULL"), unique=True
+    )
+    replaced_by_token_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("auth_refresh_token.id", ondelete="SET NULL")
+    )
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), unique=True, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ManagedDomain(TimestampMixin, Base):
@@ -238,6 +308,17 @@ class NotificationOutbox(TimestampMixin, Base):
 
 class SecurityAuditEvent(Base):
     __tablename__ = "security_audit_event"
+    __table_args__ = (
+        Index("ix_security_audit_actor_occurred", "actor_user_id", "occurred_at"),
+        Index(
+            "ix_security_audit_target_occurred",
+            "target_type",
+            "target_id",
+            "occurred_at",
+        ),
+        Index("ix_security_audit_event_occurred", "event_type", "occurred_at"),
+        Index("ix_security_audit_request_id", "request_id"),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     actor_user_id: Mapped[UUID | None] = mapped_column(

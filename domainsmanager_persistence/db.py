@@ -6,7 +6,7 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import MetaData
+from sqlalchemy import MetaData, event
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 NAMING_CONVENTION = {
@@ -21,7 +21,20 @@ metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
 def create_engine(url: str, **kwargs) -> AsyncEngine:
-    return create_async_engine(url, **kwargs)
+    engine = create_async_engine(url, **kwargs)
+    if engine.dialect.name == "sqlite":
+        event.listen(engine.sync_engine, "connect", _configure_sqlite_connection)
+    return engine
+
+
+def _configure_sqlite_connection(dbapi_connection, connection_record) -> None:
+    del connection_record
+    cursor = dbapi_connection.cursor()
+    try:
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.execute("PRAGMA busy_timeout=5000")
+    finally:
+        cursor.close()
 
 
 def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:
