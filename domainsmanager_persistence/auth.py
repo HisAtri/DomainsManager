@@ -5,10 +5,13 @@ from types import TracebackType
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from domainsmanager_application.auth import (
     AuditEvent,
+    ConcurrentUpdateError,
+    DuplicateRecordError,
     RefreshTokenRecord,
     SessionRecord,
     UserRecord,
@@ -22,10 +25,6 @@ from domainsmanager_persistence.models import (
 
 
 class RecordNotFoundError(RuntimeError):
-    pass
-
-
-class ConcurrentUpdateError(RuntimeError):
     pass
 
 
@@ -89,7 +88,10 @@ class SqlAlchemyUserRepository:
                 updated_at=user.updated_at,
             )
         )
-        await self._session.flush()
+        try:
+            await self._session.flush()
+        except IntegrityError as error:
+            raise DuplicateRecordError("user already exists") from error
 
     async def set_last_login(self, user_id: UUID, at: datetime) -> None:
         await self._update_user(user_id, last_login_at=at, updated_at=at)
@@ -126,6 +128,25 @@ class SqlAlchemyUserRepository:
             password_hash=password_hash,
             password_changed_at=changed_at,
             updated_at=changed_at,
+        )
+
+    async def set_account_state(
+        self,
+        user_id: UUID,
+        *,
+        is_active: bool,
+        banned_at: datetime | None,
+        ban_reason: str | None,
+        banned_by_user_id: UUID | None,
+        updated_at: datetime,
+    ) -> None:
+        await self._update_user(
+            user_id,
+            is_active=is_active,
+            banned_at=banned_at,
+            ban_reason=ban_reason,
+            banned_by_user_id=banned_by_user_id,
+            updated_at=updated_at,
         )
 
     async def _update_user(self, user_id: UUID, **values) -> None:
@@ -188,7 +209,10 @@ class SqlAlchemyAuthSessionRepository:
                 revoked_at=token.revoked_at,
             )
         )
-        await self._session.flush()
+        try:
+            await self._session.flush()
+        except IntegrityError as error:
+            raise DuplicateRecordError("refresh token already exists") from error
 
     async def get_session(
         self,

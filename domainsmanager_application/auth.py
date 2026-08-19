@@ -7,6 +7,14 @@ from typing import Any, Protocol
 from uuid import UUID
 
 
+class DuplicateRecordError(RuntimeError):
+    pass
+
+
+class ConcurrentUpdateError(RuntimeError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class UserRecord:
     id: UUID
@@ -103,6 +111,17 @@ class UserRepository(Protocol):
         user_id: UUID,
         password_hash: str,
         changed_at: datetime,
+    ) -> None: ...
+
+    async def set_account_state(
+        self,
+        user_id: UUID,
+        *,
+        is_active: bool,
+        banned_at: datetime | None,
+        ban_reason: str | None,
+        banned_by_user_id: UUID | None,
+        updated_at: datetime,
     ) -> None: ...
 
 
