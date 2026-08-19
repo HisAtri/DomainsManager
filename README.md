@@ -46,7 +46,7 @@ results = await lookup.lookup(
 
 ## FastAPI 服务器（阶段性）
 
-当前已提供 FastAPI 应用骨架和健康检查，业务路由将按
+当前已提供 FastAPI 应用骨架、健康检查和本地用户认证接口。域名及管理员业务路由将按
 [后端 API 规范](docs/api/README.md) 逐步实现。开发环境启动：
 
 ```powershell
@@ -54,11 +54,15 @@ uv sync --extra api
 $env:DOMAINSMANAGER_DATABASE_URL = "postgresql+asyncpg://user:password@localhost/domainsmanager"
 $env:DOMAINSMANAGER_JWT_SECRET_KEY = "replace-me"
 $env:DOMAINSMANAGER_REFRESH_TOKEN_PEPPER = "replace-me"
+uv run alembic upgrade head
 uv run domainsmanager-api
 ```
 
 服务默认监听 `http://127.0.0.1:7920`，健康检查为 `/health/live` 和
-`/health/ready`。数据库迁移应在部署阶段单独执行，不会在服务启动时自动运行。
+`/health/ready`。数据库迁移必须在服务启动前单独执行，不会由应用自动运行。首次部署可临时设置
+`DOMAINSMANAGER_BOOTSTRAP_ADMIN_USERNAME` 和
+`DOMAINSMANAGER_BOOTSTRAP_ADMIN_PASSWORD`；只有数据库没有任何用户时才会创建管理员，后续启动
+不会用这些变量修改或新增账号。
 
 ## 文档
 

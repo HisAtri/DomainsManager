@@ -59,12 +59,15 @@ def install_exception_handlers(app: FastAPI) -> None:
         if isinstance(error.detail, dict):
             code = str(error.detail.get("code", code))
             message = str(error.detail.get("message", message))
-        return error_response(
+        response = error_response(
             request,
             status_code=error.status_code,
             code=code,
             message=message,
         )
+        if error.headers:
+            response.headers.update(error.headers)
+        return response
 
     @app.exception_handler(Exception)
     async def handle_unexpected_error(

@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from domainsmanager_api.api.auth import router as auth_router
 from domainsmanager_api.api.health import router as health_router
 from domainsmanager_api.errors import install_exception_handlers
 from domainsmanager_api.middleware import RequestIdMiddleware
@@ -24,6 +25,14 @@ def create_app(
         resources = resource_factory(effective_settings)
         app.state.resources = resources
         try:
+            if (
+                effective_settings.bootstrap_admin_username is not None
+                and effective_settings.bootstrap_admin_password is not None
+            ):
+                await resources.auth.bootstrap_first_admin(
+                    effective_settings.bootstrap_admin_username,
+                    effective_settings.bootstrap_admin_password.get_secret_value(),
+                )
             yield
         finally:
             await resources.close()
@@ -41,6 +50,7 @@ def create_app(
     )
     install_exception_handlers(app)
     app.include_router(health_router)
+    app.include_router(auth_router, prefix=effective_settings.api_prefix)
     return app
 
 

@@ -21,6 +21,7 @@ from domainsmanager_persistence.models import (
     AuthRefreshToken,
     AuthSession,
     SecurityAuditEvent,
+    SystemState,
 )
 
 
@@ -393,6 +394,20 @@ class SqlAlchemyAuditRepository:
         await self._session.flush()
 
 
+class SqlAlchemySystemStateRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def try_claim(self, key: str, created_at: datetime) -> bool:
+        try:
+            async with self._session.begin_nested():
+                self._session.add(SystemState(key=key, created_at=created_at))
+                await self._session.flush()
+        except IntegrityError:
+            return False
+        return True
+
+
 class SqlAlchemyUnitOfWork:
     def __init__(self, sessions: async_sessionmaker[AsyncSession]) -> None:
         self._sessions = sessions
@@ -405,6 +420,7 @@ class SqlAlchemyUnitOfWork:
         self.users = SqlAlchemyUserRepository(self._session)
         self.sessions = SqlAlchemyAuthSessionRepository(self._session)
         self.audits = SqlAlchemyAuditRepository(self._session)
+        self.system_state = SqlAlchemySystemStateRepository(self._session)
         return self
 
     async def __aexit__(

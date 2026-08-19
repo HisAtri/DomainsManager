@@ -420,7 +420,10 @@ class AuthService:
         )
         try:
             async with self._unit_of_work() as uow:
+                if not await uow.system_state.try_claim("bootstrap_admin", now):
+                    return False
                 if await uow.users.count() != 0:
+                    await uow.commit()
                     return False
                 await uow.users.add(user)
                 await uow.audits.add(

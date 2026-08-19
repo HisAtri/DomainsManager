@@ -14,6 +14,8 @@ from domainsmanager_api.settings import Settings
 def client(tmp_path: Path) -> Iterator[TestClient]:
     settings = Settings(
         database_url=f"sqlite+aiosqlite:///{tmp_path / 'api.db'}",
+        jwt_secret_key="x",
+        refresh_token_pepper="y",
     )
     with TestClient(create_app(settings)) as test_client:
         yield test_client

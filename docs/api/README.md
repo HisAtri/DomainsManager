@@ -122,7 +122,7 @@ WHOIS/RDAP 请求延迟和上游限流不适合占用普通 HTTP 请求，所以
 | 域名标准化 | `DomainLookup.normalize()` | 调用并映射 `InvalidDomainError` |
 | 域名查询 | `DomainLookup.lookup()` | 后台 Worker 和任务编排 |
 | 查询缓存 | `SqlAlchemyLookupStore` | 在应用生命周期注入 `DomainLookup` |
-| 用户数据 | `AppUser` | User Repository、认证服务 |
+| 用户数据 | `AppUser`、认证会话 | User/UoW/认证服务已实现；管理员管理待实现 |
 | 管理域名 | `ManagedDomain` | Domain Repository、快照写入服务 |
 | 检查历史 | `DomainCheck` | 成功/失败检查持久化和变化比较 |
 | 安全审计 | `SecurityAuditEvent` | Audit Repository 和统一审计服务 |
@@ -145,7 +145,7 @@ WHOIS/RDAP 请求延迟和上游限流不适合占用普通 HTTP 请求，所以
 
 ## 9. 当前状态
 
-FastAPI 应用工厂、配置、资源生命周期、请求 ID、统一错误边界和 `/health/live`、
-`/health/ready` 已实现。认证、用户/域名业务路由、Repository、后台 Worker、OAuth Provider
-集成和上述数据库迁移仍待后续阶段实现。后续实现应以 [openapi.yaml](openapi.yaml) 为行为基线，
+FastAPI 应用工厂、配置、资源生命周期、请求 ID、统一错误边界、健康检查，以及本地注册、登录、
+退出、Token 轮换、当前用户资料、改密和设置接口已实现。用户域名/管理员业务路由、后台 Worker、
+OAuth Provider 集成和对应后续迁移仍待实现。后续实现应以 [openapi.yaml](openapi.yaml) 为行为基线，
 并在修改 HTTP 行为时同步更新规范和契约测试。

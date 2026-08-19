@@ -69,13 +69,57 @@ def test_implemented_health_operations_match_contract() -> None:
         for method, operation in document["paths"][path].items()
         if method == "get"
     }
-    app = create_app(Settings(database_url="sqlite+aiosqlite://"))
+    app = create_app(
+        Settings(
+            database_url="sqlite+aiosqlite://",
+            jwt_secret_key="x",
+            refresh_token_pepper="y",
+        )
+    )
     runtime_document = app.openapi()
     actual = {
         operation["operationId"]
         for path in ("/health/live", "/health/ready")
         for method, operation in runtime_document["paths"][path].items()
         if method == "get"
+    }
+
+    assert actual == expected
+
+
+@pytest.mark.contract
+def test_implemented_auth_operations_match_contract() -> None:
+    document = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
+    implemented_paths = {
+        "/auth/register",
+        "/auth/login",
+        "/auth/logout",
+        "/auth/token/refresh",
+        "/auth/me",
+        "/auth/me/password",
+        "/auth/me/settings",
+    }
+    expected = {
+        (f"/api/v1{path}", method, operation["operationId"])
+        for path, path_item in document["paths"].items()
+        if path in implemented_paths
+        for method, operation in path_item.items()
+        if method in {"get", "post", "patch", "delete"}
+    }
+    app = create_app(
+        Settings(
+            database_url="sqlite+aiosqlite://",
+            jwt_secret_key="x",
+            refresh_token_pepper="y",
+        )
+    )
+    runtime_document = app.openapi()
+    actual = {
+        (path, method, operation["operationId"])
+        for path, path_item in runtime_document["paths"].items()
+        if path.startswith("/api/v1/auth/")
+        for method, operation in path_item.items()
+        if method in {"get", "post", "patch", "delete"}
     }
 
     assert actual == expected

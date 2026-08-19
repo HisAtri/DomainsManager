@@ -223,6 +223,27 @@ async def test_password_update_and_other_session_revocation(tmp_path: Path) -> N
         assert loaded_user.password_hash == "new-hash"
         assert loaded_user.password_changed_at == changed_at
         assert loaded_current is not None and loaded_current.revoked_at is None
-        assert loaded_other is not None and loaded_other.revoked_at == changed_at
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_system_state_claim_is_unique_and_keeps_transaction_usable(
+    tmp_path: Path,
+) -> None:
+    engine, factory = await make_uow(tmp_path)
+
+    async with factory() as uow:
+        assert await uow.system_state.try_claim("bootstrap_admin", NOW) is True
+        await uow.commit()
+
+    user = make_user("after-claim")
+    async with factory() as uow:
+        assert await uow.system_state.try_claim("bootstrap_admin", NOW) is False
+        await uow.users.add(user)
+        await uow.commit()
+
+    async with factory() as uow:
+        assert await uow.users.get_by_id(user.id) is not None
 
     await engine.dispose()

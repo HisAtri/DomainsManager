@@ -36,6 +36,13 @@ class TimestampMixin:
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class SystemState(Base):
+    __tablename__ = "system_state"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class AppUser(TimestampMixin, Base):
     __tablename__ = "app_user"
     __table_args__ = (

@@ -139,6 +139,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TokenPair' }
         '401': { $ref: '#/components/responses/AuthenticationFailed' }
+        '422': { $ref: '#/components/responses/ValidationError' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /auth/me:
     get:
