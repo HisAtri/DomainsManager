@@ -8,6 +8,7 @@ from sqlalchemy.exc import IntegrityError
 
 from domainsmanager_persistence.db import create_engine, run_migrations
 from domainsmanager_persistence.models import AppUser, AuthRefreshToken, AuthSession
+from tests.database import sqlite_database
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 OLD_REVISION = "6f0aad6e5b27"
@@ -16,11 +17,10 @@ OLD_REVISION = "6f0aad6e5b27"
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_auth_migration_backfills_existing_user(tmp_path: Path) -> None:
-    database = tmp_path / "migration.db"
-    url = f"sqlite+aiosqlite:///{database}"
-    await run_migrations(url, OLD_REVISION)
+    database = sqlite_database(tmp_path / "migration.db")
+    await run_migrations(database, OLD_REVISION)
 
-    engine = create_engine(url)
+    engine = create_engine(database)
     user_id = uuid4()
     async with engine.begin() as connection:
         await connection.execute(
@@ -43,9 +43,9 @@ async def test_auth_migration_backfills_existing_user(tmp_path: Path) -> None:
         )
     await engine.dispose()
 
-    await run_migrations(url)
+    await run_migrations(database)
 
-    engine = create_engine(url)
+    engine = create_engine(database)
     async with engine.connect() as connection:
         result = await connection.execute(
             select(
@@ -69,10 +69,9 @@ async def test_auth_migration_backfills_existing_user(tmp_path: Path) -> None:
 async def test_auth_migration_rejects_casefolded_username_conflicts(
     tmp_path: Path,
 ) -> None:
-    database = tmp_path / "conflict.db"
-    url = f"sqlite+aiosqlite:///{database}"
-    await run_migrations(url, OLD_REVISION)
-    engine = create_engine(url)
+    database = sqlite_database(tmp_path / "conflict.db")
+    await run_migrations(database, OLD_REVISION)
+    engine = create_engine(database)
     async with engine.begin() as connection:
         for username in ("CaseUser", "caseuser"):
             await connection.execute(
@@ -99,15 +98,15 @@ async def test_auth_migration_rejects_casefolded_username_conflicts(
         RuntimeError,
         match="case-insensitive username conflicts",
     ):
-        await run_migrations(url)
+        await run_migrations(database)
 
 
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_auth_schema_enforces_user_constraints(tmp_path: Path) -> None:
-    url = f"sqlite+aiosqlite:///{tmp_path / 'constraints.db'}"
-    await run_migrations(url)
-    engine = create_engine(url)
+    database = sqlite_database(tmp_path / "constraints.db")
+    await run_migrations(database)
+    engine = create_engine(database)
 
     invalid_role = AppUser(
         username="invalid-role",
@@ -147,9 +146,9 @@ async def test_auth_schema_enforces_user_constraints(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 @pytest.mark.integration
 async def test_deleting_user_cascades_auth_sessions_and_tokens(tmp_path: Path) -> None:
-    url = f"sqlite+aiosqlite:///{tmp_path / 'cascade.db'}"
-    await run_migrations(url)
-    engine = create_engine(url)
+    database = sqlite_database(tmp_path / "cascade.db")
+    await run_migrations(database)
+    engine = create_engine(database)
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
     sessions = async_sessionmaker(engine, expire_on_commit=False)

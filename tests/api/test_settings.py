@@ -9,12 +9,20 @@ def test_settings_load_prefixed_environment(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv("DOMAINSMANAGER_SERVER_HOST", "0.0.0.0")
     monkeypatch.setenv("DOMAINSMANAGER_SERVER_PORT", "8080")
     monkeypatch.setenv("DOMAINSMANAGER_REGISTRATION_ENABLED", "true")
+    monkeypatch.setenv("DOMAINSMANAGER_DATABASE_TYPE", "postgresql")
+    monkeypatch.setenv("DOMAINSMANAGER_DATABASE_HOST", "db.example")
+    monkeypatch.setenv("DOMAINSMANAGER_DATABASE_NAME", "domains")
+    monkeypatch.setenv("DOMAINSMANAGER_DATABASE_USER", "app")
 
     settings = Settings(_env_file=None)
 
     assert settings.server_host == "0.0.0.0"
     assert settings.server_port == 8080
     assert settings.registration_enabled is True
+    database = settings.database_config()
+    assert database.host == "db.example"
+    assert database.name == "domains"
+    assert database.user == "app"
 
 
 @pytest.mark.unit
@@ -24,6 +32,7 @@ def test_settings_default_to_local_only_server() -> None:
     assert settings.server_host == "127.0.0.1"
     assert settings.server_port == 7920
     assert settings.registration_enabled is False
+    assert not hasattr(settings, "database_url")
 
 
 @pytest.mark.unit

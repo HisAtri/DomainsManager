@@ -7,7 +7,13 @@ from pathlib import Path
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import MetaData, event
+from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+
+from domainsmanager_persistence.database_config import (
+    DatabaseConfig,
+    DatabaseConnectionConfig,
+)
 
 NAMING_CONVENTION = {
     "ix": "ix_%(column_0_label)s",
@@ -20,8 +26,28 @@ NAMING_CONVENTION = {
 metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
-def create_engine(url: str, **kwargs) -> AsyncEngine:
-    engine = create_async_engine(url, **kwargs)
+def create_engine(
+    configuration: DatabaseConfig | DatabaseConnectionConfig,
+    **overrides,
+) -> AsyncEngine:
+    connection = (
+        configuration.build_connection()
+        if isinstance(configuration, DatabaseConfig)
+        else configuration
+    )
+    options = {
+        **connection.engine_options,
+        **overrides,
+    }
+    connect_args = {
+        **connection.connect_args,
+        **options.pop("connect_args", {}),
+    }
+    engine = create_async_engine(
+        connection.url,
+        connect_args=connect_args,
+        **options,
+    )
     if engine.dialect.name == "sqlite":
         event.listen(engine.sync_engine, "connect", _configure_sqlite_connection)
     return engine
@@ -41,11 +67,26 @@ def create_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSessi
     return async_sessionmaker(engine, expire_on_commit=False)
 
 
-async def run_migrations(url: str, revision: str = "head") -> None:
+async def run_migrations(
+    configuration: DatabaseConfig | DatabaseConnectionConfig,
+    revision: str = "head",
+) -> None:
+    connection = (
+        configuration.build_connection()
+        if isinstance(configuration, DatabaseConfig)
+        else configuration
+    )
+    config = create_alembic_config(connection)
+    await asyncio.to_thread(command.upgrade, config, revision)
+
+
+def create_alembic_config(connection: DatabaseConnectionConfig) -> Config:
     package_root = Path(__file__).parent
     config_path = package_root / "alembic.ini"
     if not config_path.exists():
         config_path = package_root.parent / "alembic.ini"
     config = Config(str(config_path))
-    config.set_main_option("sqlalchemy.url", url)
-    await asyncio.to_thread(command.upgrade, config, revision)
+    rendered = connection.url.render_as_string(hide_password=False).replace("%", "%%")
+    config.set_main_option("sqlalchemy.url", rendered)
+    config.attributes["database_connection_config"] = connection
+    return config

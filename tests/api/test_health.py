@@ -13,7 +13,8 @@ from domainsmanager_api.settings import Settings
 @pytest.fixture
 def client(tmp_path: Path) -> Iterator[TestClient]:
     settings = Settings(
-        database_url=f"sqlite+aiosqlite:///{tmp_path / 'api.db'}",
+        database_type="sqlite",
+        database_path=str(tmp_path / "api.db"),
         jwt_secret_key="x",
         refresh_token_pepper="y",
     )
@@ -55,7 +56,7 @@ def test_ready_returns_uniform_error_when_database_is_unavailable() -> None:
         database_ready=AsyncMock(return_value=False),
         close=AsyncMock(),
     )
-    settings = Settings(database_url="sqlite+aiosqlite://")
+    settings = Settings(database_type="sqlite", database_path=":memory:")
 
     with TestClient(
         create_app(settings, resource_factory=lambda _: resources)

@@ -51,7 +51,13 @@ results = await lookup.lookup(
 
 ```powershell
 uv sync --extra api
-$env:DOMAINSMANAGER_DATABASE_URL = "postgresql+asyncpg://user:password@localhost/domainsmanager"
+$env:DOMAINSMANAGER_DATABASE_TYPE = "postgresql"
+$env:DOMAINSMANAGER_DATABASE_HOST = "localhost"
+$env:DOMAINSMANAGER_DATABASE_PORT = "5432"
+$env:DOMAINSMANAGER_DATABASE_NAME = "domainsmanager"
+$env:DOMAINSMANAGER_DATABASE_USER = "domainsmanager"
+$env:DOMAINSMANAGER_DATABASE_PASSWORD = "change-me"
+$env:DOMAINSMANAGER_DATABASE_SSL_MODE = "disable"
 $env:DOMAINSMANAGER_JWT_SECRET_KEY = "replace-me"
 $env:DOMAINSMANAGER_REFRESH_TOKEN_PEPPER = "replace-me"
 uv run alembic upgrade head

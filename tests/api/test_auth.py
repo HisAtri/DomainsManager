@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from domainsmanager_api.main import create_app
 from domainsmanager_api.settings import Settings
 from domainsmanager_persistence.db import run_migrations
+from tests.database import sqlite_database
 
 
 async def make_client(
@@ -17,11 +18,11 @@ async def make_client(
     bootstrap_admin_password: str | None = None,
 ):
     database = tmp_path / "auth-api.db"
-    url = f"sqlite+aiosqlite:///{database}"
-    await run_migrations(url)
+    await run_migrations(sqlite_database(database))
     settings = Settings(
         _env_file=None,
-        database_url=url,
+        database_type="sqlite",
+        database_path=str(database),
         jwt_secret_key="x",
         refresh_token_pepper="y",
         registration_enabled=registration_enabled,

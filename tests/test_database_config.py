@@ -9,6 +9,7 @@ from domainsmanager_persistence.database_config import (
     DatabaseSSLMode,
     DatabaseType,
 )
+from domainsmanager_persistence.db import create_alembic_config
 
 
 @pytest.mark.unit
@@ -154,3 +155,19 @@ def test_loads_database_configuration_from_environment() -> None:
     assert config.password.get_secret_value() == "runtime-secret"
     assert config.pool_size == 2
     assert "runtime-secret" not in repr(config)
+
+
+@pytest.mark.unit
+def test_alembic_configuration_preserves_percent_encoded_credentials() -> None:
+    connection = DatabaseConfig(
+        type="postgresql",
+        host="localhost",
+        name="domains",
+        user="app",
+        password="percent%password",
+    ).build_connection()
+
+    alembic = create_alembic_config(connection)
+    rendered = alembic.get_main_option("sqlalchemy.url")
+
+    assert make_url(rendered).password == "percent%password"

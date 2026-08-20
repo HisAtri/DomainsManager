@@ -71,7 +71,8 @@ def test_implemented_health_operations_match_contract() -> None:
     }
     app = create_app(
         Settings(
-            database_url="sqlite+aiosqlite://",
+            database_type="sqlite",
+            database_path=":memory:",
             jwt_secret_key="x",
             refresh_token_pepper="y",
         )
@@ -108,7 +109,8 @@ def test_implemented_auth_operations_match_contract() -> None:
     }
     app = create_app(
         Settings(
-            database_url="sqlite+aiosqlite://",
+            database_type="sqlite",
+            database_path=":memory:",
             jwt_secret_key="x",
             refresh_token_pepper="y",
         )

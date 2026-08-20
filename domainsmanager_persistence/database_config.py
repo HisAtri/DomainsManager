@@ -7,7 +7,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Mapping
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+from pydantic import ConfigDict, Field, SecretStr, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
 
@@ -30,8 +31,13 @@ class DatabaseConnectionConfig:
     engine_options: dict[str, object]
 
 
-class DatabaseConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+class DatabaseConfig(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="DOMAINSMANAGER_DATABASE_",
+        extra="ignore",
+    )
 
     type: DatabaseType = DatabaseType.POSTGRESQL
     host: str | None = "localhost"

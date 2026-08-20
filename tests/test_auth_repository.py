@@ -21,6 +21,7 @@ from domainsmanager_persistence.db import (
     run_migrations,
 )
 from domainsmanager_persistence.models import SecurityAuditEvent
+from tests.database import sqlite_database
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
@@ -44,9 +45,9 @@ def make_user(username: str = "Test.User") -> UserRecord:
 
 
 async def make_uow(tmp_path: Path):
-    url = f"sqlite+aiosqlite:///{tmp_path / 'repository.db'}"
-    await run_migrations(url)
-    engine = create_engine(url)
+    database = sqlite_database(tmp_path / "repository.db")
+    await run_migrations(database)
+    engine = create_engine(database)
     return engine, SqlAlchemyUnitOfWorkFactory(create_session_factory(engine))
 
 

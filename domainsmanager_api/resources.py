@@ -49,7 +49,8 @@ def create_resources(settings: Settings) -> Resources:
     ):
         raise ValueError("DOMAINSMANAGER_REFRESH_TOKEN_PEPPER must not be empty")
 
-    engine = create_engine(settings.database_url, pool_pre_ping=True)
+    database = settings.database_config()
+    engine = create_engine(database)
     sessions = create_session_factory(engine)
     store = SqlAlchemyLookupStore(sessions)
     auth = AuthService(

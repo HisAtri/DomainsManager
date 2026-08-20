@@ -26,6 +26,7 @@ from domainsmanager_persistence.db import (
     create_session_factory,
     run_migrations,
 )
+from tests.database import sqlite_database
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 CONTEXT = AuthContext(request_id="request-1234", user_agent="test-client")
@@ -37,9 +38,9 @@ async def make_service(
     registration_enabled: bool = True,
     passwords: PasswordService | None = None,
 ):
-    url = f"sqlite+aiosqlite:///{tmp_path / 'service.db'}"
-    await run_migrations(url)
-    engine = create_engine(url)
+    database = sqlite_database(tmp_path / "service.db")
+    await run_migrations(database)
+    engine = create_engine(database)
     sessions = create_session_factory(engine)
     service = AuthService(
         unit_of_work=SqlAlchemyUnitOfWorkFactory(sessions),
