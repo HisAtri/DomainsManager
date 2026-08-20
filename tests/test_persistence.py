@@ -33,11 +33,38 @@ async def test_sqlalchemy_lookup_store_round_trip_and_head_order(tmp_path: Path)
         observed_at=NOW + timedelta(seconds=1), fresh_until=NOW + timedelta(hours=1),
     )
     await store.publish(newer)
+    await store.publish(newer)
+    duplicate = StoredLookupRecord(
+        record_id=uuid4(),
+        namespace=newer.namespace,
+        cache_key=newer.cache_key,
+        schema_version=newer.schema_version,
+        payload=newer.payload,
+        payload_codec=newer.payload_codec,
+        content_hash=newer.content_hash,
+        observed_at=newer.observed_at,
+        fresh_until=newer.fresh_until,
+    )
+    await store.publish(duplicate)
     await store.publish(older)
 
     loaded = await store.get_current(newer.namespace, newer.cache_key)
     assert loaded is not None
     assert loaded.record_id == newer.record_id
+
+    conflicting = StoredLookupRecord(
+        record_id=newer.record_id,
+        namespace=newer.namespace,
+        cache_key=newer.cache_key,
+        schema_version=1,
+        payload=b"conflict",
+        payload_codec="raw",
+        content_hash="conflict",
+        observed_at=newer.observed_at,
+        fresh_until=newer.fresh_until,
+    )
+    with pytest.raises(ValueError, match="different data"):
+        await store.publish(conflicting)
 
     lease = await store.try_acquire_lease(
         newer.namespace, newer.cache_key, "worker", timedelta(seconds=30)
