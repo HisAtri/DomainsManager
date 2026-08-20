@@ -71,6 +71,7 @@ uv run domainsmanager-api
 - [数据库缓存接入指南](docs/cache-backends.md)
 - [数据库设计](docs/database-design.md)
 - [后端 API 规范](docs/api/README.md)
+- [后续开发工作计划](docs/development-plan.md)
 
 ## 测试
 
