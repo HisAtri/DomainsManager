@@ -80,6 +80,19 @@ async def run_migrations(
     await asyncio.to_thread(command.upgrade, config, revision)
 
 
+async def downgrade_migrations(
+    configuration: DatabaseConfig | DatabaseConnectionConfig,
+    revision: str = "base",
+) -> None:
+    connection = (
+        configuration.build_connection()
+        if isinstance(configuration, DatabaseConfig)
+        else configuration
+    )
+    config = create_alembic_config(connection)
+    await asyncio.to_thread(command.downgrade, config, revision)
+
+
 def create_alembic_config(connection: DatabaseConnectionConfig) -> Config:
     package_root = Path(__file__).parent
     config_path = package_root / "alembic.ini"

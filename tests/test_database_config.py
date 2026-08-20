@@ -9,7 +9,12 @@ from domainsmanager_persistence.database_config import (
     DatabaseSSLMode,
     DatabaseType,
 )
-from domainsmanager_persistence.db import create_alembic_config
+from domainsmanager_persistence.db import (
+    create_alembic_config,
+    create_engine,
+    downgrade_migrations,
+    run_migrations,
+)
 
 
 @pytest.mark.unit
@@ -138,7 +143,7 @@ def test_loads_database_configuration_from_environment() -> None:
     config = DatabaseConfig.from_environment(
         environment={
             "DOMAINSMANAGER_DATABASE_TYPE": "postgresql",
-            "DOMAINSMANAGER_DATABASE_HOST": "172.19.174.204",
+            "DOMAINSMANAGER_DATABASE_HOST": "192.0.2.10",
             "DOMAINSMANAGER_DATABASE_PORT": "5432",
             "DOMAINSMANAGER_DATABASE_NAME": "postgres",
             "DOMAINSMANAGER_DATABASE_USER": "postgres",
@@ -148,7 +153,7 @@ def test_loads_database_configuration_from_environment() -> None:
     )
 
     assert config.type is DatabaseType.POSTGRESQL
-    assert config.host == "172.19.174.204"
+    assert config.host == "192.0.2.10"
     assert config.name == "postgres"
     assert config.user == "postgres"
     assert config.password is not None
@@ -171,3 +176,29 @@ def test_alembic_configuration_preserves_percent_encoded_credentials() -> None:
     rendered = alembic.get_main_option("sqlalchemy.url")
 
     assert make_url(rendered).password == "percent%password"
+
+
+@pytest.mark.asyncio
+@pytest.mark.integration
+async def test_migration_upgrade_and_downgrade_use_structured_config(
+    tmp_path: Path,
+) -> None:
+    config = DatabaseConfig(type="sqlite", path=str(tmp_path / "migration.db"))
+
+    await run_migrations(config)
+    engine = create_engine(config)
+    async with engine.connect() as connection:
+        tables = await connection.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )
+        assert "app_user" in set(tables.scalars())
+    await engine.dispose()
+
+    await downgrade_migrations(config)
+    engine = create_engine(config)
+    async with engine.connect() as connection:
+        tables = await connection.exec_driver_sql(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )
+        assert "app_user" not in set(tables.scalars())
+    await engine.dispose()

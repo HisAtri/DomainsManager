@@ -66,6 +66,7 @@ markers = [
     "concurrency: asynchronous concurrency tests",
     "regression: tests for previously observed behavior",
     "api: FastAPI HTTP interface tests",
+    "postgres: tests requiring a dedicated PostgreSQL instance",
 ]
 
 [tool.coverage.run]
