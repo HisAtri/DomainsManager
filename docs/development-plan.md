@@ -10,6 +10,13 @@
 - 新增 `DOMAINSMANAGER_TASK_*` 和 `DOMAINSMANAGER_WORKER_POLL_INTERVAL_SECONDS` 配置项；
 - 该阶段只建立可靠任务主链，不包含 Scheduler、通知或 OAuth。
 
+### 2026-08-24：Worker 冷启动与运行配置
+
+- 独立 Worker 与 API 服务一致，在创建资源前自动升级数据库迁移；
+- 默认 Worker ID 使用主机名和进程号，支持 `DOMAINSMANAGER_WORKER_ID` 覆盖；
+- 空队列轮询间隔由 `DOMAINSMANAGER_WORKER_POLL_INTERVAL_SECONDS` 配置；
+- Worker 可注入停止事件和资源工厂，便于受控测试与优雅关闭编排。
+
 ## 1. 目标与文档边界
 
 本文档用于安排 DomainsManager 后端从当前的认证系统、查询核心和持久化骨架，逐步发展为

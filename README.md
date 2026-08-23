@@ -70,6 +70,8 @@ uv run domainsmanager-api
 `DOMAINSMANAGER_BOOTSTRAP_ADMIN_PASSWORD`；只有数据库没有任何用户时才会创建管理员，后续启动
 不会用这些变量修改或新增账号。
 
+刷新任务由独立 Worker 执行：`uv run domainsmanager-worker`（也支持 `python -m domainsmanager_api.worker`）。Worker 启动时同样会自动执行迁移；可使用 `DOMAINSMANAGER_WORKER_ID` 指定稳定标识，并使用 `DOMAINSMANAGER_WORKER_POLL_INTERVAL_SECONDS` 调整空队列轮询间隔。
+
 ## 文档
 
 - [架构与本次重构说明](docs/architecture.md)
