@@ -1,5 +1,15 @@
 # 后续开发工作计划
 
+## M2 实施记录
+
+### 2026-08-24：任务重试策略与租约基础
+
+- 刷新任务新增 `max_attempts`，创建任务时固定最大尝试次数；
+- `rate_limited` 与 `temporary_failure` 将按指数退避重新入队；其他错误或达到重试上限后终态失败；
+- 新增租约 heartbeat 持久化接口，供后续 Worker 保持长时间查询任务的所有权；
+- 新增 `DOMAINSMANAGER_TASK_*` 和 `DOMAINSMANAGER_WORKER_POLL_INTERVAL_SECONDS` 配置项；
+- 该阶段只建立可靠任务主链，不包含 Scheduler、通知或 OAuth。
+
 ## 1. 目标与文档边界
 
 本文档用于安排 DomainsManager 后端从当前的认证系统、查询核心和持久化骨架，逐步发展为

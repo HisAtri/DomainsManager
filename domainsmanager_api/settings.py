@@ -1,5 +1,4 @@
 from functools import lru_cache
-
 from pathlib import Path
 
 from pydantic import Field, SecretStr, model_validator
@@ -47,6 +46,11 @@ class Settings(BaseSettings):
     access_token_ttl_seconds: int = Field(default=900, ge=60)
     refresh_token_ttl_seconds: int = Field(default=2_592_000, ge=60)
     jwt_clock_skew_seconds: int = Field(default=30, ge=0, le=300)
+    task_lease_seconds: int = Field(default=120, ge=30, le=3600)
+    task_max_attempts: int = Field(default=5, ge=1, le=100)
+    task_retry_base_seconds: int = Field(default=60, ge=1, le=3600)
+    task_retry_max_seconds: int = Field(default=3600, ge=1, le=86_400)
+    worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
     bootstrap_admin_username: str | None = None
     bootstrap_admin_password: SecretStr | None = None
     request_id_header: str = "X-Request-ID"
@@ -88,6 +92,10 @@ class Settings(BaseSettings):
             )
         if "*" in self.cors_origins:
             raise ValueError("cors_origins cannot include '*' when credentials are enabled")
+        if self.task_retry_max_seconds < self.task_retry_base_seconds:
+            raise ValueError(
+                "task retry max seconds must not be less than the base delay"
+            )
         return self
 
 

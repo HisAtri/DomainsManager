@@ -199,6 +199,7 @@ class DomainRefreshTask(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
     force_refresh: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     lease_token: Mapped[UUID | None] = mapped_column(Uuid)
     lease_owner: Mapped[str | None] = mapped_column(String(128))

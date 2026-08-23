@@ -25,6 +25,21 @@ class IdempotencyConflictError(TaskError):
 
 
 @dataclass(frozen=True, slots=True)
+class TaskExecutionPolicy:
+    lease_duration: timedelta = timedelta(minutes=2)
+    max_attempts: int = 5
+    retry_base_delay: timedelta = timedelta(minutes=1)
+    retry_max_delay: timedelta = timedelta(hours=1)
+
+    def retry_at(self, now: datetime, attempt_count: int) -> datetime:
+        delay = min(
+            self.retry_base_delay * (2 ** max(attempt_count - 1, 0)),
+            self.retry_max_delay,
+        )
+        return now + delay
+
+
+@dataclass(frozen=True, slots=True)
 class RefreshTaskRecord:
     id: UUID
     user_id: UUID
@@ -40,6 +55,8 @@ class RefreshTaskRecord:
     check_id: UUID | None
     error_code: str | None
     error_message: str | None
+    available_at: datetime | None = None
+    max_attempts: int = 5
     lease_token: UUID | None = None
 
 
@@ -75,10 +92,12 @@ class RefreshTaskService:
         unit_of_work: UnitOfWorkFactory,
         lookup: DomainLookup,
         clock: Callable[[], datetime] | None = None,
+        policy: TaskExecutionPolicy | None = None,
     ) -> None:
         self._unit_of_work = unit_of_work
         self._lookup = lookup
         self._clock = clock or (lambda: datetime.now(UTC))
+        self._policy = policy or TaskExecutionPolicy()
 
     async def enqueue(
         self,
@@ -121,6 +140,8 @@ class RefreshTaskService:
                 check_id=None,
                 error_code=None,
                 error_message=None,
+                available_at=now,
+                max_attempts=self._policy.max_attempts,
             )
             await uow.tasks.add(
                 task, idempotency_key, fingerprint, now + timedelta(days=1)
@@ -185,7 +206,9 @@ class RefreshTaskService:
     async def run_once(self, worker_id: str) -> bool:
         now = self._clock()
         async with self._unit_of_work() as uow:
-            task = await uow.tasks.claim(worker_id, now, now + timedelta(minutes=2))
+            task = await uow.tasks.claim(
+                worker_id, now, now + self._policy.lease_duration
+            )
             if task is not None:
                 await uow.commit()
         if task is None:
@@ -208,6 +231,12 @@ class RefreshTaskService:
                     snapshot,
                 )
             else:
+                retry_at = (
+                    self._policy.retry_at(completed, task.attempt_count)
+                    if self._is_retryable(result.error_code)
+                    and task.attempt_count < task.max_attempts
+                    else None
+                )
                 check = await uow.tasks.complete_failure(
                     task.id,
                     task.lease_token,
@@ -217,7 +246,13 @@ class RefreshTaskService:
                     if result.error_code
                     else "unexpected_response",
                     result.error_message or "lookup failed",
+                    retry_at=retry_at,
                 )
             if check is not None:
                 await uow.commit()
         return True
+
+    @staticmethod
+    def _is_retryable(error_code: object) -> bool:
+        value = getattr(error_code, "value", error_code)
+        return value in {"rate_limited", "temporary_failure"}

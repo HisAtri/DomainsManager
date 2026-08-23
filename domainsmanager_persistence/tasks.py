@@ -57,6 +57,7 @@ class SqlAlchemyTaskRepository:
                 status=task.status,
                 force_refresh=task.force_refresh,
                 attempt_count=task.attempt_count,
+                max_attempts=task.max_attempts,
                 available_at=task.created_at,
                 created_at=task.created_at,
                 updated_at=task.updated_at,
@@ -129,6 +130,17 @@ class SqlAlchemyTaskRepository:
         await self._session.flush()
         return self._task_record(task, domain_name)
 
+    async def heartbeat(
+        self, task_id: UUID, lease_token: UUID, lease_until: datetime, at: datetime
+    ) -> bool:
+        task = await self._locked_task(task_id, lease_token)
+        if task is None:
+            return False
+        task.lease_until = lease_until
+        task.updated_at = at
+        await self._session.flush()
+        return True
+
     async def complete_success(
         self,
         task_id: UUID,
@@ -187,6 +199,8 @@ class SqlAlchemyTaskRepository:
         duration_ms: int,
         error_code: str,
         error_message: str,
+        *,
+        retry_at: datetime | None = None,
     ) -> DomainCheckRecord | None:
         task = await self._locked_task(task_id, lease_token)
         if task is None:
@@ -210,11 +224,12 @@ class SqlAlchemyTaskRepository:
             domain.last_outcome = error_code
             domain.updated_at = at
             domain.version += 1
-        task.status = "failed"
+        task.status = "queued" if retry_at is not None else "failed"
         task.domain_check_id = check.id
         task.error_code = error_code
         task.error_message = error_message[:512]
-        task.completed_at = at
+        task.completed_at = at if retry_at is None else None
+        task.available_at = retry_at or task.available_at
         task.lease_token = None
         task.lease_owner = None
         task.lease_until = None
@@ -303,6 +318,8 @@ class SqlAlchemyTaskRepository:
             check_id=task.domain_check_id,
             error_code=task.error_code,
             error_message=task.error_message,
+            available_at=as_utc(task.available_at),
+            max_attempts=task.max_attempts,
             lease_token=task.lease_token,
         )
 

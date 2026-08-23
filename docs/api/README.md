@@ -1,5 +1,9 @@
 # 后端 API 规范
 
+## 刷新任务执行策略
+
+刷新任务默认最多尝试 5 次。`rate_limited` 与 `temporary_failure` 使用指数退避重新排队；其他错误或达到重试上限后进入 `failed`。可通过 `DOMAINSMANAGER_TASK_MAX_ATTEMPTS`、`DOMAINSMANAGER_TASK_RETRY_BASE_SECONDS`、`DOMAINSMANAGER_TASK_RETRY_MAX_SECONDS` 和 `DOMAINSMANAGER_TASK_LEASE_SECONDS` 调整策略。Worker 租约保持由后续 Worker 心跳实现。
+
 [openapi.yaml](openapi.yaml) 是 FastAPI 后端的初版契约，采用 OpenAPI 3.1，统一前缀为
 `/api/v1`。当前已实现应用骨架、根级健康检查、本地认证、当前用户、用户域名 CRUD、刷新任务、检查历史和基础管理员接口。OAuth2 仅提供 Provider 空配置状态；其余业务路由按本文档约定逐步交付。
 

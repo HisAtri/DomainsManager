@@ -7,23 +7,22 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from domainsmanager_lookup import DomainLookup
+from domainsmanager_api.settings import Settings
 from domainsmanager_application.domains import DomainService
-from domainsmanager_application.tasks import RefreshTaskService
 from domainsmanager_application.security import (
     AccessTokenService,
     PasswordService,
     RefreshTokenService,
 )
 from domainsmanager_application.services import AuthConfiguration, AuthService
+from domainsmanager_application.tasks import RefreshTaskService, TaskExecutionPolicy
+from domainsmanager_lookup import DomainLookup
 from domainsmanager_persistence import (
     SqlAlchemyLookupStore,
     create_engine,
     create_session_factory,
 )
 from domainsmanager_persistence.auth import SqlAlchemyUnitOfWorkFactory
-
-from domainsmanager_api.settings import Settings
 
 
 @dataclass(slots=True)
@@ -46,7 +45,7 @@ class Resources:
                 revisions = (
                     await connection.execute(text("SELECT version_num FROM alembic_version"))
                 ).scalars().all()
-        except Exception:
+        except Exception:  # noqa: BLE001 - readiness must never leak backend failures
             return False
         return set(revisions) == heads
 
@@ -94,5 +93,14 @@ def create_resources(settings: Settings) -> Resources:
         lookup=lookup,
         auth=auth,
         domains=DomainService(unit_of_work=unit_of_work, lookup=lookup),
-        tasks=RefreshTaskService(unit_of_work=unit_of_work, lookup=lookup),
+        tasks=RefreshTaskService(
+            unit_of_work=unit_of_work,
+            lookup=lookup,
+            policy=TaskExecutionPolicy(
+                lease_duration=timedelta(seconds=settings.task_lease_seconds),
+                max_attempts=settings.task_max_attempts,
+                retry_base_delay=timedelta(seconds=settings.task_retry_base_seconds),
+                retry_max_delay=timedelta(seconds=settings.task_retry_max_seconds),
+            ),
+        ),
     )

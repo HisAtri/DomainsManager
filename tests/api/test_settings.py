@@ -51,6 +51,16 @@ def test_settings_accept_nonempty_auth_secrets() -> None:
 
 
 @pytest.mark.unit
+def test_settings_reject_task_retry_cap_lower_than_base() -> None:
+    with pytest.raises(ValidationError, match="must not be less"):
+        Settings(
+            _env_file=None,
+            task_retry_base_seconds=60,
+            task_retry_max_seconds=30,
+        )
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize(
     ("username", "password"),
     [("admin", None), (None, "password")],
