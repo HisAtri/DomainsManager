@@ -22,13 +22,13 @@ class Settings(BaseSettings):
 
     app_name: str = "DomainsManager"
     app_version: str = "0.1.0"
-    database_type: DatabaseType = DatabaseType.POSTGRESQL
-    database_host: str | None = "localhost"
+    database_type: DatabaseType = DatabaseType.SQLITE
+    database_host: str | None = None
     database_port: int = Field(default=5432, ge=1, le=65535)
-    database_name: str | None = "domainsmanager"
+    database_name: str | None = None
     database_user: str | None = None
     database_password: SecretStr | None = None
-    database_path: str | None = None
+    database_path: str | None = "domainsmanager.db"
     database_ssl_mode: DatabaseSSLMode = DatabaseSSLMode.DISABLE
     database_ssl_ca: Path | None = None
     database_pool_size: int = Field(default=5, ge=1)

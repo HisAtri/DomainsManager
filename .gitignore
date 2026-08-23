@@ -125,6 +125,8 @@ celerybeat.pid
 .env
 .env.*
 !.env.example
+!.env.sqlite.example
+!.env.postgresql.example
 .venv
 env/
 venv/

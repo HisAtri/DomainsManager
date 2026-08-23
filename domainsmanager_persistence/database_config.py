@@ -39,10 +39,10 @@ class DatabaseConfig(BaseSettings):
         extra="ignore",
     )
 
-    type: DatabaseType = DatabaseType.POSTGRESQL
-    host: str | None = "localhost"
+    type: DatabaseType = DatabaseType.SQLITE
+    host: str | None = None
     port: int = Field(default=5432, ge=1, le=65535)
-    name: str | None = "domainsmanager"
+    name: str | None = None
     user: str | None = None
     password: SecretStr | None = None
     path: str | None = None
