@@ -180,3 +180,9 @@ uv.lock
 # ide
 .vscode/
 .zcode/
+
+# Frontend dependencies and generated output
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/*.tsbuildinfo
