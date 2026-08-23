@@ -1,0 +1,17 @@
+name: verify
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --extra api --group dev
+      - run: uv run ruff format --check domainsmanager_api/api/domains.py domainsmanager_api/schemas/domains.py domainsmanager_application/domains.py domainsmanager_persistence/domains.py migrations/versions/d4e7f1c9a862_add_managed_domain_soft_delete.py tests/api/test_domains.py tests/test_domain_persistence.py tests/test_resources.py
+      - run: uv run ruff check domainsmanager_api/api/domains.py domainsmanager_api/schemas/domains.py domainsmanager_application/domains.py domainsmanager_persistence/domains.py migrations/versions/d4e7f1c9a862_add_managed_domain_soft_delete.py tests/api/test_domains.py tests/test_domain_persistence.py tests/test_resources.py
+      - run: uv run pytest -m "not network and not postgres" -ra
+      - run: uv build

@@ -4,7 +4,7 @@ info:
   version: 0.1.0
   summary: DomainsManager 后端 API 初版契约
   description: |
-    本文档定义计划中的 FastAPI HTTP 接口。健康检查已实现，其余业务路由按里程碑逐步交付。
+    本文档定义 FastAPI HTTP 接口。健康检查、本地认证、当前用户、用户域名、刷新任务、检查历史和基础管理员接口已实现。OAuth2 仅提供 Provider 配置状态；真实第三方授权和账号绑定仍待实现。
     所有时间均为 UTC RFC 3339 时间；除公开认证端点外均使用 Bearer Access Token。
 servers:
   - url: /api/v1
@@ -161,7 +161,7 @@ paths:
       requestBody:
         required: true
         content:
-          application/merge-patch+json:
+          application/json:
             schema: { $ref: '#/components/schemas/UpdateCurrentUserRequest' }
       responses:
         '200':
@@ -209,7 +209,7 @@ paths:
       requestBody:
         required: true
         content:
-          application/merge-patch+json:
+          application/json:
             schema: { $ref: '#/components/schemas/UserSettingsPatch' }
       responses:
         '200':
@@ -360,7 +360,7 @@ paths:
       requestBody:
         required: true
         content:
-          application/merge-patch+json:
+          application/json:
             schema: { $ref: '#/components/schemas/AdminUpdateUserRequest' }
       responses:
         '200':
@@ -469,9 +469,7 @@ paths:
       tags: [Domains]
       operationId: createDomain
       summary: 新增管理域名
-      description: 输入通过 `DomainLookup.normalize()` 标准化；同一用户的 ASCII 域名唯一。`check_now` 仅创建异步刷新任务。
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      description: 输入通过 `DomainLookup.normalize()` 标准化；同一用户的 ASCII 域名唯一。M1 不创建刷新任务。
       requestBody:
         required: true
         content:
@@ -482,12 +480,22 @@ paths:
           description: 域名已创建
           headers:
             Location: { schema: { type: string } }
+            ETag: { schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CreateDomainResult' }
+        '200':
+          description: 已软删除的同名域名已恢复
+          headers:
+            Location: { schema: { type: string } }
+            ETag: { schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateDomainResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
-        '429': { $ref: '#/components/responses/RateLimited' }
   /domains/{domain_id}:
     parameters:
       - $ref: '#/components/parameters/DomainId'
@@ -514,7 +522,7 @@ paths:
       requestBody:
         required: true
         content:
-          application/merge-patch+json:
+          application/json:
             schema: { $ref: '#/components/schemas/UpdateDomainRequest' }
       responses:
         '200':
@@ -534,8 +542,6 @@ paths:
       operationId: deleteDomain
       summary: 软删除当前用户域名
       description: 从默认列表隐藏，保留历史检查和安全审计；重复删除仍然成功。
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '204': { description: 域名已软删除或原本已删除 }
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -681,7 +687,7 @@ paths:
       requestBody:
         required: true
         content:
-          application/merge-patch+json:
+          application/json:
             schema: { $ref: '#/components/schemas/AdminUpdateDomainRequest' }
       responses:
         '200':
@@ -914,7 +920,7 @@ components:
       additionalProperties: false
       required: [refresh_token]
       properties:
-        refresh_token: { type: string, minLength: 32 }
+        refresh_token: { type: string, minLength: 1, maxLength: 1024 }
     UpdateCurrentUserRequest:
       type: object
       additionalProperties: false
@@ -1090,12 +1096,9 @@ components:
       properties:
         id: { type: string, format: uuid }
         identity: { $ref: '#/components/schemas/DomainIdentity' }
-        snapshot: { anyOf: [{ $ref: '#/components/schemas/DomainSnapshot' }, { type: 'null' }] }
-        latest_check: { anyOf: [{ $ref: '#/components/schemas/CheckSummary' }, { type: 'null' }] }
         monitor_enabled: { type: boolean }
         renewal_mode: { $ref: '#/components/schemas/RenewalMode' }
         notes: { type: [string, 'null'], maxLength: 5000 }
-        next_check_at: { type: [string, 'null'], format: date-time }
         version: { type: integer, minimum: 1 }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
@@ -1106,16 +1109,12 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 253 }
         monitor_enabled: { type: boolean, default: true }
-        renewal_mode: { $ref: '#/components/schemas/RenewalMode' }
-        notes: { type: [string, 'null'], maxLength: 5000 }
-        check_now: { type: boolean, default: true }
     CreateDomainResult:
       type: object
       additionalProperties: false
       required: [domain]
       properties:
         domain: { $ref: '#/components/schemas/ManagedDomain' }
-        refresh_task: { anyOf: [{ $ref: '#/components/schemas/RefreshTask' }, { type: 'null' }] }
     UpdateDomainRequest:
       type: object
       additionalProperties: false

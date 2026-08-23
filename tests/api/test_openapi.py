@@ -89,7 +89,71 @@ def test_implemented_health_operations_match_contract() -> None:
 
 
 @pytest.mark.contract
-def test_implemented_auth_operations_match_contract() -> None:
+def test_implemented_domain_operations_match_contract() -> None:
+    document = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
+    expected = {
+        ("/api/v1/domains", "get", "listDomains"),
+        ("/api/v1/domains", "post", "createDomain"),
+        ("/api/v1/domains/{domain_id}", "get", "getDomain"),
+        ("/api/v1/domains/{domain_id}", "patch", "updateDomain"),
+        ("/api/v1/domains/{domain_id}", "delete", "deleteDomain"),
+        ("/api/v1/domains/{domain_id}/refresh", "post", "refreshDomain"),
+        ("/api/v1/domains/{domain_id}/checks", "get", "listDomainChecks"),
+        ("/api/v1/domains/{domain_id}/checks/{check_id}", "get", "getDomainCheck"),
+        ("/api/v1/tasks/{task_id}", "get", "getTask"),
+    }
+    app = create_app(
+        Settings(
+            database_type="sqlite",
+            database_path=":memory:",
+            jwt_secret_key="x",
+            refresh_token_pepper="y",
+        )
+    )
+    runtime_document = app.openapi()
+    actual = {
+        (path, method, operation["operationId"])
+        for path, path_item in runtime_document["paths"].items()
+        if path.startswith("/api/v1/domains")
+        or path.startswith("/api/v1/tasks/")
+        for method, operation in path_item.items()
+        if method in {"get", "post", "patch", "delete"}
+    }
+
+    assert actual == expected
+
+
+@pytest.mark.contract
+def test_implemented_admin_operations_match_contract() -> None:
+    expected = {
+        ("/api/v1/admin/users", "get", "listUsers"),
+        ("/api/v1/admin/users/{user_id}", "get", "getUserAsAdmin"),
+        ("/api/v1/admin/users/{user_id}", "patch", "updateUserAsAdmin"),
+        ("/api/v1/admin/users/{user_id}/ban", "post", "banUser"),
+        ("/api/v1/admin/users/{user_id}/unban", "post", "unbanUser"),
+        ("/api/v1/admin/domains", "get", "listDomainsAsAdmin"),
+        ("/api/v1/admin/domains/{domain_id}", "get", "getDomainAsAdmin"),
+        ("/api/v1/admin/domains/{domain_id}", "patch", "updateDomainAsAdmin"),
+        ("/api/v1/admin/domains/{domain_id}", "delete", "deleteDomainAsAdmin"),
+        ("/api/v1/admin/domains/{domain_id}/refresh", "post", "refreshDomainAsAdmin"),
+    }
+    app = create_app(
+        Settings(
+            database_type="sqlite",
+            database_path=":memory:",
+            jwt_secret_key="x",
+            refresh_token_pepper="y",
+        )
+    )
+    actual = {
+        (path, method, operation["operationId"])
+        for path, path_item in app.openapi()["paths"].items()
+        if path.startswith("/api/v1/admin/")
+        for method, operation in path_item.items()
+        if method in {"get", "post", "patch", "delete"}
+    }
+    assert actual == expected
+
     document = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
     implemented_paths = {
         "/auth/register",
@@ -99,6 +163,9 @@ def test_implemented_auth_operations_match_contract() -> None:
         "/auth/me",
         "/auth/me/password",
         "/auth/me/settings",
+        "/auth/oauth2/providers",
+        "/auth/oauth2/{provider}/authorize",
+        "/auth/oauth2/{provider}/callback",
     }
     expected = {
         (f"/api/v1{path}", method, operation["operationId"])

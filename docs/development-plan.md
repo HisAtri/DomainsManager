@@ -32,7 +32,7 @@
 
 ## 2. 当前基线
 
-基线提交为 `139da95`，开发分支为 `feature/fastapi-server`。
+基线提交为 `fc98fe2`，开发分支为 `feature/fastapi-server`。
 
 ### 2.1 已完成能力
 
@@ -42,7 +42,7 @@
 - Bearer Access Token、当前用户资料、改密和白名单设置；
 - 首次管理员环境变量引导，并通过唯一系统状态避免重复初始化；
 - 用户、认证 Session、Refresh Token、安全审计的 Repository 和 UoW；
-- SQLAlchemy、Alembic、SQLite 快速集成测试和可打包迁移资源；
+- SQLAlchemy、Alembic、SQLite 快速集成测试、PostgreSQL 迁移与认证并发测试，以及可打包迁移资源；
 - `DomainLookup.normalize()` 和 `DomainLookup.lookup()` 公开查询入口；
 - IDNA/Punycode 标准化、Public Suffix 识别、RDAP 优先、WHOIS 回退和原始响应缓存。
 
@@ -82,8 +82,8 @@
 
 | 里程碑 | 状态 | 核心交付 | 前置依赖 |
 | --- | --- | --- | --- |
-| M0 | 待开始 | 契约、PostgreSQL 和质量门禁收敛 | 当前基线 |
-| M1 | 待开始 | 用户域名持久化和 CRUD | M0 |
+| M0 | 进行中 | 契约、PostgreSQL 和质量门禁收敛 | 当前基线 |
+| M1 | 进行中 | 用户域名持久化和 CRUD | M0 |
 | M2 | 待开始 | 刷新任务、Worker 和检查历史 | M1 |
 | M3 | 待开始 | 定时调度和通知 | M2 |
 | M4 | 待开始 | 管理员用户和全局域名管理 | 用户管理依赖 M1；刷新依赖 M2 |
@@ -92,7 +92,7 @@
 
 ## 5. M0：契约与工程基线收敛
 
-**状态：** `待开始`
+**状态：** `进行中`
 
 ### 5.1 目标
 
@@ -111,7 +111,7 @@
 - 建立 PostgreSQL 集成测试入口，覆盖迁移、Session、Refresh Token 轮换和行锁；
 - 增加格式检查、lint、type-check、coverage 门禁和 wheel 隔离安装测试；
 - readiness 检查数据库 revision，而不只是执行 `SELECT 1`；
-- 明确生产支持矩阵，清理数据库设计文档中遗留的 SQLite/MySQL 目标描述。
+- 明确生产支持矩阵，并清理数据库设计文档中遗留的 SQLite/MySQL 目标描述；
 
 ### 5.3 完成条件
 
@@ -130,7 +130,7 @@
 
 ## 6. M1：用户域名持久化与 CRUD
 
-**状态：** `待开始`
+**状态：** `进行中`
 
 **前置依赖：** M0
 

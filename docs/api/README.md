@@ -1,7 +1,7 @@
 # 后端 API 规范
 
 [openapi.yaml](openapi.yaml) 是 FastAPI 后端的初版契约，采用 OpenAPI 3.1，统一前缀为
-`/api/v1`。当前已实现应用骨架和根级健康检查；其余业务路由按本文档约定逐步交付。
+`/api/v1`。当前已实现应用骨架、根级健康检查、本地认证、当前用户、用户域名 CRUD、刷新任务、检查历史和基础管理员接口。OAuth2 仅提供 Provider 空配置状态；其余业务路由按本文档约定逐步交付。
 
 ## 1. 资源和权限边界
 
@@ -67,7 +67,9 @@ Token。封禁要求原因并立即撤销会话；管理员不能封禁自己。
 ## 4. 域名资源语义
 
 新增域名先调用 `DomainLookup.normalize()`，将 Unicode 和 Punycode 等价输入归一为相同的
-`name_ascii`。数据库通过 `(user_id, name_ascii)` 唯一约束处理并发重复创建。
+`name_ascii`。M1 仅接受可注册域名，例如 `example.com`；子域名会被拒绝。数据库通过
+`(user_id, name_ascii)` 唯一约束处理并发重复创建。创建同名软删除记录会恢复该记录并返回
+`200`，首次创建返回 `201`。
 
 `ManagedDomain` 响应由三类数据组成：
 
@@ -79,9 +81,8 @@ Token。封禁要求原因并立即撤销会话；管理员不能封禁自己。
 等注册局数据。更新使用 `ETag: "<version>"` 和 `If-Match` 实施乐观并发；缺少前置条件返回
 `428`，版本过期返回 `409`。
 
-删除采用软删除：资源默认从用户列表和调度器中隐藏，检查历史与审计按保留策略继续保存。
-管理员也只能通过首版 API 执行软删除，且必须提交 `Idempotency-Key` 和
-`X-Confirm-Action: soft-delete`；永久删除应由单独的数据治理流程处理。
+删除采用软删除：资源默认从用户列表和调度器中隐藏，检查历史与审计按保留策略继续保存。M1 的
+DELETE 天然幂等，不要求 `Idempotency-Key`；需要持久化请求幂等的刷新和管理员写操作留待 M2。
 
 ## 5. 刷新和检查任务
 
@@ -123,7 +124,7 @@ WHOIS/RDAP 请求延迟和上游限流不适合占用普通 HTTP 请求，所以
 | 域名查询 | `DomainLookup.lookup()` | 后台 Worker 和任务编排 |
 | 查询缓存 | `SqlAlchemyLookupStore` | 在应用生命周期注入 `DomainLookup` |
 | 用户数据 | `AppUser`、认证会话 | User/UoW/认证服务已实现；管理员管理待实现 |
-| 管理域名 | `ManagedDomain` | Domain Repository、快照写入服务 |
+| 管理域名 | `ManagedDomain` | Domain Repository、M1 CRUD 和软删除已实现；快照写入服务待 M2 |
 | 检查历史 | `DomainCheck` | 成功/失败检查持久化和变化比较 |
 | 安全审计 | `SecurityAuditEvent` | Audit Repository 和统一审计服务 |
 
@@ -145,7 +146,7 @@ WHOIS/RDAP 请求延迟和上游限流不适合占用普通 HTTP 请求，所以
 
 ## 9. 当前状态
 
-FastAPI 应用工厂、配置、资源生命周期、请求 ID、统一错误边界、健康检查，以及本地注册、登录、
-退出、Token 轮换、当前用户资料、改密和设置接口已实现。用户域名/管理员业务路由、后台 Worker、
-OAuth Provider 集成和对应后续迁移仍待实现。后续实现应以 [openapi.yaml](openapi.yaml) 为行为基线，
-并在修改 HTTP 行为时同步更新规范和契约测试。
+FastAPI 应用工厂、配置、资源生命周期、请求 ID、统一错误边界、健康检查，本地注册、登录、
+退出、Token 轮换、当前用户资料、改密和设置，以及用户域名列表、创建、详情、ETag 更新与软删除
+已实现。管理员业务路由、后台 Worker、OAuth Provider 集成和对应后续迁移仍待实现。后续实现应以
+[openapi.yaml](openapi.yaml) 为行为基线，并在修改 HTTP 行为时同步更新规范和契约测试。

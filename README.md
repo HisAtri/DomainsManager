@@ -46,7 +46,7 @@ results = await lookup.lookup(
 
 ## FastAPI 服务器（阶段性）
 
-当前已提供 FastAPI 应用骨架、健康检查和本地用户认证接口。域名及管理员业务路由将按
+当前已提供 FastAPI 应用骨架、健康检查、本地用户认证、用户域名 CRUD、刷新任务和检查历史、基础管理员查询与封禁接口。使用 `domainsmanager-worker` 独立处理刷新任务，使用 `domainsmanager-seed` 创建前端联调示例数据。真实 OAuth2、通知和后台调度将按
 [后端 API 规范](docs/api/README.md) 逐步实现。开发环境启动：
 
 ```powershell
