@@ -184,11 +184,21 @@ class SystemStateRepository(Protocol):
     async def try_claim(self, key: str, created_at: datetime) -> bool: ...
 
 
+class DomainRepository(Protocol):
+    pass
+
+
+class TaskRepository(Protocol):
+    pass
+
+
 class UnitOfWork(Protocol):
     users: UserRepository
     sessions: AuthSessionRepository
     audits: AuditRepository
     system_state: SystemStateRepository
+    domains: DomainRepository
+    tasks: TaskRepository
 
     async def __aenter__(self) -> "UnitOfWork": ...
 

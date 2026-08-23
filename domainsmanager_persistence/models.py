@@ -132,6 +132,14 @@ class ManagedDomain(TimestampMixin, Base):
         UniqueConstraint("user_id", "name_ascii"),
         Index("ix_managed_domain_schedule", "monitor_enabled", "next_check_at"),
         Index("ix_managed_domain_expires_at", "expires_at"),
+        Index(
+            "ix_managed_domain_user_active_name",
+            "user_id",
+            "deleted_at",
+            "name_ascii",
+            "id",
+        ),
+        CheckConstraint("version >= 1", name="managed_domain_version_positive"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
@@ -159,6 +167,71 @@ class ManagedDomain(TimestampMixin, Base):
     renewal_mode: Mapped[str | None] = mapped_column(String(32))
     notes: Mapped[str | None] = mapped_column(Text)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    deleted_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+
+
+class DomainRefreshTask(TimestampMixin, Base):
+    __tablename__ = "domain_refresh_task"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')",
+            name="domain_refresh_task_valid_status",
+        ),
+        Index(
+            "ix_domain_refresh_task_claim",
+            "status",
+            "available_at",
+            "lease_until",
+        ),
+        Index("ix_domain_refresh_task_domain_created", "managed_domain_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("app_user.id", ondelete="CASCADE"), nullable=False
+    )
+    managed_domain_id: Mapped[UUID] = mapped_column(
+        ForeignKey("managed_domain.id", ondelete="CASCADE"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
+    force_refresh: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    lease_token: Mapped[UUID | None] = mapped_column(Uuid)
+    lease_owner: Mapped[str | None] = mapped_column(String(128))
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    domain_check_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("domain_check.id", ondelete="SET NULL")
+    )
+    error_code: Mapped[str | None] = mapped_column(String(64))
+    error_message: Mapped[str | None] = mapped_column(String(512))
+
+
+class IdempotencyRecord(Base):
+    __tablename__ = "idempotency_record"
+    __table_args__ = (
+        UniqueConstraint("user_id", "operation", "resource_id", "key"),
+        Index("ix_idempotency_record_expires", "expires_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("app_user.id", ondelete="CASCADE"), nullable=False
+    )
+    operation: Mapped[str] = mapped_column(String(64), nullable=False)
+    resource_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    key: Mapped[str] = mapped_column(String(128), nullable=False)
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    task_id: Mapped[UUID] = mapped_column(
+        ForeignKey("domain_refresh_task.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class LookupRecord(Base):

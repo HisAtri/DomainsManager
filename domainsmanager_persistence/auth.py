@@ -16,6 +16,8 @@ from domainsmanager_application.auth import (
     SessionRecord,
     UserRecord,
 )
+from domainsmanager_persistence.domains import SqlAlchemyDomainRepository
+from domainsmanager_persistence.tasks import SqlAlchemyTaskRepository
 from domainsmanager_persistence.models import (
     AppUser,
     AuthRefreshToken,
@@ -421,6 +423,8 @@ class SqlAlchemyUnitOfWork:
         self.sessions = SqlAlchemyAuthSessionRepository(self._session)
         self.audits = SqlAlchemyAuditRepository(self._session)
         self.system_state = SqlAlchemySystemStateRepository(self._session)
+        self.domains = SqlAlchemyDomainRepository(self._session)
+        self.tasks = SqlAlchemyTaskRepository(self._session)
         return self
 
     async def __aexit__(
