@@ -12,6 +12,7 @@ from domainsmanager_application.domains import (
     DomainListQuery,
     DomainPage,
     ManagedDomainRecord,
+    ScheduledDomain,
 )
 from domainsmanager_persistence.models import ManagedDomain
 
@@ -204,6 +205,38 @@ class SqlAlchemyDomainRepository:
             )
         )
         return result.rowcount == 1
+
+    async def claim_due(
+        self, now: datetime, next_check_at: datetime, limit: int
+    ) -> list[ScheduledDomain]:
+        rows = (
+            await self._session.execute(
+                select(ManagedDomain)
+                .where(
+                    ManagedDomain.monitor_enabled.is_(True),
+                    ManagedDomain.deleted_at.is_(None),
+                    ManagedDomain.next_check_at.is_not(None),
+                    ManagedDomain.next_check_at <= now,
+                )
+                .order_by(ManagedDomain.next_check_at, ManagedDomain.id)
+                .limit(limit)
+                .with_for_update(skip_locked=True)
+            )
+        ).scalars().all()
+        claimed: list[ScheduledDomain] = []
+        for domain in rows:
+            domain.next_check_at = next_check_at
+            domain.updated_at = now
+            domain.version += 1
+            claimed.append(
+                ScheduledDomain(
+                    id=domain.id,
+                    user_id=domain.user_id,
+                    name_ascii=domain.name_ascii,
+                )
+            )
+        await self._session.flush()
+        return claimed
 
     @staticmethod
     def _to_record(row: ManagedDomain) -> ManagedDomainRecord:

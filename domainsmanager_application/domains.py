@@ -87,6 +87,13 @@ class DomainPage:
     page_size: int
 
 
+@dataclass(frozen=True, slots=True)
+class ScheduledDomain:
+    id: UUID
+    user_id: UUID
+    name_ascii: str
+
+
 class ManagedDomainRepository(Protocol):
     async def get(
         self, user_id: UUID, domain_id: UUID, *, include_deleted: bool = False
@@ -122,6 +129,10 @@ class ManagedDomainRepository(Protocol):
     async def soft_delete(
         self, domain_id: UUID, user_id: UUID, at: datetime
     ) -> bool: ...
+
+    async def claim_due(
+        self, now: datetime, next_check_at: datetime, limit: int
+    ) -> list[ScheduledDomain]: ...
 
 
 class DomainService:

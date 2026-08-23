@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from domainsmanager_api.settings import Settings
 from domainsmanager_application.domains import DomainService
+from domainsmanager_application.scheduler import DomainSchedulerService, SchedulerPolicy
 from domainsmanager_application.security import (
     AccessTokenService,
     PasswordService,
@@ -33,6 +34,7 @@ class Resources:
     auth: AuthService
     domains: DomainService
     tasks: RefreshTaskService
+    scheduler: DomainSchedulerService
 
     async def database_ready(self) -> bool:
         try:
@@ -104,6 +106,13 @@ def create_resources(settings: Settings) -> Resources:
                 successful_check_interval=timedelta(
                     seconds=settings.check_interval_seconds
                 ),
+            ),
+        ),
+        scheduler=DomainSchedulerService(
+            unit_of_work=unit_of_work,
+            policy=SchedulerPolicy(
+                check_interval=timedelta(seconds=settings.check_interval_seconds),
+                batch_size=settings.scheduler_batch_size,
             ),
         ),
     )

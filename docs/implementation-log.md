@@ -22,3 +22,21 @@
 
 - `tests/test_task_policy.py` 覆盖租约续期、防止第二 Worker 重领、快照差异和下次检查时间。
 - 每次变更后运行目标测试、静态检查和全量测试；PostgreSQL 多 Worker 并发测试将在 M2 最终验收中补齐。
+
+## 2026-08-24 — M3 Scheduler 基础链路
+
+### 后端变更
+
+- 新增独立的 `domainsmanager-scheduler` 进程。它扫描已启用、未软删除且 `next_check_at <= now` 的域名。
+- Scheduler 使用数据库行锁和 `SKIP LOCKED` 领取域名；领取、推进 `next_check_at`、创建刷新任务及幂等记录处于同一事务中。
+- 默认批量大小为 100，轮询间隔为 10 秒；可通过 `DOMAINSMANAGER_SCHEDULER_BATCH_SIZE` 和 `DOMAINSMANAGER_SCHEDULER_POLL_INTERVAL_SECONDS` 调整。
+- Scheduler 创建的任务不跳过查询缓存。任务成功后继续由 Worker 写入下一次检查时间；任务重试或失败遵循既有 M2 策略。
+
+### API 与前端对接
+
+- 本提交未改变 HTTP API 或前端数据类型。Scheduler 是部署侧后台进程，前端继续通过现有任务轮询和检查历史接口观察结果。
+- 后续通知规则和投递历史 API 将在 M3 Outbox 提交中记录在本文件和 `frontend/README.md`。
+
+### 验证
+
+- `tests/test_scheduler.py` 覆盖到期域名入队、监控关闭域名排除和重复扫描不重复建任务。

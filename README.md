@@ -71,6 +71,7 @@ uv run domainsmanager-api
 不会用这些变量修改或新增账号。
 
 刷新任务由独立 Worker 执行：`uv run domainsmanager-worker`（也支持 `python -m domainsmanager_api.worker`）。Worker 启动时同样会自动执行迁移；可使用 `DOMAINSMANAGER_WORKER_ID` 指定稳定标识，并使用 `DOMAINSMANAGER_WORKER_POLL_INTERVAL_SECONDS` 调整空队列轮询间隔。
+定时调度由独立 Scheduler 执行：`uv run domainsmanager-scheduler`（也支持 `python -m domainsmanager_api.scheduler`）。它扫描到期的已启用域名并创建刷新任务；可通过 `DOMAINSMANAGER_SCHEDULER_POLL_INTERVAL_SECONDS` 和 `DOMAINSMANAGER_SCHEDULER_BATCH_SIZE` 调整轮询与批量大小。
 
 ## 文档
 
