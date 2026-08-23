@@ -20,7 +20,11 @@ from domainsmanager_persistence.db import (
     create_session_factory,
     run_migrations,
 )
-from domainsmanager_persistence.models import ManagedDomain
+from domainsmanager_persistence.models import (
+    ManagedDomain,
+    NotificationOutbox,
+    NotificationRule,
+)
 from tests.database import sqlite_database
 
 
@@ -221,6 +225,14 @@ async def test_worker_renews_lease_and_records_snapshot_changes(tmp_path: Path) 
                 )
             )
             await uow.commit()
+        async with engine.begin() as connection:
+            await connection.execute(
+                NotificationRule.__table__.insert().values(
+                    id=uuid4(), user_id=user_id, managed_domain_id=domain_id,
+                    event_type="status_change", days_before=None, channel="email",
+                    channel_config={}, is_enabled=True, created_at=now, updated_at=now,
+                )
+            )
 
         lookup = DelayedLookup(
             [
@@ -268,6 +280,10 @@ async def test_worker_renews_lease_and_records_snapshot_changes(tmp_path: Path) 
             next_check_at = await connection.scalar(
                 select(ManagedDomain.next_check_at).where(ManagedDomain.id == domain_id)
             )
+            outbox_count = await connection.scalar(
+                select(NotificationOutbox).where(NotificationOutbox.event_type == "status_change")
+            )
+        assert outbox_count is not None
         assert next_check_at is not None
         if next_check_at.tzinfo is None:
             next_check_at = next_check_at.replace(tzinfo=UTC)

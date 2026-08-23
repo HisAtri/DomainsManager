@@ -47,3 +47,9 @@
 - 支持 `expiration`、`status_change` 和 `query_failure` 事件，以及 `email`、`webhook` 渠道。到期规则必须指定提前天数。
 - Webhook 规则当前只保存公开 URL；认证凭据、密钥和 Authorization 头不允许通过该接口或 JSON 配置提交。Outbox 与发送 Worker 将在下一提交实现。
 - 前端尚未新增页面；可在后续通知设置页面调用上述接口。
+
+## 2026-08-24 — M3 检查结果 Outbox
+
+- 成功检查的状态变化、到期窗口，以及失败检查会在同一数据库事务中创建 `notification_outbox` 记录。
+- Outbox 去重键由规则、检查或到期日组成；并发重复写入受唯一约束保护，不会回滚域名检查事务。
+- 本次未改变浏览器 API；后续投递历史接口完成后再提供前端页面对接。
