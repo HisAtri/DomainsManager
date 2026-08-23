@@ -35,7 +35,7 @@ class SqlAlchemyNotificationRuleRepository:
         await self._session.flush()
 
     async def claim_outbox(self, worker_id: str, now: datetime, lease_until: datetime) -> OutboxMessage | None:
-        row = (await self._session.execute(select(NotificationOutbox, NotificationRule, AppUser.email).join(NotificationRule).join(AppUser, AppUser.id == NotificationRule.user_id).where(or_(and_(NotificationOutbox.status == "pending", NotificationOutbox.available_at <= now), and_(NotificationOutbox.status == "running", NotificationOutbox.lease_until <= now))).order_by(NotificationOutbox.available_at, NotificationOutbox.id).limit(1).with_for_update(skip_locked=True))).one_or_none()
+        row = (await self._session.execute(select(NotificationOutbox, NotificationRule, AppUser.email).select_from(NotificationOutbox).join(NotificationRule, NotificationRule.id == NotificationOutbox.notification_rule_id).join(AppUser, AppUser.id == NotificationRule.user_id).where(or_(and_(NotificationOutbox.status == "pending", NotificationOutbox.available_at <= now), and_(NotificationOutbox.status == "running", NotificationOutbox.lease_until <= now))).order_by(NotificationOutbox.available_at, NotificationOutbox.id).limit(1).with_for_update(skip_locked=True))).one_or_none()
         if row is None:
             return None
         outbox, rule, email = row
