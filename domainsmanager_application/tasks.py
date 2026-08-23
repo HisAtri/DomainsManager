@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -27,6 +28,7 @@ class IdempotencyConflictError(TaskError):
 @dataclass(frozen=True, slots=True)
 class TaskExecutionPolicy:
     lease_duration: timedelta = timedelta(minutes=2)
+    successful_check_interval: timedelta = timedelta(days=1)
     max_attempts: int = 5
     retry_base_delay: timedelta = timedelta(minutes=1)
     retry_max_delay: timedelta = timedelta(hours=1)
@@ -37,6 +39,11 @@ class TaskExecutionPolicy:
             self.retry_max_delay,
         )
         return now + delay
+
+    @property
+    def heartbeat_interval(self) -> timedelta:
+        """Renew a lease before it can be reclaimed by another worker."""
+        return self.lease_duration / 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -214,9 +221,18 @@ class RefreshTaskService:
         if task is None:
             return False
         started = monotonic()
-        outcome = await self._lookup.lookup(
-            [task.domain_name], options=LookupOptions(force_refresh=task.force_refresh)
+        stop_heartbeat = asyncio.Event()
+        heartbeat = asyncio.create_task(
+            self._maintain_lease(task, stop_heartbeat), name=f"task-lease-{task.id}"
         )
+        try:
+            outcome = await self._lookup.lookup(
+                [task.domain_name],
+                options=LookupOptions(force_refresh=task.force_refresh),
+            )
+        finally:
+            stop_heartbeat.set()
+            await heartbeat
         result = outcome[0]
         completed = self._clock()
         duration_ms = int((monotonic() - started) * 1000)
@@ -229,6 +245,7 @@ class RefreshTaskService:
                     completed,
                     duration_ms,
                     snapshot,
+                    next_check_at=completed + self._policy.successful_check_interval,
                 )
             else:
                 retry_at = (
@@ -251,6 +268,28 @@ class RefreshTaskService:
             if check is not None:
                 await uow.commit()
         return True
+
+    async def _maintain_lease(
+        self, task: RefreshTaskRecord, stop: asyncio.Event
+    ) -> None:
+        """Periodically extend the claimed task lease while lookup is in flight."""
+        interval = self._policy.heartbeat_interval.total_seconds()
+        while True:
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=interval)
+                return
+            except TimeoutError:
+                now = self._clock()
+                async with self._unit_of_work() as uow:
+                    renewed = await uow.tasks.heartbeat(
+                        task.id,
+                        task.lease_token,
+                        now + self._policy.lease_duration,
+                        now,
+                    )
+                    if not renewed:
+                        return
+                    await uow.commit()
 
     @staticmethod
     def _is_retryable(error_code: object) -> bool:

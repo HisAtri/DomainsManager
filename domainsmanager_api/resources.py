@@ -101,6 +101,9 @@ def create_resources(settings: Settings) -> Resources:
                 max_attempts=settings.task_max_attempts,
                 retry_base_delay=timedelta(seconds=settings.task_retry_base_seconds),
                 retry_max_delay=timedelta(seconds=settings.task_retry_max_seconds),
+                successful_check_interval=timedelta(
+                    seconds=settings.check_interval_seconds
+                ),
             ),
         ),
     )

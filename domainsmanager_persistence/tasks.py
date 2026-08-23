@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+from hashlib import sha256
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, func, or_, select
@@ -148,10 +150,16 @@ class SqlAlchemyTaskRepository:
         at: datetime,
         duration_ms: int,
         snapshot: dict,
+        *,
+        next_check_at: datetime,
     ) -> DomainCheckRecord | None:
         task = await self._locked_task(task_id, lease_token)
         if task is None:
             return None
+        previous_snapshot = await self._previous_success_snapshot(
+            task.managed_domain_id
+        )
+        snapshot_hash = self._snapshot_hash(snapshot)
         check = DomainCheck(
             id=uuid4(),
             managed_domain_id=task.managed_domain_id,
@@ -161,7 +169,8 @@ class SqlAlchemyTaskRepository:
             protocol=snapshot.get("source"),
             source=snapshot.get("source_url"),
             snapshot=snapshot,
-            changed_fields=[],
+            snapshot_hash=snapshot_hash,
+            changed_fields=self._changed_fields(previous_snapshot, snapshot),
             is_stale=False,
             created_at=at,
         )
@@ -170,15 +179,16 @@ class SqlAlchemyTaskRepository:
         if domain is not None:
             domain.registrar_json = snapshot.get("registrar")
             domain.statuses = snapshot.get("statuses", [])
-            domain.registered_at = snapshot.get("registered_at")
-            domain.expires_at = snapshot.get("expires_at")
-            domain.registry_updated_at = snapshot.get("updated_at")
+            domain.registered_at = self._snapshot_datetime(snapshot.get("registered_at"))
+            domain.expires_at = self._snapshot_datetime(snapshot.get("expires_at"))
+            domain.registry_updated_at = self._snapshot_datetime(snapshot.get("updated_at"))
             domain.nameservers = snapshot.get("nameservers", [])
             domain.dnssec_enabled = snapshot.get("dnssec_enabled")
             domain.latest_source = snapshot.get("source")
             domain.last_successful_check_at = at
             domain.last_check_at = at
             domain.last_outcome = "success"
+            domain.next_check_at = next_check_at
             domain.updated_at = at
             domain.version += 1
         task.status = "succeeded"
@@ -300,6 +310,54 @@ class SqlAlchemyTaskRepository:
             .with_for_update()
         )
         return result.scalar_one_or_none()
+
+    async def _previous_success_snapshot(
+        self, domain_id: UUID
+    ) -> dict | None:
+        result = await self._session.execute(
+            select(DomainCheck.snapshot)
+            .where(
+                DomainCheck.managed_domain_id == domain_id,
+                DomainCheck.outcome == "success",
+                DomainCheck.snapshot.is_not(None),
+            )
+            .order_by(DomainCheck.checked_at.desc(), DomainCheck.id.desc())
+            .limit(1)
+        )
+        snapshot = result.scalar_one_or_none()
+        return dict(snapshot) if snapshot is not None else None
+
+    @staticmethod
+    def _snapshot_hash(snapshot: dict) -> str:
+        payload = json.dumps(
+            snapshot, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        )
+        return sha256(payload.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _changed_fields(previous: dict | None, current: dict) -> list[str]:
+        if previous is None:
+            return []
+        monitored_fields = (
+            "registrar",
+            "statuses",
+            "registered_at",
+            "expires_at",
+            "updated_at",
+            "nameservers",
+            "dnssec_enabled",
+        )
+        return [field for field in monitored_fields if previous.get(field) != current.get(field)]
+
+    @staticmethod
+    def _snapshot_datetime(value: object) -> datetime | None:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value
+        if isinstance(value, str):
+            return datetime.fromisoformat(value)
+        raise TypeError("snapshot datetime fields must be RFC 3339 timestamps")
 
     @staticmethod
     def _task_record(task: DomainRefreshTask, domain_name: str) -> RefreshTaskRecord:
