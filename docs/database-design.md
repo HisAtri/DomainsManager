@@ -11,7 +11,7 @@
 
 ## 1. 目标与范围
 
-DomainsManager 使用 SQLAlchemy 访问 SQLite 或 MySQL，数据库需要支持：
+DomainsManager 使用 SQLAlchemy 访问 PostgreSQL 15+；SQLite 仅用于快速本地测试，数据库需要支持：
 
 - 保存用户及安全设置；
 - 保存用户管理的域名及最新注册状态；
@@ -192,7 +192,7 @@ erDiagram
 - 单用户模式可对 `name_ascii` 建唯一约束；兼容多用户时使用
   `UNIQUE(user_id, name_ascii)`；
 - 为 `expiration_at`、`monitor_enabled`、`last_check_at` 建索引，支持到期扫描和任务调度；
-- `name_ascii` 只保存小写 ASCII，避免 MySQL collation 和 Unicode 等价性影响唯一约束；
+- `name_ascii` 只保存小写 ASCII，避免数据库 collation 和 Unicode 等价性影响唯一约束；
 - `statuses` 和 `nameservers` 写入前去重并排序，减少无意义的变化记录。
 
 `expiration_at`、`registry_updated_at`、`source_checked_at` 和 `updated_at` 语义不同，不能合并：
@@ -336,21 +336,19 @@ PSL 包含类似 `*.ck` 与 `!www.ck` 的规则，所以不能只保存一个无
 
 ### 6.1 主键
 
-SQLite 的自动递增行为对 `INTEGER PRIMARY KEY` 有特殊要求，而 MySQL 常用 `BIGINT`。
-实现时应定义统一的主键类型变体，或在项目规模允许时统一使用 UUID。不要假设
-`BigInteger` 在 SQLite 上天然具有与 `Integer` 相同的自增行为。
+项目统一使用 UUID 主键，避免依赖整数自增行为。
 
 ### 6.2 时间
 
 - 应用层只使用带时区的 UTC `datetime`；
-- 数据库适配层应明确处理 MySQL/SQLite 对时区信息支持不一致的问题；
+- PostgreSQL 以 `TIMESTAMP WITH TIME ZONE` 保存时间；SQLite 测试适配器在读取时恢复 UTC aware datetime；
 - 读取后统一恢复为 UTC aware datetime；
 - 不要把域名的 `expiration_at` 当作查询缓存的 `expires_at`。
 
 ### 6.3 JSON 与枚举
 
 - 使用 SQLAlchemy `JSON` 类型提供基础兼容性；
-- 不依赖 SQLite 和 MySQL 不一致的 JSON 查询行为；
+- SQLite 测试不得替代 PostgreSQL 对 JSONB 查询行为的验证；
 - 状态值优先使用字符串列配合 Python Enum 和校验，不使用数据库厂商专用 Enum；
 - JSON 字段变更若需要 SQLAlchemy 自动检测，应使用 `MutableDict`/`MutableList`，或总是整体替换值。
 
@@ -365,13 +363,13 @@ SQLite 的自动递增行为对 `INTEGER PRIMARY KEY` 有特殊要求，而 MySQ
 
 - 使用唯一约束保证跨进程并发下不会插入重复域名或重复端点；
 - 缓存保存和提醒发送必须是幂等操作；
-- MySQL 可使用方言 UPSERT；SQLite 使用对应冲突处理，但应封装在仓储层；
+- PostgreSQL 使用方言 UPSERT；SQLite 测试使用对应冲突处理，但应封装在仓储层；
 - 进程内 `asyncio.Lock` 只能减少重复请求，不能替代数据库约束或事务。
 
 ### 6.6 迁移
 
-使用 Alembic 管理全部模式变更。迁移至少需要在 SQLite 和目标 MySQL 版本上分别执行测试，
-尤其关注主键自增、JSON 默认值、索引长度、外键和 DateTime 行为。
+使用 Alembic 管理全部模式变更。迁移至少需要在 SQLite 与 PostgreSQL 15+ 上分别执行测试，
+尤其关注 UUID、JSONB、索引、外键和 DateTime 行为。
 
 ## 7. 更新流程
 
@@ -397,7 +395,7 @@ Worker 同时刷新，可增加租约字段、任务锁或使用独立任务队�
 - 引入 SQLAlchemy 与 Alembic；
 - 实现 `user`、`domain`、`domain_check`；
 - 实现 `raw_lookup_response`、`registry_endpoint` 及两个现有缓存接口的数据库适配器；
-- 在 SQLite 建立集成测试。
+- 在 SQLite 建立快速集成测试，并以 PostgreSQL 15+ 集成测试验证生产语义。
 
 ### 第二阶段：监控与提醒
 
@@ -420,4 +418,4 @@ Worker 同时刷新，可增加租约字段、任务锁或使用独立任务队�
 - 每次检查均可追溯到协议、端点、时间、解析器版本和原始响应；
 - 到期时间、注册局更新时间、抓取时间与本地更新时间含义互不混用；
 - 重复执行同一检查或提醒任务不会产生重复业务结果；
-- SQLite 和 MySQL 能从空库执行同一组 Alembic 迁移，并通过核心仓储测试。
+- SQLite 和 PostgreSQL 15+ 能从空库执行同一组 Alembic 迁移，并通过核心仓储测试。

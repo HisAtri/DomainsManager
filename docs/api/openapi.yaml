@@ -4,7 +4,7 @@ info:
   version: 0.1.0
   summary: DomainsManager 后端 API 初版契约
   description: |
-    本文档定义计划中的 FastAPI HTTP 接口。当前仓库尚未实现这些路由。
+    本文档定义 FastAPI HTTP 接口。健康检查、本地认证、当前用户、用户域名、刷新任务、检查历史和基础管理员接口已实现。OAuth2 仅提供 Provider 配置状态；真实第三方授权和账号绑定仍待实现。
     所有时间均为 UTC RFC 3339 时间；除公开认证端点外均使用 Bearer Access Token。
 servers:
   - url: /api/v1
@@ -16,9 +16,44 @@ tags:
   - name: Tasks
   - name: Admin users
   - name: Admin domains
+  - name: Health
 security:
   - bearerAuth: []
 paths:
+  /health/live:
+    get:
+      tags: [Health]
+      operationId: getLiveness
+      summary: 进程存活检查
+      security: []
+      servers:
+        - url: /
+      responses:
+        '200':
+          description: 服务进程存活
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthStatus' }
+  /health/ready:
+    get:
+      tags: [Health]
+      operationId: getReadiness
+      summary: 服务就绪检查
+      description: 检查数据库连接，不访问外部 RDAP/WHOIS 服务。
+      security: []
+      servers:
+        - url: /
+      responses:
+        '200':
+          description: 服务可接收业务请求
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HealthStatus' }
+        '503':
+          description: 数据库不可用
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /auth/register:
     post:
       tags: [Authentication]
@@ -38,7 +73,16 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AuthResult' }
-        '409': { $ref: '#/components/responses/Conflict' }
+        '403':
+          description: 注册功能已关闭（`registration_disabled`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: 用户名已存在（`username_taken`）
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '422': { $ref: '#/components/responses/ValidationError' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /auth/login:
@@ -67,15 +111,16 @@ paths:
       tags: [Authentication]
       operationId: logout
       summary: 撤销当前会话
-      description: 使用 Refresh Token 标识待撤销会话；重复请求仍然成功。
+      description: 使用 Refresh Token 标识待撤销会话；无效、已撤销或重复请求仍然成功。
+      security: []
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: '#/components/schemas/RefreshTokenRequest' }
       responses:
-        '204': { description: 会话已撤销或原本不存在 }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        '204': { description: 会话已撤销、不可用或原本不存在 }
+        '422': { $ref: '#/components/responses/ValidationError' }
   /auth/token/refresh:
     post:
       tags: [Authentication]
@@ -94,6 +139,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TokenPair' }
         '401': { $ref: '#/components/responses/AuthenticationFailed' }
+        '422': { $ref: '#/components/responses/ValidationError' }
         '429': { $ref: '#/components/responses/RateLimited' }
   /auth/me:
     get:
@@ -115,7 +161,7 @@ paths:
       requestBody:
         required: true
         content:
-          application/merge-patch+json:
+          application/json:
             schema: { $ref: '#/components/schemas/UpdateCurrentUserRequest' }
       responses:
         '200':
@@ -163,7 +209,7 @@ paths:
       requestBody:
         required: true
         content:
-          application/merge-patch+json:
+          application/json:
             schema: { $ref: '#/components/schemas/UserSettingsPatch' }
       responses:
         '200':
@@ -314,7 +360,7 @@ paths:
       requestBody:
         required: true
         content:
-          application/merge-patch+json:
+          application/json:
             schema: { $ref: '#/components/schemas/AdminUpdateUserRequest' }
       responses:
         '200':
@@ -423,9 +469,7 @@ paths:
       tags: [Domains]
       operationId: createDomain
       summary: 新增管理域名
-      description: 输入通过 `DomainLookup.normalize()` 标准化；同一用户的 ASCII 域名唯一。`check_now` 仅创建异步刷新任务。
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
+      description: 输入通过 `DomainLookup.normalize()` 标准化；同一用户的 ASCII 域名唯一。M1 不创建刷新任务。
       requestBody:
         required: true
         content:
@@ -436,12 +480,22 @@ paths:
           description: 域名已创建
           headers:
             Location: { schema: { type: string } }
+            ETag: { schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CreateDomainResult' }
+        '200':
+          description: 已软删除的同名域名已恢复
+          headers:
+            Location: { schema: { type: string } }
+            ETag: { schema: { type: string, pattern: '^"[1-9][0-9]*"$' } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CreateDomainResult' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
-        '429': { $ref: '#/components/responses/RateLimited' }
   /domains/{domain_id}:
     parameters:
       - $ref: '#/components/parameters/DomainId'
@@ -468,7 +522,7 @@ paths:
       requestBody:
         required: true
         content:
-          application/merge-patch+json:
+          application/json:
             schema: { $ref: '#/components/schemas/UpdateDomainRequest' }
       responses:
         '200':
@@ -488,8 +542,6 @@ paths:
       operationId: deleteDomain
       summary: 软删除当前用户域名
       description: 从默认列表隐藏，保留历史检查和安全审计；重复删除仍然成功。
-      parameters:
-        - $ref: '#/components/parameters/IdempotencyKey'
       responses:
         '204': { description: 域名已软删除或原本已删除 }
         '401': { $ref: '#/components/responses/Unauthorized' }
@@ -628,14 +680,14 @@ paths:
     patch:
       tags: [Admin domains]
       operationId: updateDomainAsAdmin
-      summary: 修改全局域名本地属性或归属
-      description: "`owner_user_id` 变更必须单独记录审计事件。"
+      summary: 修改全局域名本地属性
+      description: 域名所有权转移不属于首版通用编辑接口。
       parameters:
         - $ref: '#/components/parameters/IfMatch'
       requestBody:
         required: true
         content:
-          application/merge-patch+json:
+          application/json:
             schema: { $ref: '#/components/schemas/AdminUpdateDomainRequest' }
       responses:
         '200':
@@ -792,6 +844,12 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
   schemas:
+    HealthStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, const: ok }
     Error:
       type: object
       additionalProperties: false
@@ -831,7 +889,7 @@ components:
       required: [username, password]
       properties:
         username: { type: string, minLength: 3, maxLength: 128, pattern: '^[A-Za-z0-9_.-]+$' }
-        password: { type: string, format: password, minLength: 12, maxLength: 256 }
+        password: { type: string, format: password, minLength: 6, maxLength: 256 }
         email: { type: [string, 'null'], format: email, maxLength: 320 }
     LoginRequest:
       type: object
@@ -862,7 +920,7 @@ components:
       additionalProperties: false
       required: [refresh_token]
       properties:
-        refresh_token: { type: string, minLength: 32 }
+        refresh_token: { type: string, minLength: 1, maxLength: 1024 }
     UpdateCurrentUserRequest:
       type: object
       additionalProperties: false
@@ -875,7 +933,7 @@ components:
       required: [current_password, new_password]
       properties:
         current_password: { type: string, format: password, minLength: 1, maxLength: 256 }
-        new_password: { type: string, format: password, minLength: 12, maxLength: 256 }
+        new_password: { type: string, format: password, minLength: 6, maxLength: 256 }
     UserSettings:
       type: object
       additionalProperties: false
@@ -933,21 +991,30 @@ components:
         provider_username: { type: [string, 'null'] }
         bound_at: { type: string, format: date-time }
     AdminUser:
-      allOf:
-        - $ref: '#/components/schemas/User'
-        - type: object
-          required: [domain_count]
-          properties:
-            domain_count: { type: integer, minimum: 0 }
-            banned_at: { type: [string, 'null'], format: date-time }
-            ban_reason: { type: [string, 'null'] }
+      type: object
+      additionalProperties: false
+      required: [id, username, role, status, created_at, updated_at, domain_count]
+      properties:
+        id: { type: string, format: uuid }
+        username: { type: string }
+        email: { type: [string, 'null'], format: email }
+        role: { $ref: '#/components/schemas/UserRole' }
+        status: { $ref: '#/components/schemas/UserStatus' }
+        last_login_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        domain_count: { type: integer, minimum: 0 }
+        banned_at: { type: [string, 'null'], format: date-time }
+        ban_reason: { type: [string, 'null'] }
     AdminUserPage:
-      allOf:
-        - $ref: '#/components/schemas/PageMetadata'
-        - type: object
-          required: [items]
-          properties:
-            items: { type: array, items: { $ref: '#/components/schemas/AdminUser' } }
+      type: object
+      additionalProperties: false
+      required: [items, page, page_size, total]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminUser' } }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
     AdminUpdateUserRequest:
       type: object
       additionalProperties: false
@@ -1029,12 +1096,9 @@ components:
       properties:
         id: { type: string, format: uuid }
         identity: { $ref: '#/components/schemas/DomainIdentity' }
-        snapshot: { anyOf: [{ $ref: '#/components/schemas/DomainSnapshot' }, { type: 'null' }] }
-        latest_check: { anyOf: [{ $ref: '#/components/schemas/CheckSummary' }, { type: 'null' }] }
         monitor_enabled: { type: boolean }
         renewal_mode: { $ref: '#/components/schemas/RenewalMode' }
         notes: { type: [string, 'null'], maxLength: 5000 }
-        next_check_at: { type: [string, 'null'], format: date-time }
         version: { type: integer, minimum: 1 }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
@@ -1045,16 +1109,12 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 253 }
         monitor_enabled: { type: boolean, default: true }
-        renewal_mode: { $ref: '#/components/schemas/RenewalMode' }
-        notes: { type: [string, 'null'], maxLength: 5000 }
-        check_now: { type: boolean, default: true }
     CreateDomainResult:
       type: object
       additionalProperties: false
       required: [domain]
       properties:
         domain: { $ref: '#/components/schemas/ManagedDomain' }
-        refresh_task: { anyOf: [{ $ref: '#/components/schemas/RefreshTask' }, { type: 'null' }] }
     UpdateDomainRequest:
       type: object
       additionalProperties: false
@@ -1072,12 +1132,14 @@ components:
         page_size: { type: integer, minimum: 1, maximum: 100 }
         total: { type: integer, minimum: 0 }
     DomainPage:
-      allOf:
-        - $ref: '#/components/schemas/PageMetadata'
-        - type: object
-          required: [items]
-          properties:
-            items: { type: array, items: { $ref: '#/components/schemas/ManagedDomain' } }
+      type: object
+      additionalProperties: false
+      required: [items, page, page_size, total]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ManagedDomain' } }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
     RefreshDomainRequest:
       type: object
       additionalProperties: false
@@ -1134,21 +1196,33 @@ components:
         is_stale: { type: boolean }
         created_at: { type: string, format: date-time }
     DomainCheckPage:
-      allOf:
-        - $ref: '#/components/schemas/PageMetadata'
-        - type: object
-          required: [items]
-          properties:
-            items: { type: array, items: { $ref: '#/components/schemas/DomainCheck' } }
+      type: object
+      additionalProperties: false
+      required: [items, page, page_size, total]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/DomainCheck' } }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
     AdminManagedDomain:
-      allOf:
-        - $ref: '#/components/schemas/ManagedDomain'
-        - type: object
-          required: [owner, deleted_at]
-          properties:
-            owner: { $ref: '#/components/schemas/UserReference' }
-            deleted_at: { type: [string, 'null'], format: date-time }
-            deleted_by_user_id: { type: [string, 'null'], format: uuid }
+      type: object
+      additionalProperties: false
+      required: [id, identity, monitor_enabled, version, created_at, updated_at, owner, deleted_at]
+      properties:
+        id: { type: string, format: uuid }
+        identity: { $ref: '#/components/schemas/DomainIdentity' }
+        snapshot: { anyOf: [{ $ref: '#/components/schemas/DomainSnapshot' }, { type: 'null' }] }
+        latest_check: { anyOf: [{ $ref: '#/components/schemas/CheckSummary' }, { type: 'null' }] }
+        monitor_enabled: { type: boolean }
+        renewal_mode: { $ref: '#/components/schemas/RenewalMode' }
+        notes: { type: [string, 'null'], maxLength: 5000 }
+        next_check_at: { type: [string, 'null'], format: date-time }
+        version: { type: integer, minimum: 1 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        owner: { $ref: '#/components/schemas/UserReference' }
+        deleted_at: { type: [string, 'null'], format: date-time }
+        deleted_by_user_id: { type: [string, 'null'], format: uuid }
     UserReference:
       type: object
       additionalProperties: false
@@ -1157,18 +1231,22 @@ components:
         id: { type: string, format: uuid }
         username: { type: string }
     AdminUpdateDomainRequest:
-      allOf:
-        - $ref: '#/components/schemas/UpdateDomainRequest'
-        - type: object
-          properties:
-            owner_user_id: { type: string, format: uuid }
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        monitor_enabled: { type: boolean }
+        renewal_mode: { $ref: '#/components/schemas/RenewalMode' }
+        notes: { type: [string, 'null'], maxLength: 5000 }
     AdminDomainPage:
-      allOf:
-        - $ref: '#/components/schemas/PageMetadata'
-        - type: object
-          required: [items]
-          properties:
-            items: { type: array, items: { $ref: '#/components/schemas/AdminManagedDomain' } }
+      type: object
+      additionalProperties: false
+      required: [items, page, page_size, total]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AdminManagedDomain' } }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
     CheckStatistics:
       type: object
       additionalProperties: false
@@ -1178,9 +1256,12 @@ components:
           type: object
           additionalProperties: { type: integer, minimum: 0 }
     AdminDomainCheckPage:
-      allOf:
-        - $ref: '#/components/schemas/DomainCheckPage'
-        - type: object
-          required: [statistics]
-          properties:
-            statistics: { $ref: '#/components/schemas/CheckStatistics' }
+      type: object
+      additionalProperties: false
+      required: [items, page, page_size, total, statistics]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/DomainCheck' } }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
+        statistics: { $ref: '#/components/schemas/CheckStatistics' }

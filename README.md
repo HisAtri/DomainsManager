@@ -44,6 +44,32 @@ results = await lookup.lookup(
 )
 ```
 
+## FastAPI 服务器（阶段性）
+
+当前已提供 FastAPI 应用骨架、健康检查、本地用户认证、用户域名 CRUD、刷新任务和检查历史、基础管理员查询与封禁接口。使用 `domainsmanager-worker` 独立处理刷新任务，使用 `domainsmanager-seed` 创建前端联调示例数据。真实 OAuth2、通知和后台调度将按
+[后端 API 规范](docs/api/README.md) 逐步实现。开发环境启动：
+
+```powershell
+uv sync --extra api
+$env:DOMAINSMANAGER_DATABASE_TYPE = "postgresql"
+$env:DOMAINSMANAGER_DATABASE_HOST = "localhost"
+$env:DOMAINSMANAGER_DATABASE_PORT = "5432"
+$env:DOMAINSMANAGER_DATABASE_NAME = "domainsmanager"
+$env:DOMAINSMANAGER_DATABASE_USER = "domainsmanager"
+$env:DOMAINSMANAGER_DATABASE_PASSWORD = "change-me"
+$env:DOMAINSMANAGER_DATABASE_SSL_MODE = "disable"
+$env:DOMAINSMANAGER_JWT_SECRET_KEY = "replace-me"
+$env:DOMAINSMANAGER_REFRESH_TOKEN_PEPPER = "replace-me"
+uv run alembic upgrade head
+uv run domainsmanager-api
+```
+
+服务默认监听 `http://127.0.0.1:7920`，健康检查为 `/health/live` 和
+`/health/ready`。数据库迁移必须在服务启动前单独执行，不会由应用自动运行。首次部署可临时设置
+`DOMAINSMANAGER_BOOTSTRAP_ADMIN_USERNAME` 和
+`DOMAINSMANAGER_BOOTSTRAP_ADMIN_PASSWORD`；只有数据库没有任何用户时才会创建管理员，后续启动
+不会用这些变量修改或新增账号。
+
 ## 文档
 
 - [架构与本次重构说明](docs/architecture.md)
@@ -51,6 +77,7 @@ results = await lookup.lookup(
 - [数据库缓存接入指南](docs/cache-backends.md)
 - [数据库设计](docs/database-design.md)
 - [后端 API 规范](docs/api/README.md)
+- [后续开发工作计划](docs/development-plan.md)
 
 ## 测试
 
