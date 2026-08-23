@@ -387,6 +387,7 @@ class NotificationOutbox(TimestampMixin, Base):
     attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     available_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    lease_token: Mapped[UUID | None] = mapped_column(Uuid)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     lease_owner: Mapped[str | None] = mapped_column(String(128))
     last_error: Mapped[str | None] = mapped_column(String(512))

@@ -7,10 +7,14 @@ from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
+from domainsmanager_api.notifier import deliver
 from domainsmanager_api.settings import Settings
 from domainsmanager_application.domains import DomainService
+from domainsmanager_application.notifications import (
+    NotificationOutboxService,
+    NotificationRuleService,
+)
 from domainsmanager_application.scheduler import DomainSchedulerService, SchedulerPolicy
-from domainsmanager_application.notifications import NotificationRuleService
 from domainsmanager_application.security import (
     AccessTokenService,
     PasswordService,
@@ -37,6 +41,7 @@ class Resources:
     tasks: RefreshTaskService
     scheduler: DomainSchedulerService
     notifications: NotificationRuleService
+    notifier: NotificationOutboxService
 
     async def database_ready(self) -> bool:
         try:
@@ -118,4 +123,5 @@ def create_resources(settings: Settings) -> Resources:
             ),
         ),
         notifications=NotificationRuleService(unit_of_work=unit_of_work),
+        notifier=NotificationOutboxService(unit_of_work=unit_of_work, deliver=lambda message: deliver(message, settings)),
     )

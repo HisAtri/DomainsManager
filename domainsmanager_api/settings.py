@@ -54,6 +54,14 @@ class Settings(BaseSettings):
     worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
     scheduler_poll_interval_seconds: float = Field(default=10.0, gt=0, le=300)
     scheduler_batch_size: int = Field(default=100, ge=1, le=1000)
+    notification_delivery_timeout_seconds: float = Field(default=10, gt=0, le=120)
+    notification_worker_poll_interval_seconds: float = Field(default=1, gt=0, le=60)
+    smtp_host: str | None = None
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_from: str | None = None
+    smtp_username: str | None = None
+    smtp_password: SecretStr | None = None
+    smtp_starttls: bool = True
     bootstrap_admin_username: str | None = None
     bootstrap_admin_password: SecretStr | None = None
     request_id_header: str = "X-Request-ID"
