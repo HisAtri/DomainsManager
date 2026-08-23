@@ -65,7 +65,7 @@ uv run domainsmanager-api
 ```
 
 服务默认监听 `http://127.0.0.1:7920`，健康检查为 `/health/live` 和
-`/health/ready`。数据库迁移必须在服务启动前单独执行，不会由应用自动运行。首次部署可临时设置
+`/health/ready`。服务启动时会自动将配置的数据库升级到最新迁移版本；首次部署可临时设置
 `DOMAINSMANAGER_BOOTSTRAP_ADMIN_USERNAME` 和
 `DOMAINSMANAGER_BOOTSTRAP_ADMIN_PASSWORD`；只有数据库没有任何用户时才会创建管理员，后续启动
 不会用这些变量修改或新增账号。

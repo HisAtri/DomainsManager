@@ -63,7 +63,11 @@ class Settings(BaseSettings):
             name=self.database_name,
             user=self.database_user,
             password=self.database_password,
-            path=self.database_path,
+            path=(
+                self.database_path
+                if self.database_type is DatabaseType.SQLITE
+                else None
+            ),
             ssl_mode=self.database_ssl_mode,
             ssl_ca=self.database_ssl_ca,
             pool_size=self.database_pool_size,

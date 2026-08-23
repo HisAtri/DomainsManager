@@ -14,6 +14,7 @@ from domainsmanager_api.errors import install_exception_handlers
 from domainsmanager_api.middleware import RequestIdMiddleware
 from domainsmanager_api.resources import Resources, create_resources
 from domainsmanager_api.settings import Settings, get_settings
+from domainsmanager_persistence.db import run_migrations
 
 ResourceFactory = Callable[[Settings], Resources]
 
@@ -27,6 +28,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        await run_migrations(effective_settings.database_config())
         resources = resource_factory(effective_settings)
         app.state.resources = resources
         try:

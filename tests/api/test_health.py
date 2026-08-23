@@ -83,7 +83,11 @@ def test_ready_returns_uniform_error_when_database_is_unavailable() -> None:
         database_ready=AsyncMock(return_value=False),
         close=AsyncMock(),
     )
-    settings = Settings(database_type="sqlite", database_path=":memory:")
+    settings = Settings(
+        _env_file=None,
+        database_type="sqlite",
+        database_path=":memory:",
+    )
 
     with TestClient(
         create_app(settings, resource_factory=lambda _: resources)
@@ -100,3 +104,20 @@ def test_ready_returns_uniform_error_when_database_is_unavailable() -> None:
         "request_id": "request-5678",
     }
     resources.close.assert_awaited_once()
+
+
+@pytest.mark.api
+def test_startup_migrates_an_empty_sqlite_database(tmp_path: Path) -> None:
+    database = tmp_path / "fresh.db"
+    settings = Settings(
+        _env_file=None,
+        database_type="sqlite",
+        database_path=str(database),
+        jwt_secret_key="x",
+        refresh_token_pepper="y",
+    )
+
+    with TestClient(create_app(settings)) as test_client:
+        response = test_client.get("/health/ready")
+
+    assert response.status_code == 200
