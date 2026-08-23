@@ -17,9 +17,36 @@ tags:
   - name: Admin users
   - name: Admin domains
   - name: Health
+  - name: Notifications
 security:
   - bearerAuth: []
 paths:
+  /notification-rules:
+    get:
+      tags: [Notifications]
+      operationId: listNotificationRules
+      responses:
+        '200':
+          description: Notification rules
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/NotificationRule' } }
+    post:
+      tags: [Notifications]
+      operationId: createNotificationRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateNotificationRuleRequest' }
+      responses:
+        '201':
+          description: Notification rule created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationRule' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
   /health/live:
     get:
       tags: [Health]
@@ -844,6 +871,30 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
   schemas:
+    CreateNotificationRuleRequest:
+      type: object
+      additionalProperties: false
+      required: [event_type, channel]
+      properties:
+        domain_id: { type: [string, 'null'], format: uuid }
+        event_type: { type: string, enum: [expiration, status_change, query_failure] }
+        days_before: { type: [integer, 'null'], minimum: 0, maximum: 365 }
+        channel: { type: string, enum: [email, webhook] }
+        webhook_url: { type: [string, 'null'], format: uri }
+    NotificationRule:
+      type: object
+      additionalProperties: false
+      required: [id, domain_id, event_type, days_before, channel, webhook_url, enabled, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        domain_id: { type: [string, 'null'], format: uuid }
+        event_type: { type: string, enum: [expiration, status_change, query_failure] }
+        days_before: { type: [integer, 'null'] }
+        channel: { type: string, enum: [email, webhook] }
+        webhook_url: { type: [string, 'null'], format: uri }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
     HealthStatus:
       type: object
       additionalProperties: false

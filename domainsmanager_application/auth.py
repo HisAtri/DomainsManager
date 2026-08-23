@@ -192,6 +192,10 @@ class TaskRepository(Protocol):
     pass
 
 
+class NotificationRepository(Protocol):
+    pass
+
+
 class UnitOfWork(Protocol):
     users: UserRepository
     sessions: AuthSessionRepository
@@ -199,6 +203,7 @@ class UnitOfWork(Protocol):
     system_state: SystemStateRepository
     domains: DomainRepository
     tasks: TaskRepository
+    notifications: NotificationRepository
 
     async def __aenter__(self) -> "UnitOfWork": ...
 

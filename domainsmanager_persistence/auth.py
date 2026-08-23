@@ -17,6 +17,7 @@ from domainsmanager_application.auth import (
     UserRecord,
 )
 from domainsmanager_persistence.domains import SqlAlchemyDomainRepository
+from domainsmanager_persistence.notifications import SqlAlchemyNotificationRuleRepository
 from domainsmanager_persistence.tasks import SqlAlchemyTaskRepository
 from domainsmanager_persistence.models import (
     AppUser,
@@ -425,6 +426,7 @@ class SqlAlchemyUnitOfWork:
         self.system_state = SqlAlchemySystemStateRepository(self._session)
         self.domains = SqlAlchemyDomainRepository(self._session)
         self.tasks = SqlAlchemyTaskRepository(self._session)
+        self.notifications = SqlAlchemyNotificationRuleRepository(self._session)
         return self
 
     async def __aexit__(

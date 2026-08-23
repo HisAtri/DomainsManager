@@ -9,6 +9,7 @@ from domainsmanager_api.api.admin import router as admin_router
 from domainsmanager_api.api.domains import router as domains_router
 from domainsmanager_api.api.health import router as health_router
 from domainsmanager_api.api.oauth import router as oauth_router
+from domainsmanager_api.api.notifications import router as notifications_router
 from domainsmanager_api.api.tasks import router as tasks_router
 from domainsmanager_api.errors import install_exception_handlers
 from domainsmanager_api.middleware import RequestIdMiddleware
@@ -71,6 +72,7 @@ def create_app(
     app.include_router(admin_router, prefix=effective_settings.api_prefix)
     app.include_router(domains_router, prefix=effective_settings.api_prefix)
     app.include_router(tasks_router, prefix=effective_settings.api_prefix)
+    app.include_router(notifications_router, prefix=effective_settings.api_prefix)
     return app
 
 

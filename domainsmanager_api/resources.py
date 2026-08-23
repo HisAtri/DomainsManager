@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from domainsmanager_api.settings import Settings
 from domainsmanager_application.domains import DomainService
 from domainsmanager_application.scheduler import DomainSchedulerService, SchedulerPolicy
+from domainsmanager_application.notifications import NotificationRuleService
 from domainsmanager_application.security import (
     AccessTokenService,
     PasswordService,
@@ -35,6 +36,7 @@ class Resources:
     domains: DomainService
     tasks: RefreshTaskService
     scheduler: DomainSchedulerService
+    notifications: NotificationRuleService
 
     async def database_ready(self) -> bool:
         try:
@@ -115,4 +117,5 @@ def create_resources(settings: Settings) -> Resources:
                 batch_size=settings.scheduler_batch_size,
             ),
         ),
+        notifications=NotificationRuleService(unit_of_work=unit_of_work),
     )

@@ -348,6 +348,11 @@ class DomainCheck(Base):
 
 class NotificationRule(TimestampMixin, Base):
     __tablename__ = "notification_rule"
+    __table_args__ = (
+        CheckConstraint("event_type IN ('expiration', 'status_change', 'query_failure')", name="notification_rule_valid_event_type"),
+        CheckConstraint("channel IN ('email', 'webhook')", name="notification_rule_valid_channel"),
+        Index("ix_notification_rule_user_domain", "user_id", "managed_domain_id"),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("app_user.id", ondelete="CASCADE"))

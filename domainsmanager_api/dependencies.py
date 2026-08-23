@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domainsmanager_lookup import DomainLookup
 from domainsmanager_application.domains import DomainService
 from domainsmanager_application.tasks import RefreshTaskService
+from domainsmanager_application.notifications import NotificationRuleService
 from domainsmanager_application.services import (
     AccountBannedError,
     AuthContext,
@@ -46,6 +47,13 @@ def get_task_service(resources: ResourcesDependency) -> RefreshTaskService:
 
 
 TaskServiceDependency = Annotated[RefreshTaskService, Depends(get_task_service)]
+
+
+def get_notification_service(resources: ResourcesDependency) -> NotificationRuleService:
+    return resources.notifications
+
+
+NotificationServiceDependency = Annotated[NotificationRuleService, Depends(get_notification_service)]
 
 
 def get_auth_context(request: Request) -> AuthContext:
