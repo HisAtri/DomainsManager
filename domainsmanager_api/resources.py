@@ -1,10 +1,15 @@
 from dataclasses import dataclass
 from datetime import timedelta
+from pathlib import Path
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from domainsmanager_lookup import DomainLookup
+from domainsmanager_application.domains import DomainService
+from domainsmanager_application.tasks import RefreshTaskService
 from domainsmanager_application.security import (
     AccessTokenService,
     PasswordService,
@@ -27,14 +32,23 @@ class Resources:
     sessions: async_sessionmaker[AsyncSession]
     lookup: DomainLookup
     auth: AuthService
+    domains: DomainService
+    tasks: RefreshTaskService
 
     async def database_ready(self) -> bool:
         try:
+            config = Config(str(Path(__file__).parents[1] / "alembic.ini"))
+            heads = set(ScriptDirectory.from_config(config).get_heads())
+            if len(heads) != 1:
+                return False
             async with self.engine.connect() as connection:
                 await connection.execute(text("SELECT 1"))
+                revisions = (
+                    await connection.execute(text("SELECT version_num FROM alembic_version"))
+                ).scalars().all()
         except Exception:
             return False
-        return True
+        return set(revisions) == heads
 
     async def close(self) -> None:
         await self.engine.dispose()
@@ -53,8 +67,10 @@ def create_resources(settings: Settings) -> Resources:
     engine = create_engine(database)
     sessions = create_session_factory(engine)
     store = SqlAlchemyLookupStore(sessions)
+    lookup = DomainLookup(store=store)
+    unit_of_work = SqlAlchemyUnitOfWorkFactory(sessions)
     auth = AuthService(
-        unit_of_work=SqlAlchemyUnitOfWorkFactory(sessions),
+        unit_of_work=unit_of_work,
         passwords=PasswordService(),
         access_tokens=AccessTokenService(
             secret=settings.jwt_secret_key.get_secret_value(),
@@ -75,6 +91,8 @@ def create_resources(settings: Settings) -> Resources:
     return Resources(
         engine=engine,
         sessions=sessions,
-        lookup=DomainLookup(store=store),
+        lookup=lookup,
         auth=auth,
+        domains=DomainService(unit_of_work=unit_of_work, lookup=lookup),
+        tasks=RefreshTaskService(unit_of_work=unit_of_work, lookup=lookup),
     )

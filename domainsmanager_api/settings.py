@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     bootstrap_admin_password: SecretStr | None = None
     request_id_header: str = "X-Request-ID"
     docs_enabled: bool = True
+    cors_origins: list[str] = Field(default_factory=list)
+    oauth_providers: list[str] = Field(default_factory=list)
     api_prefix: str = Field(default="/api/v1", pattern=r"^/[a-z0-9/_-]+$")
 
     def database_config(self) -> DatabaseConfig:
@@ -73,13 +75,15 @@ class Settings(BaseSettings):
         )
 
     @model_validator(mode="after")
-    def validate_bootstrap_admin(self) -> "Settings":
+    def validate_settings(self) -> "Settings":
         username_set = self.bootstrap_admin_username is not None
         password_set = self.bootstrap_admin_password is not None
         if username_set != password_set:
             raise ValueError(
                 "bootstrap admin username and password must be configured together"
             )
+        if "*" in self.cors_origins:
+            raise ValueError("cors_origins cannot include '*' when credentials are enabled")
         return self
 
 

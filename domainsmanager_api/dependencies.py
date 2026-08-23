@@ -6,6 +6,8 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domainsmanager_lookup import DomainLookup
+from domainsmanager_application.domains import DomainService
+from domainsmanager_application.tasks import RefreshTaskService
 from domainsmanager_application.services import (
     AccountBannedError,
     AuthContext,
@@ -30,6 +32,20 @@ def get_auth_service(resources: ResourcesDependency) -> AuthService:
 
 
 AuthServiceDependency = Annotated[AuthService, Depends(get_auth_service)]
+
+
+def get_domain_service(resources: ResourcesDependency) -> DomainService:
+    return resources.domains
+
+
+DomainServiceDependency = Annotated[DomainService, Depends(get_domain_service)]
+
+
+def get_task_service(resources: ResourcesDependency) -> RefreshTaskService:
+    return resources.tasks
+
+
+TaskServiceDependency = Annotated[RefreshTaskService, Depends(get_task_service)]
 
 
 def get_auth_context(request: Request) -> AuthContext:
@@ -71,6 +87,18 @@ async def get_current_user(
 
 
 CurrentUserDependency = Annotated[AuthenticatedUser, Depends(get_current_user)]
+
+
+async def require_admin(current: CurrentUserDependency) -> AuthenticatedUser:
+    if current.user.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "forbidden", "message": "Administrator role is required"},
+        )
+    return current
+
+
+AdminUserDependency = Annotated[AuthenticatedUser, Depends(require_admin)]
 
 
 async def get_session(
