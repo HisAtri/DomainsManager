@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
@@ -23,7 +23,7 @@ from tests.database import sqlite_database
 
 
 @pytest.mark.asyncio
-async def test_outbox_delivery_marks_sent_and_dead_letter(tmp_path: Path) -> None:
+async def test_outbox_delivery_marks_sent_and_retries_with_backoff(tmp_path: Path) -> None:
     database = sqlite_database(tmp_path / "outbox.db")
     await run_migrations(database)
     engine = create_engine(database)
@@ -40,9 +40,16 @@ async def test_outbox_delivery_marks_sent_and_dead_letter(tmp_path: Path) -> Non
         async def succeed(_message: object) -> None: pass
         async def fail(_message: object) -> None: raise RuntimeError("delivery failed")
         assert await NotificationOutboxService(unit_of_work=factory, deliver=succeed, clock=lambda: now).run_once("worker")
-        assert await NotificationOutboxService(unit_of_work=factory, deliver=fail, clock=lambda: now, max_attempts=1).run_once("worker")
+        assert await NotificationOutboxService(unit_of_work=factory, deliver=fail, clock=lambda: now, max_attempts=2, retry_base_delay=timedelta(minutes=5)).run_once("worker")
         async with engine.connect() as connection:
-            statuses = (await connection.execute(select(NotificationOutbox.status).order_by(NotificationOutbox.deduplication_key))).scalars().all()
-        assert statuses == ["sent", "dead_letter"]
+            rows = (await connection.execute(select(NotificationOutbox.deduplication_key, NotificationOutbox.status, NotificationOutbox.available_at))).all()
+        states = {key: (status, available_at) for key, status, available_at in rows}
+        assert states["sent"][0] == "sent"
+        assert states["failed"][0] == "pending"
+        available_at = states["failed"][1]
+        assert available_at is not None
+        if available_at.tzinfo is None:
+            available_at = available_at.replace(tzinfo=UTC)
+        assert available_at == now + timedelta(minutes=5)
     finally:
         await engine.dispose()

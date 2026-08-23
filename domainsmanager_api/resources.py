@@ -123,5 +123,11 @@ def create_resources(settings: Settings) -> Resources:
             ),
         ),
         notifications=NotificationRuleService(unit_of_work=unit_of_work),
-        notifier=NotificationOutboxService(unit_of_work=unit_of_work, deliver=lambda message: deliver(message, settings)),
+        notifier=NotificationOutboxService(
+            unit_of_work=unit_of_work,
+            deliver=lambda message: deliver(message, settings),
+            max_attempts=settings.notification_max_attempts,
+            retry_base_delay=timedelta(seconds=settings.notification_retry_base_seconds),
+            retry_max_delay=timedelta(seconds=settings.notification_retry_max_seconds),
+        ),
     )

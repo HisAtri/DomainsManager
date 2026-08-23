@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     scheduler_batch_size: int = Field(default=100, ge=1, le=1000)
     notification_delivery_timeout_seconds: float = Field(default=10, gt=0, le=120)
     notification_worker_poll_interval_seconds: float = Field(default=1, gt=0, le=60)
+    notification_max_attempts: int = Field(default=5, ge=1, le=100)
+    notification_retry_base_seconds: int = Field(default=60, ge=1, le=3600)
+    notification_retry_max_seconds: int = Field(default=3600, ge=1, le=86_400)
     smtp_host: str | None = None
     smtp_port: int = Field(default=587, ge=1, le=65535)
     smtp_from: str | None = None
@@ -106,6 +109,10 @@ class Settings(BaseSettings):
         if self.task_retry_max_seconds < self.task_retry_base_seconds:
             raise ValueError(
                 "task retry max seconds must not be less than the base delay"
+            )
+        if self.notification_retry_max_seconds < self.notification_retry_base_seconds:
+            raise ValueError(
+                "notification retry max seconds must not be less than the base delay"
             )
         return self
 

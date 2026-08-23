@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, or_, select
@@ -51,11 +51,11 @@ class SqlAlchemyNotificationRuleRepository:
         row.status, row.sent_at, row.lease_token, row.lease_owner, row.lease_until, row.updated_at = "sent", at, None, None, None, at
         await self._session.flush(); return True
 
-    async def fail_outbox(self, message_id: UUID, token: UUID, at: datetime, error: str, max_attempts: int) -> bool:
+    async def fail_outbox(self, message_id: UUID, token: UUID, at: datetime, error: str, max_attempts: int, retry_delay: timedelta) -> bool:
         row = await self._locked_outbox(message_id, token)
         if row is None: return False
         row.status = "dead_letter" if row.attempt_count >= max_attempts else "pending"
-        row.available_at = at
+        row.available_at = at if row.status == "dead_letter" else at + retry_delay
         row.last_error, row.lease_token, row.lease_owner, row.lease_until, row.updated_at = error[:512], None, None, None, at
         await self._session.flush(); return True
 
