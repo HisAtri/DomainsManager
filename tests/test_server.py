@@ -24,6 +24,8 @@ async def test_complete_server_starts_and_stops_all_background_components() -> N
         stopped.append(settings.app_name)
 
     class Server:
+        started = True
+
         async def serve(self) -> None:
             await asyncio.sleep(0)
 
