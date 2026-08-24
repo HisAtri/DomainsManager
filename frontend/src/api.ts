@@ -5,6 +5,7 @@ export class ApiError extends Error { constructor(public status: number, message
 
 class ApiClient {
   private tokens: Tokens | null = null;
+  private refreshInFlight: Promise<Tokens> | null = null;
   setTokens(tokens: Tokens | null) { this.tokens = tokens; }
   async restoreTokens() { try { const tokens = await this.refresh(); this.setTokens(tokens); return tokens; } catch { this.setTokens(null); return null; } }
   private async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<{ data: T; etag: string | null }> {
@@ -18,7 +19,18 @@ class ApiClient {
     if (!response.ok) { const body = await response.json().catch(() => ({})) as ApiErrorBody; const detail = typeof body.detail === "object" ? body.detail.message : body.detail; throw new ApiError(response.status, detail || body.message || `请求失败 (${response.status})`); }
     return { data: response.status === 204 ? undefined as T : await response.json() as T, etag: response.headers.get("ETag") };
   }
-  private async refresh() { const result = await this.request<Tokens>("/auth/token/refresh", { method: "POST" }, false); return result.data; }
+  private async refresh() {
+    if (this.refreshInFlight) return this.refreshInFlight;
+    this.refreshInFlight = this.withRefreshLock(async () => {
+      const result = await this.request<Tokens>("/auth/token/refresh", { method: "POST" }, false);
+      return result.data;
+    });
+    try { return await this.refreshInFlight; } finally { this.refreshInFlight = null; }
+  }
+  private async withRefreshLock<T>(action: () => Promise<T>): Promise<T> {
+    if (!navigator.locks) return action();
+    return navigator.locks.request("domainsmanager.refresh-token", { mode: "exclusive" }, action);
+  }
   login(username: string, password: string) { const body = new URLSearchParams({ username, password }); return this.request<AuthResult>("/auth/login", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }).then((r) => r.data); }
   register(username: string, password: string, email?: string) { return this.request<AuthResult>("/auth/register", { method: "POST", body: JSON.stringify({ username, password, email: email || null }) }).then((r) => r.data); }
   async logout() { await this.request<void>("/auth/logout", { method: "POST" }, false).catch(() => undefined); this.setTokens(null); }
