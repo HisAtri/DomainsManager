@@ -9,3 +9,5 @@ export type Task = { id: string; status: "queued" | "running" | "succeeded" | "f
 export type Settings = { locale: "zh-CN" | "en-US"; timezone: string; default_monitor_enabled: boolean; expiration_warning_days: number[] };
 export type AdminUser = User & { domain_count: number; banned_at: string | null; ban_reason: string | null };
 export type AdminDomain = Domain & { owner: { id: string; username: string }; deleted_at: string | null; deleted_by_user_id: string | null };
+export type NotificationRule = { id: string; domain_id: string | null; event_type: "expiration" | "status_change" | "query_failure"; days_before: number | null; channel: "email" | "webhook"; webhook_url: string | null; enabled: boolean; created_at: string; updated_at: string };
+export type NotificationDelivery = { id: string; domain_id: string; event_type: "expiration" | "status_change" | "query_failure"; channel: "email" | "webhook"; status: "pending" | "running" | "sent" | "dead_letter"; attempt_count: number; available_at: string | null; sent_at: string | null; failure_reason: string | null; created_at: string; updated_at: string };
