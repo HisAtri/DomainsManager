@@ -1,34 +1,34 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
-from bs4 import BeautifulSoup
 
+from domainsmanager_lookup._internal.clients.iana_whois import IanaWhoisClient
 from domainsmanager_lookup._internal.errors import EndpointDiscoveryError
 from domainsmanager_lookup._internal.models.domain import NormalizedDomain
 from domainsmanager_lookup._internal.models.registry import RegistryEndpoint
 
 
 class IanaClient:
-    """从 IANA Root Database 和 RDAP Bootstrap 发现注册局端点。"""
+    """从 IANA WHOIS 和 RDAP Bootstrap 发现注册局端点。"""
 
     RDAP_BOOTSTRAP_URL = "https://data.iana.org/rdap/dns.json"
-    ROOT_DATABASE_URL = "https://www.iana.org/domains/root/db/{tld}.html"
-
     def __init__(
         self,
         http_client: httpx.AsyncClient | None = None,
+        whois_client: IanaWhoisClient | None = None,
         timeout: float = 15.0,
         cache_ttl: timedelta = timedelta(days=7),
     ) -> None:
         self._http_client = http_client
+        self._whois_client = whois_client or IanaWhoisClient(timeout=timeout)
         self._timeout = timeout
         self._cache_ttl = cache_ttl
 
     async def discover(self, domain: NormalizedDomain) -> RegistryEndpoint:
         whois_result, rdap_result = await asyncio.gather(
-            self._discover_whois(domain.tld),
+            self._discover_whois(domain),
             self._discover_rdap(domain.ascii_name),
             return_exceptions=True,
         )
@@ -46,7 +46,7 @@ class IanaClient:
                 f"无法发现 {domain.registrable_domain} 的注册局端点：{detail}"
             )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return RegistryEndpoint(
             key=domain.public_suffix,
             tld=domain.tld,
@@ -57,14 +57,15 @@ class IanaClient:
             expires_at=now + self._cache_ttl,
         )
 
-    async def _discover_whois(self, tld: str) -> str | None:
-        response = await self._get(self.ROOT_DATABASE_URL.format(tld=tld))
-        response.raise_for_status()
-        soup = BeautifulSoup(response.text, "html.parser")
-        label = soup.find("b", string=lambda value: value and "WHOIS Server:" in value)
-        if label is None or label.next_sibling is None:
-            return None
-        return str(label.next_sibling).strip() or None
+    async def _discover_whois(self, domain: NormalizedDomain) -> str | None:
+        record = await self._whois_client.lookup_domain(domain.registrable_domain)
+        if record.domain is not None and record.domain != domain.tld:
+            raise EndpointDiscoveryError("IANA WHOIS response does not match requested TLD")
+        if record.referral_server is not None:
+            return record.referral_server
+        if domain.tld in {"arpa", "int"} and record.whois_server == "whois.iana.org":
+            return record.whois_server
+        return None
 
     async def _discover_rdap(self, ascii_name: str) -> list[str]:
         response = await self._get(self.RDAP_BOOTSTRAP_URL)

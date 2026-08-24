@@ -1,7 +1,7 @@
 import asyncio
 import unittest
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
@@ -10,6 +10,7 @@ from domainsmanager_lookup._internal.cache.memory import (
     MemoryRegistryEndpointCache,
 )
 from domainsmanager_lookup._internal.clients.iana import IanaClient
+from domainsmanager_lookup._internal.clients.iana_whois import IanaWhoisRecord
 from domainsmanager_lookup._internal.models.registry import RegistryEndpoint
 from domainsmanager_lookup._internal.models.response import RawLookupResponse
 from domainsmanager_lookup._internal.normalization.domain import DomainNormalizer
@@ -17,8 +18,7 @@ from domainsmanager_lookup._internal.parsers.rdap import RdapParser
 from domainsmanager_lookup._internal.parsers.whois import WhoisParser
 from domainsmanager_lookup._internal.services.domain_lookup import DomainLookupService
 
-
-NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
+NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 class FakeEndpointProvider:
@@ -98,16 +98,22 @@ class DomainNormalizerTests(unittest.TestCase):
 
 
 class IanaClientTests(unittest.IsolatedAsyncioTestCase):
-    async def test_uses_tld_for_root_database_and_suffix_as_cache_key(self):
+    async def test_uses_iana_whois_referral_and_suffix_as_cache_key(self):
         requested_paths: list[str] = []
+
+        class FakeIanaWhoisClient:
+            async def lookup_domain(self, name: str) -> IanaWhoisRecord:
+                self.name = name
+                return IanaWhoisRecord(
+                    domain="uk",
+                    referral_server="whois.nic.uk",
+                    whois_server="whois.nic.uk",
+                )
+
+        whois_client = FakeIanaWhoisClient()
 
         def handler(request: httpx.Request) -> httpx.Response:
             requested_paths.append(request.url.path)
-            if request.url.path.endswith("/uk.html"):
-                return httpx.Response(
-                    200,
-                    text="<p><b>WHOIS Server:</b> whois.nic.uk</p>",
-                )
             return httpx.Response(
                 200,
                 json={
@@ -120,11 +126,14 @@ class IanaClientTests(unittest.IsolatedAsyncioTestCase):
         async with httpx.AsyncClient(
             transport=httpx.MockTransport(handler)
         ) as http_client:
-            endpoint = await IanaClient(http_client=http_client).discover(
+            endpoint = await IanaClient(
+                http_client=http_client, whois_client=whois_client
+            ).discover(
                 DomainNormalizer().normalize("example.co.uk")
             )
 
-        self.assertIn("/domains/root/db/uk.html", requested_paths)
+        self.assertEqual(whois_client.name, "example.co.uk")
+        self.assertNotIn("/domains/root/db/uk.html", requested_paths)
         self.assertEqual(endpoint.key, "co.uk")
         self.assertEqual(endpoint.whois_server, "whois.nic.uk")
         self.assertEqual(endpoint.rdap_urls, ["https://rdap.nominet.uk/uk"])
