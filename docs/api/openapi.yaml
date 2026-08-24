@@ -21,6 +21,21 @@ tags:
 security:
   - bearerAuth: []
 paths:
+  /notification-rules/deliveries:
+    get:
+      tags: [Notifications]
+      operationId: listNotificationDeliveries
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Notification delivery history for the current user
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/NotificationDelivery' } }
   /notification-rules:
     get:
       tags: [Notifications]
@@ -893,6 +908,22 @@ components:
         channel: { type: string, enum: [email, webhook] }
         webhook_url: { type: [string, 'null'], format: uri }
         enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    NotificationDelivery:
+      type: object
+      additionalProperties: false
+      required: [id, domain_id, event_type, channel, status, attempt_count, available_at, sent_at, failure_reason, created_at, updated_at]
+      properties:
+        id: { type: string, format: uuid }
+        domain_id: { type: string, format: uuid }
+        event_type: { type: string, enum: [expiration, status_change, query_failure] }
+        channel: { type: string, enum: [email, webhook] }
+        status: { type: string, enum: [pending, running, sent, dead_letter] }
+        attempt_count: { type: integer, minimum: 0 }
+        available_at: { type: [string, 'null'], format: date-time }
+        sent_at: { type: [string, 'null'], format: date-time }
+        failure_reason: { type: [string, 'null'] }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     HealthStatus:

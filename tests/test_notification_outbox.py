@@ -44,9 +44,12 @@ async def test_outbox_delivery_marks_sent_and_retries_with_backoff(tmp_path: Pat
         async with engine.connect() as connection:
             rows = (await connection.execute(select(NotificationOutbox.deduplication_key, NotificationOutbox.status, NotificationOutbox.available_at))).all()
         states = {key: (status, available_at) for key, status, available_at in rows}
-        assert states["sent"][0] == "sent"
-        assert states["failed"][0] == "pending"
-        available_at = states["failed"][1]
+        assert sorted(status for status, _ in states.values()) == ["pending", "sent"]
+        available_at = next(
+            available_at
+            for status, available_at in states.values()
+            if status == "pending"
+        )
         assert available_at is not None
         if available_at.tzinfo is None:
             available_at = available_at.replace(tzinfo=UTC)

@@ -23,3 +23,17 @@ class NotificationRuleResponse(BaseModel):
     enabled: bool
     created_at: datetime
     updated_at: datetime
+
+
+class NotificationDeliveryResponse(BaseModel):
+    id: UUID
+    domain_id: UUID
+    event_type: str
+    channel: str
+    status: Literal["pending", "running", "sent", "dead_letter"]
+    attempt_count: int
+    available_at: datetime | None
+    sent_at: datetime | None
+    failure_reason: str | None
+    created_at: datetime
+    updated_at: datetime

@@ -59,3 +59,10 @@
 - 新增 `domainsmanager-notifier` 独立进程，使用租约令牌领取 Outbox；投递成功标为 `sent`，失败重试，达到上限标为 `dead_letter`。
 - Webhook 使用 HTTP POST；邮件使用用户账户邮箱和 SMTP 配置。SMTP 密码仅从环境变量读取，不写入规则、Outbox、日志或 API 响应。
 - 前端可继续通过后续通知历史接口观察投递状态；本提交未新增浏览器端请求。
+
+## 2026-08-24 — M3 通知重试与投递历史
+
+- Outbox 投递失败后按 `base * 2^(attempt - 1)` 延迟重新入队，延迟受 `DOMAINSMANAGER_NOTIFICATION_RETRY_MAX_SECONDS` 限制；达到 `DOMAINSMANAGER_NOTIFICATION_MAX_ATTEMPTS` 后转入 `dead_letter`。
+- 新增 `GET /api/v1/notification-rules/deliveries?limit=50`，仅返回当前用户规则产生的投递记录。响应不包含 Webhook URL、SMTP 配置、收件人或事件原始载荷。
+- 保存的失败原因仅为异常类型和固定说明，不保留可能含有 URL、认证信息或服务端细节的原始异常文本。
+- 前端可将 `status`、`attempt_count`、`available_at`、`sent_at` 和 `failure_reason` 显示在通知设置页的投递历史区域；本仓库当前没有对应前端页面，因此未产生前端源代码改动。

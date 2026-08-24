@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -5,6 +7,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domainsmanager_application.notifications import (
+    NotificationDeliveryRecord,
     NotificationRuleRecord,
     OutboxMessage,
 )
@@ -33,6 +36,38 @@ class SqlAlchemyNotificationRuleRepository:
     async def add(self, record: NotificationRuleRecord) -> None:
         self._session.add(NotificationRule(id=record.id, user_id=record.user_id, managed_domain_id=record.domain_id, event_type=record.event_type, days_before=record.days_before, channel=record.channel, channel_config=dict(record.channel_config), is_enabled=record.is_enabled, created_at=record.created_at, updated_at=record.updated_at))
         await self._session.flush()
+
+    async def list_deliveries(
+        self, user_id: UUID, limit: int
+    ) -> list[NotificationDeliveryRecord]:
+        rows = (
+            await self._session.execute(
+                select(NotificationOutbox, NotificationRule.channel)
+                .join(
+                    NotificationRule,
+                    NotificationRule.id == NotificationOutbox.notification_rule_id,
+                )
+                .where(NotificationRule.user_id == user_id)
+                .order_by(NotificationOutbox.created_at.desc())
+                .limit(limit)
+            )
+        ).all()
+        return [
+            NotificationDeliveryRecord(
+                id=outbox.id,
+                domain_id=outbox.managed_domain_id,
+                event_type=outbox.event_type,
+                channel=channel,
+                status=outbox.status,
+                attempt_count=outbox.attempt_count,
+                available_at=(as_utc(outbox.available_at) if outbox.available_at else None),
+                sent_at=as_utc(outbox.sent_at) if outbox.sent_at else None,
+                failure_reason=outbox.last_error,
+                created_at=as_utc(outbox.created_at),
+                updated_at=as_utc(outbox.updated_at),
+            )
+            for outbox, channel in rows
+        ]
 
     async def claim_outbox(self, worker_id: str, now: datetime, lease_until: datetime) -> OutboxMessage | None:
         row = (await self._session.execute(select(NotificationOutbox, NotificationRule, AppUser.email).select_from(NotificationOutbox).join(NotificationRule, NotificationRule.id == NotificationOutbox.notification_rule_id).join(AppUser, AppUser.id == NotificationRule.user_id).where(or_(and_(NotificationOutbox.status == "pending", NotificationOutbox.available_at <= now), and_(NotificationOutbox.status == "running", NotificationOutbox.lease_until <= now))).order_by(NotificationOutbox.available_at, NotificationOutbox.id).limit(1).with_for_update(skip_locked=True))).one_or_none()

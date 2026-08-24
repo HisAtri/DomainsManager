@@ -48,6 +48,27 @@ class OutboxMessage:
     recipient_email: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class NotificationDeliveryRecord:
+    id: UUID
+    domain_id: UUID
+    event_type: str
+    channel: str
+    status: str
+    attempt_count: int
+    available_at: datetime | None
+    sent_at: datetime | None
+    failure_reason: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class NotificationHistoryRepository(Protocol):
+    async def list_deliveries(
+        self, user_id: UUID, limit: int
+    ) -> list[NotificationDeliveryRecord]: ...
+
+
 class NotificationOutboxService:
     def __init__(self, *, unit_of_work: UnitOfWorkFactory, deliver: Callable[[OutboxMessage], Awaitable[None]], clock: Callable[[], datetime] | None = None, lease_duration: timedelta = timedelta(minutes=2), max_attempts: int = 5, retry_base_delay: timedelta = timedelta(minutes=1), retry_max_delay: timedelta = timedelta(hours=1)) -> None:
         self._unit_of_work, self._deliver, self._clock = unit_of_work, deliver, clock or (lambda: datetime.now(UTC))
@@ -66,7 +87,7 @@ class NotificationOutboxService:
             await self._deliver(message)
         except Exception as error:  # noqa: BLE001 - adapters may raise transport errors
             async with self._unit_of_work() as uow:
-                await uow.notifications.fail_outbox(message.id, message.lease_token, self._clock(), str(error), self._max_attempts, self._retry_delay(message.attempt_count))
+                await uow.notifications.fail_outbox(message.id, message.lease_token, self._clock(), f"{type(error).__name__}: delivery failed", self._max_attempts, self._retry_delay(message.attempt_count))
                 await uow.commit()
         else:
             async with self._unit_of_work() as uow:
@@ -100,3 +121,9 @@ class NotificationRuleService:
             await uow.notifications.add(record)
             await uow.commit()
         return record
+
+    async def list_deliveries(
+        self, user_id: UUID, *, limit: int = 50
+    ) -> list[NotificationDeliveryRecord]:
+        async with self._unit_of_work() as uow:
+            return await uow.notifications.list_deliveries(user_id, limit)

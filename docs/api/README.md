@@ -21,6 +21,7 @@ API 分为以下资源组：
 | 用户域名、检查和任务 | `/domains/*`、`/tasks/*` | 仅资源所有者 |
 | 管理员用户管理 | `/admin/users/*` | `admin` |
 | 管理员全局域名管理 | `/admin/domains/*`、`/admin/domain-checks` | `admin` |
+| 通知规则与投递历史 | `/notification-rules`、`/notification-rules/deliveries` | 当前用户 |
 
 访问非本人资源时，普通用户接口统一返回 `404`，不使用 `403` 暴露资源是否存在。管理员接口
 仍需先验证 `admin` 角色。角色必须存放在独立、受保护的数据字段中，不能放进用户可编辑的
