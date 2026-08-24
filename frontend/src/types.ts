@@ -1,6 +1,6 @@
 export type Role = "user" | "admin";
 export type User = { id: string; username: string; email: string | null; role: Role; status: "active" | "banned"; last_login_at: string | null; created_at: string; updated_at: string };
-export type Tokens = { access_token: string; refresh_token: string; expires_in: number };
+export type Tokens = { access_token: string; expires_in: number };
 export type AuthResult = { user: User; tokens: Tokens };
 export type Domain = { id: string; identity: { ascii_name: string; unicode_name: string; registrable_domain: string; public_suffix: string; tld: string }; monitor_enabled: boolean; renewal_mode: "automatic" | "manual" | "unknown" | null; notes: string | null; version: number; created_at: string; updated_at: string };
 export type Page<T> = { items: T[]; page: number; page_size: number; total: number };

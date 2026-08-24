@@ -24,10 +24,6 @@ class LoginRequest(StrictModel):
     scope: str = ""
 
 
-class RefreshTokenRequest(StrictModel):
-    refresh_token: str = Field(min_length=1, max_length=1024)
-
-
 class UpdateCurrentUserRequest(StrictModel):
     email: EmailStr | None = None
 
@@ -103,7 +99,6 @@ class UserResponse(StrictModel):
 
 class TokenPairResponse(StrictModel):
     access_token: str
-    refresh_token: str
     token_type: Literal["bearer"] = "bearer"
     expires_in: int = Field(gt=0)
 

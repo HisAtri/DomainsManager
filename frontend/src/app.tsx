@@ -34,15 +34,15 @@ function Brand() { return <div className="brand"><span className="brand-mark"><G
 
 export function App() {
   const [user, setUser] = useState<User | null>(null); const [ready, setReady] = useState(false); const [route, go] = useRoute(); const [flash, setFlash] = useState<string | null>(null);
-  useEffect(() => { if (!api.restoreTokens()) { setReady(true); return; } api.me().then(setUser).catch(() => api.setTokens(null)).finally(() => setReady(true)); }, []);
+  useEffect(() => { api.restoreTokens().then((tokens) => tokens ? api.me().then(setUser).catch(() => api.setTokens(null)) : undefined).finally(() => setReady(true)); }, []);
   useEffect(() => { if (flash) { const id = setTimeout(() => setFlash(null), 4200); return () => clearTimeout(id); } }, [flash]);
-  const authenticate = (result: { user: User; tokens: { access_token: string; refresh_token: string; expires_in: number } }) => { api.setTokens(result.tokens); setUser(result.user); location.hash = "dashboard"; };
+  const authenticate = (result: { user: User; tokens: { access_token: string; expires_in: number } }) => { api.setTokens(result.tokens); setUser(result.user); location.hash = "dashboard"; };
   if (!ready) return <div className="loading-screen"><LoaderCircle className="spin" /> 正在连接服务…</div>;
   if (!user) return <AuthScreen onSuccess={authenticate} />;
   return <div className="shell"><Sidebar user={user} route={route} go={go} onLogout={() => api.logout().finally(() => { setUser(null); location.hash = "dashboard"; })} /><main className="content"><Flash message={flash} />{route === "dashboard" && <Dashboard go={go} />}{route === "domains" && <Domains onMessage={setFlash} />}{route === "tasks" && <Tasks />}{route === "notifications" && <NotificationsPage onMessage={setFlash} />}{route === "settings" && <SettingsPage user={user} onUser={setUser} onMessage={setFlash} />}{route === "admin-users" && user.role === "admin" && <AdminUsers onMessage={setFlash} />}{route === "admin-domains" && user.role === "admin" && <AdminDomains />}</main></div>;
 }
 
-function AuthScreen({ onSuccess }: { onSuccess: (result: { user: User; tokens: { access_token: string; refresh_token: string; expires_in: number } }) => void }) {
+function AuthScreen({ onSuccess }: { onSuccess: (result: { user: User; tokens: { access_token: string; expires_in: number } }) => void }) {
   const [register, setRegister] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const data = new FormData(event.currentTarget); setBusy(true); setError(null); try { const username = String(data.get("username")); const password = String(data.get("password")); onSuccess(register ? await api.register(username, password, String(data.get("email") || "")) : await api.login(username, password)); } catch (e) { setError(errorText(e)); } finally { setBusy(false); } }
   return <div className="auth"><section className="auth-card"><Brand /><h1>{register ? "创建账号" : "欢迎回来"}</h1><p>{register ? "开始集中管理你的域名资产。" : "登录后继续管理域名资产。"}</p><form onSubmit={submit}>{register && <label>邮箱（可选）<input name="email" type="email" placeholder="name@example.com" /></label>}<label>用户名<input name="username" required minLength={3} placeholder="请输入用户名" /></label><label>密码<input name="password" type="password" required minLength={6} placeholder="至少 6 位字符" /></label>{error && <div className="form-error">{error}</div>}<button className="primary wide" disabled={busy}>{busy && <LoaderCircle className="spin" size={17} />}{register ? "创建并登录" : "登录"}</button></form><button className="auth-switch" onClick={() => setRegister(!register)}>{register ? "已有账号？登录" : "没有账号？注册"}</button></section></div>;

@@ -155,11 +155,6 @@ paths:
       summary: 撤销当前会话
       description: 使用 Refresh Token 标识待撤销会话；无效、已撤销或重复请求仍然成功。
       security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/RefreshTokenRequest' }
       responses:
         '204': { description: 会话已撤销、不可用或原本不存在 }
         '422': { $ref: '#/components/responses/ValidationError' }
@@ -169,11 +164,6 @@ paths:
       operationId: refreshToken
       summary: 轮换 Refresh Token
       security: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/RefreshTokenRequest' }
       responses:
         '200':
           description: Token 已轮换，原 Refresh Token 立即失效
@@ -984,10 +974,9 @@ components:
     TokenPair:
       type: object
       additionalProperties: false
-      required: [access_token, refresh_token, token_type, expires_in]
+      required: [access_token, token_type, expires_in]
       properties:
         access_token: { type: string }
-        refresh_token: { type: string }
         token_type: { type: string, const: bearer }
         expires_in: { type: integer, minimum: 1, description: Access Token 有效秒数 }
     AuthResult:
@@ -997,12 +986,6 @@ components:
       properties:
         user: { $ref: '#/components/schemas/User' }
         tokens: { $ref: '#/components/schemas/TokenPair' }
-    RefreshTokenRequest:
-      type: object
-      additionalProperties: false
-      required: [refresh_token]
-      properties:
-        refresh_token: { type: string, minLength: 1, maxLength: 1024 }
     UpdateCurrentUserRequest:
       type: object
       additionalProperties: false

@@ -32,7 +32,7 @@ API 分为以下资源组：
 本系统计划签发自己的短时 Access Token 和长时 Refresh Token：
 
 1. Access Token 通过 `Authorization: Bearer <token>` 使用，仅包含最少身份和授权声明；
-2. Refresh Token 仅在登录、轮换和退出端点传输，服务端只保存其密码学哈希；
+2. Refresh Token 仅通过 `HttpOnly`、`SameSite=Lax` Cookie 在登录、轮换和退出端点传输，服务端只保存其密码学哈希；
 3. 每次刷新都会轮换 Refresh Token，旧 Token 立即失效；发现旧 Token 重放时撤销该 Token
    家族；
 4. 退出撤销当前会话；修改密码撤销其他会话；封禁撤销目标用户全部会话；

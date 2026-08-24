@@ -1,4 +1,3 @@
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -53,7 +52,13 @@ async def test_register_me_settings_refresh_and_logout(tmp_path: Path) -> None:
         assert registered.headers["X-Request-ID"] == "request-1234"
         payload = registered.json()
         access_token = payload["tokens"]["access_token"]
-        refresh_token = payload["tokens"]["refresh_token"]
+        assert "refresh_token" not in payload["tokens"]
+        refresh_token = client.cookies.get("domainsmanager_refresh")
+        assert refresh_token is not None
+        cookie = registered.headers["set-cookie"]
+        assert "HttpOnly" in cookie
+        assert "SameSite=lax" in cookie
+        assert "Path=/api/v1/auth" in cookie
 
         me = client.get(
             "/api/v1/auth/me",
@@ -81,17 +86,21 @@ async def test_register_me_settings_refresh_and_logout(tmp_path: Path) -> None:
 
         rotated = client.post(
             "/api/v1/auth/token/refresh",
-            json={"refresh_token": refresh_token},
         )
         assert rotated.status_code == 200
         rotated_payload = rotated.json()
         rotated_access = rotated_payload["access_token"]
-        rotated_refresh = rotated_payload["refresh_token"]
+        assert "refresh_token" not in rotated_payload
+        rotated_refresh = client.cookies.get("domainsmanager_refresh")
+        assert rotated_refresh is not None and rotated_refresh != refresh_token
 
-        replay = client.post(
-            "/api/v1/auth/token/refresh",
-            json={"refresh_token": refresh_token},
+        client.cookies.set(
+            "domainsmanager_refresh",
+            refresh_token,
+            domain="testserver.local",
+            path="/api/v1/auth",
         )
+        replay = client.post("/api/v1/auth/token/refresh")
         assert replay.status_code == 401
         assert replay.json()["code"] == "refresh_token_replayed"
         assert replay.headers["WWW-Authenticate"] == "Bearer"
@@ -104,9 +113,12 @@ async def test_register_me_settings_refresh_and_logout(tmp_path: Path) -> None:
 
         logout = client.post(
             "/api/v1/auth/logout",
-            json={"refresh_token": rotated_refresh},
         )
         assert logout.status_code == 204
+        assert "Max-Age=0" in logout.headers["set-cookie"]
+
+        unavailable = client.post("/api/v1/auth/token/refresh")
+        assert unavailable.status_code == 401
 
 
 @pytest.mark.asyncio

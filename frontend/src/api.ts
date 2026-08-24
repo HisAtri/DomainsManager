@@ -5,23 +5,23 @@ export class ApiError extends Error { constructor(public status: number, message
 
 class ApiClient {
   private tokens: Tokens | null = null;
-  setTokens(tokens: Tokens | null) { this.tokens = tokens; if (tokens) sessionStorage.setItem("domainsmanager.tokens", JSON.stringify(tokens)); else sessionStorage.removeItem("domainsmanager.tokens"); }
-  restoreTokens() { const raw = sessionStorage.getItem("domainsmanager.tokens"); this.tokens = raw ? JSON.parse(raw) as Tokens : null; return this.tokens; }
+  setTokens(tokens: Tokens | null) { this.tokens = tokens; }
+  async restoreTokens() { try { const tokens = await this.refresh(); this.setTokens(tokens); return tokens; } catch { this.setTokens(null); return null; } }
   private async request<T>(path: string, init: RequestInit = {}, retry = true): Promise<{ data: T; etag: string | null }> {
     const headers = new Headers(init.headers); headers.set("Accept", "application/json");
     if (init.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
     if (this.tokens) headers.set("Authorization", `Bearer ${this.tokens.access_token}`);
     let response = await fetch(`/api/v1${path}`, { ...init, headers });
-    if (response.status === 401 && retry && this.tokens?.refresh_token && path !== "/auth/token/refresh") {
+    if (response.status === 401 && retry && path !== "/auth/token/refresh") {
       try { const refreshed = await this.refresh(); this.setTokens(refreshed); return this.request(path, init, false); } catch { this.setTokens(null); }
     }
     if (!response.ok) { const body = await response.json().catch(() => ({})) as ApiErrorBody; const detail = typeof body.detail === "object" ? body.detail.message : body.detail; throw new ApiError(response.status, detail || body.message || `请求失败 (${response.status})`); }
     return { data: response.status === 204 ? undefined as T : await response.json() as T, etag: response.headers.get("ETag") };
   }
-  private async refresh() { const value = this.tokens!.refresh_token; const result = await this.request<Tokens>("/auth/token/refresh", { method: "POST", body: JSON.stringify({ refresh_token: value }) }, false); return result.data; }
+  private async refresh() { const result = await this.request<Tokens>("/auth/token/refresh", { method: "POST" }, false); return result.data; }
   login(username: string, password: string) { const body = new URLSearchParams({ username, password }); return this.request<AuthResult>("/auth/login", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }).then((r) => r.data); }
   register(username: string, password: string, email?: string) { return this.request<AuthResult>("/auth/register", { method: "POST", body: JSON.stringify({ username, password, email: email || null }) }).then((r) => r.data); }
-  async logout() { if (this.tokens) await this.request<void>("/auth/logout", { method: "POST", body: JSON.stringify({ refresh_token: this.tokens.refresh_token }) }).catch(() => undefined); this.setTokens(null); }
+  async logout() { await this.request<void>("/auth/logout", { method: "POST" }, false).catch(() => undefined); this.setTokens(null); }
   me() { return this.request<User>("/auth/me").then((r) => r.data); }
   updateMe(email: string) { return this.request<User>("/auth/me", { method: "PATCH", body: JSON.stringify({ email: email || null }) }).then((r) => r.data); }
   changePassword(current_password: string, new_password: string) { return this.request<void>("/auth/me/password", { method: "POST", body: JSON.stringify({ current_password, new_password }) }); }

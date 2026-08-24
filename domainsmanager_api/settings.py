@@ -1,5 +1,6 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -45,6 +46,13 @@ class Settings(BaseSettings):
     jwt_audience: str = "domainsmanager-api"
     access_token_ttl_seconds: int = Field(default=900, ge=60)
     refresh_token_ttl_seconds: int = Field(default=2_592_000, ge=60)
+    refresh_cookie_name: str = Field(
+        default="domainsmanager_refresh", min_length=1, max_length=128
+    )
+    # Set this to true in HTTPS deployments. It remains false by default so the
+    # bundled HTTP development server can authenticate through Vite's proxy.
+    refresh_cookie_secure: bool = False
+    refresh_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     jwt_clock_skew_seconds: int = Field(default=30, ge=0, le=300)
     task_lease_seconds: int = Field(default=120, ge=30, le=3600)
     task_max_attempts: int = Field(default=5, ge=1, le=100)

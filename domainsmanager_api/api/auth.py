@@ -2,21 +2,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Form, HTTPException, Request, Response, status
 
-from domainsmanager_application.auth import UserRecord
-from domainsmanager_application.security import InvalidPasswordError, InvalidUsernameError
-from domainsmanager_application.services import (
-    AccountBannedError,
-    AuthContext,
-    AuthenticationError,
-    AuthenticationResult,
-    InvalidTokenError,
-    PasswordMismatchError,
-    PasswordReusedError,
-    RefreshTokenReplayedError,
-    RegistrationDisabledError,
-    TokenPair,
-    UsernameTakenError,
-)
 from domainsmanager_api.dependencies import (
     AuthContextDependency,
     AuthServiceDependency,
@@ -25,13 +10,28 @@ from domainsmanager_api.dependencies import (
 from domainsmanager_api.schemas.auth import (
     AuthResultResponse,
     ChangePasswordRequest,
-    RefreshTokenRequest,
     RegisterRequest,
     TokenPairResponse,
     UpdateCurrentUserRequest,
     UserResponse,
     UserSettings,
     UserSettingsPatch,
+)
+from domainsmanager_application.auth import UserRecord
+from domainsmanager_application.security import (
+    InvalidPasswordError,
+    InvalidUsernameError,
+)
+from domainsmanager_application.services import (
+    AccountBannedError,
+    AuthenticationError,
+    AuthenticationResult,
+    InvalidTokenError,
+    PasswordMismatchError,
+    PasswordReusedError,
+    RegistrationDisabledError,
+    TokenPair,
+    UsernameTakenError,
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -58,7 +58,6 @@ def user_response(user: UserRecord) -> UserResponse:
 def token_response(tokens: TokenPair) -> TokenPairResponse:
     return TokenPairResponse(
         access_token=tokens.access_token,
-        refresh_token=tokens.refresh_token,
         token_type="bearer",
         expires_in=tokens.expires_in,
     )
@@ -71,6 +70,30 @@ def auth_response(result: AuthenticationResult) -> AuthResultResponse:
     )
 
 
+def set_refresh_cookie(response: Response, token: str, request: Request) -> None:
+    settings = request.app.state.settings
+    response.set_cookie(
+        key=settings.refresh_cookie_name,
+        value=token,
+        max_age=settings.refresh_token_ttl_seconds,
+        httponly=True,
+        secure=settings.refresh_cookie_secure,
+        samesite=settings.refresh_cookie_samesite,
+        path=f"{settings.api_prefix}/auth",
+    )
+
+
+def clear_refresh_cookie(response: Response, request: Request) -> None:
+    settings = request.app.state.settings
+    response.delete_cookie(
+        key=settings.refresh_cookie_name,
+        httponly=True,
+        secure=settings.refresh_cookie_secure,
+        samesite=settings.refresh_cookie_samesite,
+        path=f"{settings.api_prefix}/auth",
+    )
+
+
 def raise_auth_error(error: Exception) -> None:
     if isinstance(error, RegistrationDisabledError):
         status_code = 403
@@ -80,9 +103,9 @@ def raise_auth_error(error: Exception) -> None:
         status_code = 403
     elif isinstance(error, (AuthenticationError, InvalidTokenError)):
         status_code = 401
-    elif isinstance(error, PasswordMismatchError):
-        status_code = 422
-    elif isinstance(error, (InvalidUsernameError, InvalidPasswordError)):
+    elif isinstance(
+        error, (PasswordMismatchError, InvalidUsernameError, InvalidPasswordError)
+    ):
         status_code = 422
     else:
         raise error
@@ -121,6 +144,7 @@ async def register(
         raise_auth_error(error)
     no_store(response)
     response.headers["Location"] = str(request.url_for("getCurrentUser"))
+    set_refresh_cookie(response, result.tokens.refresh_token, request)
     return auth_response(result)
 
 
@@ -130,6 +154,7 @@ async def register(
     operation_id="login",
 )
 async def login(
+    request: Request,
     response: Response,
     auth: AuthServiceDependency,
     context: AuthContextDependency,
@@ -143,6 +168,7 @@ async def login(
     except Exception as error:
         raise_auth_error(error)
     no_store(response)
+    set_refresh_cookie(response, result.tokens.refresh_token, request)
     return auth_response(result)
 
 
@@ -152,11 +178,15 @@ async def login(
     operation_id="logout",
 )
 async def logout(
-    request: RefreshTokenRequest,
+    request: Request,
+    response: Response,
     auth: AuthServiceDependency,
     context: AuthContextDependency,
 ) -> None:
-    await auth.logout(request.refresh_token, context)
+    token = request.cookies.get(request.app.state.settings.refresh_cookie_name)
+    if token is not None:
+        await auth.logout(token, context)
+    clear_refresh_cookie(response, request)
 
 
 @router.post(
@@ -165,16 +195,20 @@ async def logout(
     operation_id="refreshToken",
 )
 async def refresh_token(
-    request: RefreshTokenRequest,
+    request: Request,
     response: Response,
     auth: AuthServiceDependency,
     context: AuthContextDependency,
 ) -> TokenPairResponse:
+    token = request.cookies.get(request.app.state.settings.refresh_cookie_name)
+    if token is None:
+        raise_auth_error(InvalidTokenError("refresh token is required"))
     try:
-        tokens = await auth.rotate_refresh_token(request.refresh_token, context)
+        tokens = await auth.rotate_refresh_token(token, context)
     except Exception as error:
         raise_auth_error(error)
     no_store(response)
+    set_refresh_cookie(response, tokens.refresh_token, request)
     return token_response(tokens)
 
 
