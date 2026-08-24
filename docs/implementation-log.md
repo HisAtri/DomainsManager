@@ -72,3 +72,4 @@
 - 新增显式 `postgres` 标记测试，验证两个刷新 Worker 只会领取同一任务一次、租约到期后可恢复领取，以及两个 Scheduler 不会为同一到期域名重复建任务。
 - 测试仅在 `DOMAINSMANAGER_RUN_POSTGRES_TESTS=1` 且配置专用 PostgreSQL 测试库时执行；默认测试不会访问或清理 PostgreSQL。
 - 为 Outbox 状态和重试次数添加数据库约束，阻止非法状态或负数尝试次数绕过应用状态机写入。
+- 本地全量回归已通过；阶段状态仍保持“进行中”，直到在明确指定、可清空的 PostgreSQL 测试库中实际执行上述并发用例。
