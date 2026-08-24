@@ -13,6 +13,15 @@ class CreateNotificationRuleRequest(BaseModel):
     webhook_url: HttpUrl | None = None
 
 
+class UpdateNotificationRuleRequest(BaseModel):
+    domain_id: UUID | None = None
+    event_type: Literal["expiration", "status_change", "query_failure"] | None = None
+    days_before: int | None = Field(default=None, ge=0, le=365)
+    channel: Literal["email", "webhook"] | None = None
+    webhook_url: HttpUrl | None = None
+    enabled: bool | None = None
+
+
 class NotificationRuleResponse(BaseModel):
     id: UUID
     domain_id: UUID | None

@@ -30,11 +30,14 @@ class NotificationRuleRecord:
     is_enabled: bool
     created_at: datetime
     updated_at: datetime
+    deleted_at: datetime | None = None
 
 
 class NotificationRuleRepository(Protocol):
     async def list(self, user_id: UUID, domain_id: UUID | None) -> list[NotificationRuleRecord]: ...
+    async def get(self, user_id: UUID, rule_id: UUID) -> NotificationRuleRecord | None: ...
     async def add(self, record: NotificationRuleRecord) -> None: ...
+    async def update(self, record: NotificationRuleRecord) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +124,44 @@ class NotificationRuleService:
             await uow.notifications.add(record)
             await uow.commit()
         return record
+
+    async def get(self, user_id: UUID, rule_id: UUID) -> NotificationRuleRecord:
+        async with self._unit_of_work() as uow:
+            rule = await uow.notifications.get(user_id, rule_id)
+        if rule is None:
+            raise NotificationRuleNotFoundError("notification rule was not found")
+        return rule
+
+    async def update(
+        self,
+        user_id: UUID,
+        rule_id: UUID,
+        *,
+        domain_id: UUID | None,
+        event_type: str,
+        days_before: int | None,
+        channel: str,
+        channel_config: dict,
+        is_enabled: bool,
+    ) -> NotificationRuleRecord:
+        now = datetime.now(UTC)
+        async with self._unit_of_work() as uow:
+            existing = await uow.notifications.get(user_id, rule_id)
+            if existing is None:
+                raise NotificationRuleNotFoundError("notification rule was not found")
+            if domain_id is not None and await uow.domains.get(user_id, domain_id) is None:
+                raise DomainNotFoundError("domain was not found")
+            updated = NotificationRuleRecord(rule_id, user_id, domain_id, event_type, days_before, channel, channel_config, is_enabled, existing.created_at, now)
+            await uow.notifications.update(updated)
+            await uow.commit()
+        return updated
+
+    async def delete(self, user_id: UUID, rule_id: UUID) -> None:
+        existing = await self.get(user_id, rule_id)
+        deleted = NotificationRuleRecord(existing.id, existing.user_id, existing.domain_id, existing.event_type, existing.days_before, existing.channel, existing.channel_config, False, existing.created_at, datetime.now(UTC), datetime.now(UTC))
+        async with self._unit_of_work() as uow:
+            await uow.notifications.update(deleted)
+            await uow.commit()
 
     async def list_deliveries(
         self, user_id: UUID, *, limit: int = 50

@@ -27,14 +27,27 @@ class SqlAlchemyNotificationRuleRepository:
         self._session = session
 
     async def list(self, user_id: UUID, domain_id: UUID | None) -> list[NotificationRuleRecord]:
-        statement = select(NotificationRule).where(NotificationRule.user_id == user_id)
+        statement = select(NotificationRule).where(NotificationRule.user_id == user_id, NotificationRule.deleted_at.is_(None))
         if domain_id is not None:
             statement = statement.where(NotificationRule.managed_domain_id == domain_id)
         rows = (await self._session.execute(statement.order_by(NotificationRule.created_at))).scalars().all()
         return [self._record(row) for row in rows]
 
+    async def get(self, user_id: UUID, rule_id: UUID) -> NotificationRuleRecord | None:
+        row = (await self._session.execute(select(NotificationRule).where(NotificationRule.id == rule_id, NotificationRule.user_id == user_id, NotificationRule.deleted_at.is_(None)))).scalar_one_or_none()
+        return self._record(row) if row is not None else None
+
     async def add(self, record: NotificationRuleRecord) -> None:
-        self._session.add(NotificationRule(id=record.id, user_id=record.user_id, managed_domain_id=record.domain_id, event_type=record.event_type, days_before=record.days_before, channel=record.channel, channel_config=dict(record.channel_config), is_enabled=record.is_enabled, created_at=record.created_at, updated_at=record.updated_at))
+        self._session.add(NotificationRule(id=record.id, user_id=record.user_id, managed_domain_id=record.domain_id, event_type=record.event_type, days_before=record.days_before, channel=record.channel, channel_config=dict(record.channel_config), is_enabled=record.is_enabled, created_at=record.created_at, updated_at=record.updated_at, deleted_at=record.deleted_at))
+        await self._session.flush()
+
+    async def update(self, record: NotificationRuleRecord) -> None:
+        row = (await self._session.execute(select(NotificationRule).where(NotificationRule.id == record.id, NotificationRule.user_id == record.user_id).with_for_update())).scalar_one_or_none()
+        if row is None:
+            return
+        row.managed_domain_id, row.event_type, row.days_before = record.domain_id, record.event_type, record.days_before
+        row.channel, row.channel_config, row.is_enabled = record.channel, dict(record.channel_config), record.is_enabled
+        row.updated_at, row.deleted_at = record.updated_at, record.deleted_at
         await self._session.flush()
 
     async def list_deliveries(
@@ -70,7 +83,7 @@ class SqlAlchemyNotificationRuleRepository:
         ]
 
     async def claim_outbox(self, worker_id: str, now: datetime, lease_until: datetime) -> OutboxMessage | None:
-        row = (await self._session.execute(select(NotificationOutbox, NotificationRule, AppUser.email).select_from(NotificationOutbox).join(NotificationRule, NotificationRule.id == NotificationOutbox.notification_rule_id).join(AppUser, AppUser.id == NotificationRule.user_id).where(or_(and_(NotificationOutbox.status == "pending", NotificationOutbox.available_at <= now), and_(NotificationOutbox.status == "running", NotificationOutbox.lease_until <= now))).order_by(NotificationOutbox.available_at, NotificationOutbox.id).limit(1).with_for_update(skip_locked=True))).one_or_none()
+        row = (await self._session.execute(select(NotificationOutbox, NotificationRule, AppUser.email).select_from(NotificationOutbox).join(NotificationRule, NotificationRule.id == NotificationOutbox.notification_rule_id).join(AppUser, AppUser.id == NotificationRule.user_id).where(NotificationRule.is_enabled.is_(True), NotificationRule.deleted_at.is_(None), or_(and_(NotificationOutbox.status == "pending", NotificationOutbox.available_at <= now), and_(NotificationOutbox.status == "running", NotificationOutbox.lease_until <= now))).order_by(NotificationOutbox.available_at, NotificationOutbox.id).limit(1).with_for_update(skip_locked=True))).one_or_none()
         if row is None:
             return None
         outbox, rule, email = row
@@ -99,4 +112,4 @@ class SqlAlchemyNotificationRuleRepository:
 
     @staticmethod
     def _record(row: NotificationRule) -> NotificationRuleRecord:
-        return NotificationRuleRecord(row.id, row.user_id, row.managed_domain_id, row.event_type, row.days_before, row.channel, dict(row.channel_config), row.is_enabled, as_utc(row.created_at), as_utc(row.updated_at))
+        return NotificationRuleRecord(row.id, row.user_id, row.managed_domain_id, row.event_type, row.days_before, row.channel, dict(row.channel_config), row.is_enabled, as_utc(row.created_at), as_utc(row.updated_at), as_utc(row.deleted_at) if row.deleted_at else None)

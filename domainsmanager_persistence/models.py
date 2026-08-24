@@ -364,6 +364,7 @@ class NotificationRule(TimestampMixin, Base):
     channel: Mapped[str] = mapped_column(String(32), nullable=False)
     channel_config: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, nullable=False)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class NotificationOutbox(TimestampMixin, Base):

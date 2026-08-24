@@ -28,6 +28,19 @@ async def test_notification_rule_create_and_list(tmp_path: Path) -> None:
         listed = client.get("/api/v1/notification-rules", headers=headers)
         assert listed.status_code == 200
         assert [item["id"] for item in listed.json()] == [created.json()["id"]]
+        rule_id = created.json()["id"]
+        updated = client.patch(
+            f"/api/v1/notification-rules/{rule_id}",
+            json={"enabled": False},
+            headers=headers,
+        )
+        assert updated.status_code == 200
+        assert updated.json()["enabled"] is False
+        assert client.get(f"/api/v1/notification-rules/{rule_id}", headers=headers).status_code == 200
+        deleted = client.delete(f"/api/v1/notification-rules/{rule_id}", headers=headers)
+        assert deleted.status_code == 204
+        assert client.get(f"/api/v1/notification-rules/{rule_id}", headers=headers).status_code == 404
+        assert client.get("/api/v1/notification-rules", headers=headers).json() == []
 
 
 @pytest.mark.asyncio
