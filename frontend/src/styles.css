@@ -91,3 +91,19 @@ button, input { font: inherit; } button { border: 0; cursor: pointer; } button:d
   .content { padding-inline: 30px; }
   .settings-card { grid-template-columns: 220px minmax(0, 1fr); }
 }
+
+.wide-drawer { width: min(680px, 100vw); }
+.lookup-result { margin-top: 22px; padding: 16px; border: 1px solid #dfe3ff; border-radius: 10px; background: #fafaff; }
+.lookup-result .section-title > div { display: grid; gap: 3px; }
+.lookup-result .section-title a { color: #5856d6; font-size: 12px; font-weight: 600; }
+.lookup-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0; }
+.lookup-grid div { min-width: 0; padding: 10px; border-radius: 7px; background: #fff; }
+.lookup-grid dt, .lookup-list b { color: #667085; font-size: 11px; }
+.lookup-grid dd { margin: 5px 0 0; overflow-wrap: anywhere; color: #344054; font-size: 12px; font-weight: 600; }
+.lookup-list { margin-top: 13px; }
+.lookup-list > div { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.lookup-list ul { margin: 7px 0 0; padding-left: 18px; color: #475467; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; line-height: 1.7; }
+.lookup-list small, .empty-result p { display: block; margin: 7px 0 0; color: #98a2b3; font-size: 12px; }
+.raw-snapshot { margin-top: 15px; }
+.raw-snapshot summary { cursor: pointer; color: #5856d6; font-size: 12px; font-weight: 600; }
+.raw-snapshot pre { max-height: 320px; margin: 9px 0 0; overflow: auto; padding: 12px; border-radius: 7px; color: #344054; background: #fff; font-size: 11px; line-height: 1.5; }
