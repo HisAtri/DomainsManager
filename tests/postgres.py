@@ -9,7 +9,6 @@ from domainsmanager_persistence.database_config import DatabaseConfig
 from domainsmanager_persistence.db import (
     create_engine,
     downgrade_migrations,
-    run_migrations,
 )
 
 PROJECT_TABLES = {
@@ -18,6 +17,8 @@ PROJECT_TABLES = {
     "auth_refresh_token",
     "auth_session",
     "domain_check",
+    "domain_refresh_task",
+    "idempotency_record",
     "lookup_cache_head",
     "lookup_record",
     "lookup_refresh_lease",

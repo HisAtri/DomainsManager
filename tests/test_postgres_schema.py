@@ -1,8 +1,8 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import inspect, select, text
+from sqlalchemy import select, text
 
 from domainsmanager_persistence.db import (
     create_engine,
@@ -18,9 +18,9 @@ from tests.postgres import (
     public_tables,
 )
 
-NOW = datetime(2026, 1, 1, 12, 30, 15, 123456, tzinfo=timezone.utc)
+NOW = datetime(2026, 1, 1, 12, 30, 15, 123456, tzinfo=UTC)
 OLD_REVISION = "6f0aad6e5b27"
-HEAD_REVISION = "d4e7f1c9a862"
+HEAD_REVISION = "d6f4a9b8c2e1"
 
 
 @pytest.mark.asyncio

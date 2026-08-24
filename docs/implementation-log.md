@@ -73,3 +73,9 @@
 - 测试仅在 `DOMAINSMANAGER_RUN_POSTGRES_TESTS=1` 且配置专用 PostgreSQL 测试库时执行；默认测试不会访问或清理 PostgreSQL。
 - 为 Outbox 状态和重试次数添加数据库约束，阻止非法状态或负数尝试次数绕过应用状态机写入。
 - 本地全量回归已通过；阶段状态仍保持“进行中”，直到在明确指定、可清空的 PostgreSQL 测试库中实际执行上述并发用例。
+
+## 2026-08-24 — M2/M3 最终验收完成
+
+- 在项目专用的临时 PostgreSQL 实例中，从无表结构数据库完成迁移冷启动、历史 revision 升级与回退后再升级验证。
+- PostgreSQL 迁移与并发验收共 5 项通过；完整测试矩阵共 `123 passed`。刷新任务、Scheduler、Outbox 与通知 API 的 M2/M3 完成条件已满足。
+- 同时修复 PostgreSQL 测试 schema 白名单和 head revision 断言，使新任务表、幂等记录和最新 Outbox 迁移在冷启动验收中受到持续覆盖。
