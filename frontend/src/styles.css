@@ -56,6 +56,35 @@ button, input { font: inherit; } button { border: 0; cursor: pointer; } button:d
 .preference-row small { margin-top: 4px; color: #98a2b3; font-size: 12px; }
 .timezone-select { height: 42px; cursor: pointer; }
 
+/* Notifications */
+.notification-tabs { display: flex; gap: 24px; margin-bottom: 18px; border-bottom: 1px solid #eaecf0; }
+.notification-tabs button { position: relative; padding: 0 1px 12px; color: #667085; background: transparent; font-size: 13px; font-weight: 600; }
+.notification-tabs button.active { color: #4f46e5; }
+.notification-tabs button.active::after { position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: #5b5ce2; content: ""; }
+.notification-panel { min-height: 260px; }
+.notification-dialog { width: min(470px, calc(100vw - 32px)); }
+.notification-dialog .field-label { margin-top: 15px; }
+.notification-dialog .field-label select { height: 40px; }
+.notification-dialog .form-error { margin: 16px 0 -7px; }
+.webhook-value, .failure-reason { max-width: 220px; overflow: hidden; color: #667085; text-overflow: ellipsis; white-space: nowrap; }
+.failure-reason { color: #b42318; }
+
+/* Shared page layout corrections */
+.content { max-width: none; margin: 0; scrollbar-gutter: stable; }
+.toolbar { align-items: center; min-height: 70px; padding: 16px 24px; }
+.toolbar .search { flex: 0 1 380px; width: min(380px, 48%); }
+.domain-name + small { display: none; }
+
+/* Domain details */
+.domain-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 18px 0 0; padding: 14px; border: 1px solid #eaecf0; border-radius: 8px; background: #fcfcfd; }
+.domain-meta div { min-width: 0; }
+.domain-meta dt { color: #98a2b3; font-size: 11px; }
+.domain-meta dd { margin: 5px 0 0; overflow: hidden; color: #344054; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Settings use a centered reading column while the shared scroll area reaches the viewport edge. */
+.settings-layout { margin-inline: auto; }
+.content:has(.settings-layout) .page-head { width: min(100%, 1040px); margin-inline: auto; }
+
 @media (max-width: 1280px) {
   body { min-width: 960px; }
   .sidebar { width: 220px; }
