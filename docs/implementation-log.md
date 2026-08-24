@@ -66,3 +66,9 @@
 - 新增 `GET /api/v1/notification-rules/deliveries?limit=50`，仅返回当前用户规则产生的投递记录。响应不包含 Webhook URL、SMTP 配置、收件人或事件原始载荷。
 - 保存的失败原因仅为异常类型和固定说明，不保留可能含有 URL、认证信息或服务端细节的原始异常文本。
 - 前端可将 `status`、`attempt_count`、`available_at`、`sent_at` 和 `failure_reason` 显示在通知设置页的投递历史区域；本仓库当前没有对应前端页面，因此未产生前端源代码改动。
+
+## 2026-08-24 — M2/M3 PostgreSQL 并发验收
+
+- 新增显式 `postgres` 标记测试，验证两个刷新 Worker 只会领取同一任务一次、租约到期后可恢复领取，以及两个 Scheduler 不会为同一到期域名重复建任务。
+- 测试仅在 `DOMAINSMANAGER_RUN_POSTGRES_TESTS=1` 且配置专用 PostgreSQL 测试库时执行；默认测试不会访问或清理 PostgreSQL。
+- 为 Outbox 状态和重试次数添加数据库约束，阻止非法状态或负数尝试次数绕过应用状态机写入。

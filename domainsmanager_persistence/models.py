@@ -368,7 +368,16 @@ class NotificationRule(TimestampMixin, Base):
 
 class NotificationOutbox(TimestampMixin, Base):
     __tablename__ = "notification_outbox"
-    __table_args__ = (Index("ix_notification_outbox_status_available", "status", "available_at"),)
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'running', 'sent', 'dead_letter')",
+            name="notification_outbox_valid_status",
+        ),
+        CheckConstraint(
+            "attempt_count >= 0", name="notification_outbox_attempt_count_nonnegative"
+        ),
+        Index("ix_notification_outbox_status_available", "status", "available_at"),
+    )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
     notification_rule_id: Mapped[UUID] = mapped_column(
