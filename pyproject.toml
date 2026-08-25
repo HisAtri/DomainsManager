@@ -9,6 +9,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "cryptography>=46.0.0",
     "httpx>=0.28.1",
     "idna>=3.18",
     "pydantic>=2.13.4",

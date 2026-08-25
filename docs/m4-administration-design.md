@@ -133,7 +133,7 @@ flowchart LR
 5. 分批接入检查周期、任务/通知重试、租约、调度批量/轮询和注册开关；每批增加跨进程生效测试。
 6. 管理员配置页：展示值来源、版本、最大生效延迟、最近审计和“需重启”标记。
 
-禁止迁移数据库连接、监听/端口、JWT/Refresh Secret、SMTP 密码、TLS、CORS、迁移开关和首次管理员引导凭据。
+禁止迁移数据库连接、监听/端口、JWT/Refresh Secret、TLS、CORS、迁移开关和首次管理员引导凭据。SMTP 密码是例外：可由管理员写入加密数据库记录，解密主密钥始终保留在 `DOMAINSMANAGER_CONFIGURATION_ENCRYPTION_KEY` 环境变量中，且 API 永不返回原文。
 
 ## 8. M4-4：前端集成
 

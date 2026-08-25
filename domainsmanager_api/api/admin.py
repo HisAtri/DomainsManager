@@ -11,8 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domainsmanager_api.dependencies import (
     AdminUserDependency,
     AuthContextDependency,
+    RuntimeSettingsDependency,
     TaskServiceDependency,
     get_session,
+)
+from domainsmanager_api.global_setting_registry import (
+    GLOBAL_SETTING_BY_KEY,
+    GLOBAL_SETTINGS,
 )
 from domainsmanager_api.schemas.admin import (
     AdminSessionPageResponse,
@@ -44,6 +49,7 @@ from domainsmanager_api.schemas.tasks import (
     TaskErrorResponse,
     TaskResultResponse,
 )
+from domainsmanager_api.secret_settings import SecretSettingError, encrypt_secret
 from domainsmanager_application.domains import DomainError
 from domainsmanager_application.tasks import IdempotencyConflictError, TaskError
 from domainsmanager_persistence.models import (
@@ -58,6 +64,60 @@ from domainsmanager_persistence.models import (
 
 router = APIRouter(prefix="/admin", tags=["Admin users", "Admin domains"])
 GLOBAL_SETTING_KEY = "successful_refresh_ttl_seconds"
+
+
+def setting_value(definition, value: str) -> int | float | bool | str:
+    if definition.kind == "boolean":
+        return value == "true"
+    if definition.kind == "integer":
+        return int(value)
+    if definition.kind == "number":
+        return float(value)
+    return value
+
+
+def setting_response(definition, setting: GlobalSetting | None, default: float | bool | str | None) -> GlobalSettingResponse:
+    if definition.secret:
+        value, configured = None, bool(setting is not None or default)
+    else:
+        value = setting_value(definition, setting.value) if setting else default
+        configured = value is not None and value != ""
+    return GlobalSettingResponse(
+        key=definition.key,
+        group=definition.group,
+        label=definition.label,
+        description=definition.description,
+        kind=definition.kind,
+        value=value,
+        configured=configured,
+        version=setting.version if setting else 0,
+        source="database" if setting else "environment_default",
+        updated_at=setting.updated_at if setting else None,
+        minimum=definition.minimum,
+        maximum=definition.maximum,
+        live=definition.live,
+    )
+
+
+def valid_setting_value(definition, value: object) -> bool:
+    if definition.secret:
+        return value is None or (isinstance(value, str) and 1 <= len(value) <= 4096)
+    if definition.kind == "boolean":
+        return isinstance(value, bool)
+    if definition.kind == "integer":
+        return isinstance(value, int) and not isinstance(value, bool) and definition.minimum <= value <= definition.maximum
+    if definition.kind == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and definition.minimum <= value <= definition.maximum
+    return isinstance(value, str) and len(value) <= 512
+
+
+def setting_storage_value(definition, value: float | bool | str | None, encryption_key) -> str:
+    if definition.secret:
+        assert isinstance(value, str)
+        return encrypt_secret(value, encryption_key)
+    if definition.kind == "boolean":
+        return str(value).lower()
+    return str(value)
 
 
 @router.get(
@@ -140,20 +200,10 @@ async def update_refresh_policy(
 async def list_global_settings(
     _: AdminUserDependency,
     session: Annotated[AsyncSession, Depends(get_session)],
-    tasks: TaskServiceDependency,
+    settings: RuntimeSettingsDependency,
 ) -> list[GlobalSettingResponse]:
-    setting = await session.get(GlobalSetting, GLOBAL_SETTING_KEY)
-    return [
-        GlobalSettingResponse(
-            key=GLOBAL_SETTING_KEY,
-            value=int(setting.value)
-            if setting
-            else await tasks.get_successful_refresh_ttl_seconds(),
-            version=setting.version if setting else 0,
-            source="database" if setting else "environment_default",
-            updated_at=setting.updated_at if setting else None,
-        )
-    ]
+    rows = {row.key: row for row in (await session.execute(select(GlobalSetting).where(GlobalSetting.key.in_(GLOBAL_SETTING_BY_KEY)))).scalars()}
+    return [setting_response(definition, rows.get(definition.key), definition.default(settings)) for definition in GLOBAL_SETTINGS]
 
 
 @router.put(
@@ -167,10 +217,14 @@ async def update_global_setting(
     admin: AdminUserDependency,
     context: AuthContextDependency,
     session: Annotated[AsyncSession, Depends(get_session)],
+    settings: RuntimeSettingsDependency,
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> GlobalSettingResponse:
-    if key != GLOBAL_SETTING_KEY:
+    definition = GLOBAL_SETTING_BY_KEY.get(key)
+    if definition is None:
         not_found()
+    if not valid_setting_value(definition, body.value):
+        raise HTTPException(status_code=422, detail={"code": "validation_error", "message": "setting value is invalid"})
     if if_match is None or not if_match.isdigit():
         raise HTTPException(
             status_code=428,
@@ -187,10 +241,26 @@ async def update_global_setting(
             detail={"code": "version_conflict", "message": "setting has changed"},
         )
     now = datetime.now(UTC)
+    if definition.secret and body.value is None:
+        if setting is not None:
+            await session.delete(setting)
+        session.add(
+            SecurityAuditEvent(
+                id=uuid4(), actor_user_id=admin.user.id,
+                event_type="admin.global_setting_secret_cleared", target_type="global_setting",
+                request_id=context.request_id, event_metadata={"key": key}, occurred_at=now,
+            )
+        )
+        await session.commit()
+        return setting_response(definition, None, definition.default(settings))
+    try:
+        stored_value = setting_storage_value(definition, body.value, settings.configuration_encryption_key)
+    except SecretSettingError as error:
+        raise HTTPException(status_code=422, detail={"code": "configuration_encryption_unavailable", "message": str(error)}) from error
     if setting is None:
         setting = GlobalSetting(
             key=key,
-            value=str(body.value),
+            value=stored_value,
             version=1,
             updated_by_user_id=admin.user.id,
             updated_at=now,
@@ -202,7 +272,7 @@ async def update_global_setting(
             setting.version,
             setting.updated_by_user_id,
             setting.updated_at,
-        ) = str(body.value), version + 1, admin.user.id, now
+        ) = stored_value, version + 1, admin.user.id, now
     session.add(
         SecurityAuditEvent(
             id=uuid4(),
@@ -219,13 +289,7 @@ async def update_global_setting(
         )
     )
     await session.commit()
-    return GlobalSettingResponse(
-        key=key,
-        value=body.value,
-        version=setting.version,
-        source="database",
-        updated_at=setting.updated_at,
-    )
+    return setting_response(definition, setting, definition.default(settings))
 
 
 def not_found() -> None:

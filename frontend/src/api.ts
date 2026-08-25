@@ -62,6 +62,6 @@ class ApiClient {
   adminDomains(params: Record<string, string | number | undefined> = {}) { return this.request<Page<AdminDomain>>(`/admin/domains?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
   adminChecks() { return this.request<AdminCheckPage>("/admin/domain-checks").then((r) => r.data); }
   globalSettings() { return this.request<GlobalSetting[]>("/admin/settings").then((r) => r.data); }
-  updateGlobalSetting(key: string, value: number, version: number) { return this.request<GlobalSetting>(`/admin/settings/${key}`, { method: "PUT", headers: { "If-Match": String(version) }, body: JSON.stringify({ value }) }).then((r) => r.data); }
+  updateGlobalSetting(key: string, value: number | boolean | string | null, version: number) { return this.request<GlobalSetting>(`/admin/settings/${key}`, { method: "PUT", headers: { "If-Match": String(version) }, body: JSON.stringify({ value }) }).then((r) => r.data); }
 }
 export const api = new ApiClient();

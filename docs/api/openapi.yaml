@@ -782,6 +782,50 @@ paths:
               schema: { $ref: '#/components/schemas/RefreshPolicy' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/settings:
+    get:
+      tags: [Admin settings]
+      operationId: listGlobalSettings
+      summary: 获取后台全局设置
+      description: Secret 设置不返回明文；密码等字段只返回是否已配置。
+      responses:
+        '200':
+          description: 已注册的全局设置
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/GlobalSetting' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/settings/{key}:
+    put:
+      tags: [Admin settings]
+      operationId: updateGlobalSetting
+      summary: 更新一项后台全局设置
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema: { type: string }
+        - name: If-Match
+          in: header
+          required: true
+          schema: { type: string, pattern: '^[0-9]+$' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GlobalSettingPatch' }
+      responses:
+        '200':
+          description: 已更新的设置
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/GlobalSetting' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
   /admin/domains:
     get:
       tags: [Admin domains]
@@ -1413,6 +1457,30 @@ components:
       required: [successful_refresh_ttl_seconds]
       properties:
         successful_refresh_ttl_seconds: { type: integer, minimum: 60, maximum: 2592000 }
+    GlobalSetting:
+      type: object
+      additionalProperties: false
+      required: [key, group, label, description, kind, value, configured, version, source, updated_at, minimum, maximum, live]
+      properties:
+        key: { type: string }
+        group: { type: string }
+        label: { type: string }
+        description: { type: string }
+        kind: { type: string, enum: [integer, number, boolean, string, secret] }
+        value: { type: [number, boolean, string, 'null'] }
+        configured: { type: boolean }
+        version: { type: integer, minimum: 0 }
+        source: { type: string, enum: [database, environment_default] }
+        updated_at: { type: [string, 'null'], format: date-time }
+        minimum: { type: [number, 'null'] }
+        maximum: { type: [number, 'null'] }
+        live: { type: boolean }
+    GlobalSettingPatch:
+      type: object
+      additionalProperties: false
+      required: [value]
+      properties:
+        value: { type: [number, boolean, string, 'null'] }
     TaskError:
       type: object
       additionalProperties: false

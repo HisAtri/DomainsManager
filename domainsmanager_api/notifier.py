@@ -5,12 +5,56 @@ import smtplib
 from email.message import EmailMessage
 
 import httpx
+from pydantic import SecretStr
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from domainsmanager_api.global_setting_registry import GLOBAL_SETTING_BY_KEY
+from domainsmanager_api.secret_settings import decrypt_secret
 from domainsmanager_api.settings import Settings
 from domainsmanager_application.notifications import OutboxMessage
+from domainsmanager_persistence.models import GlobalSetting
+
+NOTIFICATION_CONFIGURATION_KEYS = frozenset(
+    key for key, definition in GLOBAL_SETTING_BY_KEY.items()
+    if definition.group in {"通知", "邮件投递"}
+)
 
 
-async def deliver(message: OutboxMessage, settings: Settings) -> None:
+async def delivery_settings(
+    defaults: Settings, sessions: async_sessionmaker[AsyncSession]
+) -> Settings:
+    async with sessions() as session:
+        rows = {
+            row.key: row.value
+            for row in (
+                await session.execute(
+                    select(GlobalSetting).where(GlobalSetting.key.in_(NOTIFICATION_CONFIGURATION_KEYS))
+                )
+            ).scalars()
+        }
+    values: dict[str, object] = {}
+    for key, raw in rows.items():
+        definition = GLOBAL_SETTING_BY_KEY[key]
+        if definition.secret:
+            values[key] = SecretStr(decrypt_secret(raw, defaults.configuration_encryption_key))
+        elif definition.kind == "boolean":
+            values[key] = raw == "true"
+        elif definition.kind == "integer":
+            values[key] = int(raw)
+        elif definition.kind == "number":
+            values[key] = float(raw)
+        else:
+            values[key] = raw or None
+    return defaults.model_copy(update=values)
+
+
+async def deliver(
+    message: OutboxMessage,
+    settings: Settings,
+    sessions: async_sessionmaker[AsyncSession],
+) -> None:
+    settings = await delivery_settings(settings, sessions)
     if message.channel == "webhook":
         url = message.channel_config.get("webhook_url")
         if not isinstance(url, str):

@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from domainsmanager_api.main import create_app
+from domainsmanager_api.notifier import delivery_settings
 from domainsmanager_api.settings import Settings
 from domainsmanager_persistence.db import run_migrations
 from tests.database import sqlite_database
@@ -23,6 +24,7 @@ async def make_client(tmp_path: Path) -> TestClient:
                 registration_enabled=True,
                 bootstrap_admin_username="task-admin",
                 bootstrap_admin_password="123456",
+                configuration_encryption_key="eAbLHc58_pjXLGKKZNoeuQLHYKkN9orkVRxMVokhGTY=",
             )
         )
     )
@@ -123,7 +125,8 @@ async def test_admin_can_override_successful_refresh_ttl(tmp_path: Path) -> None
         assert updated.json()["successful_refresh_ttl_seconds"] == 3600
         settings = client.get("/api/v1/admin/settings", headers=headers)
         assert settings.status_code == 200
-        assert settings.json()[0]["version"] == 1
+        refresh_setting = next(item for item in settings.json() if item["key"] == "successful_refresh_ttl_seconds")
+        assert refresh_setting["version"] == 1
         conflict = client.put(
             "/api/v1/admin/settings/successful_refresh_ttl_seconds",
             json={"value": 7200},
@@ -137,3 +140,30 @@ async def test_admin_can_override_successful_refresh_ttl(tmp_path: Path) -> None
         )
         assert updated_setting.status_code == 200
         assert updated_setting.json()["version"] == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.api
+async def test_admin_stores_smtp_password_encrypted_without_returning_it(tmp_path: Path) -> None:
+    client = await make_client(tmp_path)
+    with client:
+        login = client.post(
+            "/api/v1/auth/login",
+            data={"username": "task-admin", "password": "123456"},
+        )
+        headers = {"Authorization": f"Bearer {login.json()['tokens']['access_token']}"}
+        password = client.put(
+            "/api/v1/admin/settings/smtp_password",
+            json={"value": "smtp-test-password"},
+            headers={**headers, "If-Match": "0"},
+        )
+        assert password.status_code == 200
+        assert password.json()["value"] is None
+        assert password.json()["configured"] is True
+        listed = client.get("/api/v1/admin/settings", headers=headers)
+        assert listed.status_code == 200
+        assert "smtp-test-password" not in listed.text
+        resources = client.app.state.resources
+        effective = await delivery_settings(resources.settings, resources.sessions)
+        assert effective.smtp_password is not None
+        assert effective.smtp_password.get_secret_value() == "smtp-test-password"

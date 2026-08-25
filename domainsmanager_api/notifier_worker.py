@@ -23,6 +23,8 @@ async def run(
 ) -> None:
     effective = settings or get_settings()
     resources = await resource_factory(effective)
+    if isinstance(resources, Resources):
+        effective = await resources.reload_global_policies()
     stopped = stop or Event()
     try:
         while not stopped.is_set():

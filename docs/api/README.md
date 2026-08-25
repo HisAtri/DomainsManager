@@ -63,7 +63,7 @@ Token。封禁要求原因并立即撤销会话；管理员不能封禁自己。
 `SecurityAuditEvent`，至少记录操作者、目标、事件类型、请求 ID、时间和脱敏元数据。
 
 管理员可配置的全局运行策略遵循[全局运行配置管理方案](../global-configuration-management.md)：只有注册表中
-非敏感、可审计的业务策略可写入数据库；数据库连接、JWT/Token Secret、SMTP 密码、TLS、CORS、监听与
+非敏感、可审计的业务策略可写入数据库；SMTP 密码也可由管理员写入加密数据库记录（仅写入，不回显，解密主密钥由环境变量提供）；数据库连接、JWT/Token Secret、TLS、CORS、监听与
 首次管理员引导仍由部署环境或 Secret 管理器提供。
 
 用户设置采用白名单 Schema，目前预留：

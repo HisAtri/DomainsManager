@@ -28,6 +28,8 @@ async def run(
 ) -> None:
     effective_settings = settings or get_settings()
     resources = await resource_factory(effective_settings)
+    if isinstance(resources, Resources):
+        effective_settings = await resources.reload_global_policies()
     worker_id = os.environ.get("DOMAINSMANAGER_WORKER_ID", default_worker_id())
     effective_stop = stop or Event()
     try:

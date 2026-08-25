@@ -74,6 +74,7 @@ class Settings(BaseSettings):
     smtp_username: str | None = None
     smtp_password: SecretStr | None = None
     smtp_starttls: bool = True
+    configuration_encryption_key: SecretStr | None = None
     bootstrap_admin_username: str | None = None
     bootstrap_admin_password: SecretStr | None = None
     request_id_header: str = "X-Request-ID"
