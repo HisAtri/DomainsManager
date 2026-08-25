@@ -46,6 +46,7 @@ class ApiClient {
   deleteDomain(id: string) { return this.request<void>(`/domains/${id}`, { method: "DELETE" }); }
   refreshDomain(id: string, force_refresh = false) { return this.request<Task>(`/domains/${id}/refresh`, { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ force_refresh }) }).then((r) => r.data); }
   checks(id: string, params: Record<string, string | number | undefined> = {}) { return this.request<Page<Check>>(`/domains/${id}/checks?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
+  tasks(params: Record<string, string | number | undefined> = {}) { return this.request<Page<Task>>(`/tasks?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
   task(id: string) { return this.request<Task>(`/tasks/${id}`).then((r) => r.data); }
   notificationRules() { return this.request<NotificationRule[]>("/notification-rules").then((r) => r.data); }
   notificationRule(id: string) { return this.request<NotificationRule>(`/notification-rules/${id}`).then((r) => r.data); }

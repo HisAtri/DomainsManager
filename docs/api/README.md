@@ -96,7 +96,7 @@ DELETE 天然幂等，不要求 `Idempotency-Key`；需要持久化请求幂等�
 WHOIS/RDAP 请求延迟和上游限流不适合占用普通 HTTP 请求，所以刷新统一为异步任务：
 
 1. `POST /domains/{domain_id}/refresh` 返回 `202 Accepted` 和 `RefreshTask`；
-2. `Location` 指向 `/tasks/{task_id}`，客户端轮询任务状态；
+2. `Location` 指向 `/tasks/{task_id}`；客户端可按需手动查询状态，任务列表使用分页 `GET /tasks` 聚合加载；
 3. 状态为 `queued`、`running`、`succeeded`、`failed` 或 `cancelled`；
 4. 成功任务关联 `DomainCheck`，失败检查同样写入历史；
 5. 刷新必须提交 `Idempotency-Key`，相同用户、资源、操作及请求参数复用原任务；

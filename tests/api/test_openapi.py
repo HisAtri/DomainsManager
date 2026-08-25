@@ -100,6 +100,7 @@ def test_implemented_domain_operations_match_contract() -> None:
         ("/api/v1/domains/{domain_id}/refresh", "post", "refreshDomain"),
         ("/api/v1/domains/{domain_id}/checks", "get", "listDomainChecks"),
         ("/api/v1/domains/{domain_id}/checks/{check_id}", "get", "getDomainCheck"),
+        ("/api/v1/tasks", "get", "listTasks"),
         ("/api/v1/tasks/{task_id}", "get", "getTask"),
     }
     app = create_app(
@@ -115,7 +116,7 @@ def test_implemented_domain_operations_match_contract() -> None:
         (path, method, operation["operationId"])
         for path, path_item in runtime_document["paths"].items()
         if path.startswith("/api/v1/domains")
-        or path.startswith("/api/v1/tasks/")
+        or path.startswith("/api/v1/tasks")
         for method, operation in path_item.items()
         if method in {"get", "post", "patch", "delete"}
     }

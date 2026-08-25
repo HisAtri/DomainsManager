@@ -126,3 +126,5 @@ button, input { font: inherit; } button { border: 0; cursor: pointer; } button:d
 .raw-snapshot { margin-top: 15px; }
 .raw-snapshot summary { cursor: pointer; color: #5856d6; font-size: 12px; font-weight: 600; }
 .raw-snapshot pre { max-height: 320px; margin: 9px 0 0; overflow: auto; padding: 12px; border-radius: 7px; color: #344054; background: #fff; font-size: 11px; line-height: 1.5; }
+
+.pagination { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 16px 24px; color: #667085; font-size: 12px; }

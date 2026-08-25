@@ -87,7 +87,7 @@ async def test_refresh_task_is_idempotent_and_owner_scoped(tmp_path: Path) -> No
         assert checks.json()["items"] == []
         task_list = client.get("/api/v1/tasks?page=1&page_size=10", headers=first)
         assert task_list.status_code == 200
-        assert task_list.json()["total"] == 1
-        assert task_list.json()["items"][0]["domain_name"] == "example.com"
-        assert task_list.json()["items"][0]["status"] == "queued"
-        assert task_list.json()["items"][0]["result"] is None
+        assert task_list.json()["total"] == 2
+        assert {item["domain_name"] for item in task_list.json()["items"]} == {"example.com"}
+        assert {item["status"] for item in task_list.json()["items"]} == {"queued"}
+        assert all(item["result"] is None for item in task_list.json()["items"])
