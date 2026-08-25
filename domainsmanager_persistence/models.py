@@ -177,7 +177,7 @@ class DomainRefreshTask(TimestampMixin, Base):
     __tablename__ = "domain_refresh_task"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'running', 'succeeded', 'failed', 'cancelled')",
+            "status IN ('queued', 'running', 'success', 'info', 'warning', 'failed')",
             name="domain_refresh_task_valid_status",
         ),
         Index(
@@ -209,8 +209,14 @@ class DomainRefreshTask(TimestampMixin, Base):
     domain_check_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("domain_check.id", ondelete="SET NULL")
     )
+    source_check_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("domain_check.id", ondelete="SET NULL")
+    )
     error_code: Mapped[str | None] = mapped_column(String(64))
     error_message: Mapped[str | None] = mapped_column(String(512))
+    result_code: Mapped[str | None] = mapped_column(String(64))
+    result_message: Mapped[str | None] = mapped_column(String(512))
+    fresh_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class IdempotencyRecord(Base):

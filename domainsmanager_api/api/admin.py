@@ -29,6 +29,7 @@ from domainsmanager_api.schemas.admin_domains import (
 from domainsmanager_api.schemas.tasks import (
     RefreshTaskResponse,
     TaskErrorResponse,
+    TaskResultResponse,
 )
 from domainsmanager_application.domains import DomainError
 from domainsmanager_application.tasks import IdempotencyConflictError, TaskError
@@ -481,12 +482,17 @@ def task_response(task) -> RefreshTaskResponse:
         if task.error_code is not None
         else None
     )
+    result = None
+    if task.result_code is not None:
+        result = TaskResultResponse(code=task.result_code, message=task.result_message, source_check_id=task.source_check_id, fresh_until=task.fresh_until)
     return RefreshTaskResponse(
         id=task.id,
         status=task.status,
         domain_id=task.domain_id,
+        domain_name=task.domain_name,
         check_id=task.check_id,
         error=error,
+        result=result,
         created_at=task.created_at,
         started_at=task.started_at,
         completed_at=task.completed_at,

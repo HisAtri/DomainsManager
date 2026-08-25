@@ -244,6 +244,7 @@ async def test_worker_renews_lease_and_records_snapshot_changes(tmp_path: Path) 
         policy = TaskExecutionPolicy(
             lease_duration=timedelta(milliseconds=90),
             successful_check_interval=timedelta(hours=6),
+            successful_refresh_ttl=timedelta(0),
         )
         service = RefreshTaskService(
             unit_of_work=factory, lookup=lookup, policy=policy
@@ -288,5 +289,35 @@ async def test_worker_renews_lease_and_records_snapshot_changes(tmp_path: Path) 
         if next_check_at.tzinfo is None:
             next_check_at = next_check_at.replace(tzinfo=UTC)
         assert next_check_at > datetime.now(UTC) + timedelta(hours=5)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_worker_marks_recent_success_as_info_without_another_lookup(tmp_path: Path) -> None:
+    database = sqlite_database(tmp_path / "task-fresh.db")
+    await run_migrations(database)
+    engine = create_engine(database)
+    factory = SqlAlchemyUnitOfWorkFactory(create_session_factory(engine))
+    now = datetime(2026, 8, 25, tzinfo=UTC)
+    user_id, domain_id = uuid4(), uuid4()
+    try:
+        async with factory() as uow:
+            await uow.users.add(UserRecord(id=user_id, username="fresh-user", username_normalized="fresh-user", password_hash="hash", email=None, role="user", preferences={}, is_active=True, banned_at=None, password_changed_at=now, last_login_at=None, created_at=now, updated_at=now))
+            await uow.domains.add(ManagedDomainRecord(id=domain_id, user_id=user_id, name_ascii="example.com", name_unicode="example.com", registrable_domain="example.com", public_suffix="com", tld="com", monitor_enabled=True, renewal_mode=None, notes=None, expires_at=None, last_check_at=None, last_outcome=None, version=1, created_at=now, updated_at=now, deleted_at=None))
+            await uow.commit()
+        lookup = DelayedLookup([successful_outcome(expires_at=now + timedelta(days=30))])
+        service = RefreshTaskService(unit_of_work=factory, lookup=lookup, clock=lambda: now, policy=TaskExecutionPolicy(successful_refresh_ttl=timedelta(minutes=30)))
+        await service.enqueue(user_id, domain_id, force_refresh=False, idempotency_key="fresh-first-key")
+        assert await service.run_once("worker-1")
+        second = await service.enqueue(user_id, domain_id, force_refresh=True, idempotency_key="fresh-second-key")
+        assert await service.run_once("worker-1")
+        assert len(lookup._outcomes) == 0
+        task = await service.get(user_id, second.id)
+        assert task.status == "info"
+        assert task.result_code == "data_fresh"
+        assert task.result_message == "距上次成功刷新不足30分钟"
+        assert task.source_check_id is not None
+        assert task.check_id is None
     finally:
         await engine.dispose()

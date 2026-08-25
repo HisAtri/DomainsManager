@@ -29,6 +29,7 @@ class IdempotencyConflictError(TaskError):
 class TaskExecutionPolicy:
     lease_duration: timedelta = timedelta(minutes=2)
     successful_check_interval: timedelta = timedelta(days=1)
+    successful_refresh_ttl: timedelta = timedelta(minutes=30)
     max_attempts: int = 5
     retry_base_delay: timedelta = timedelta(minutes=1)
     retry_max_delay: timedelta = timedelta(hours=1)
@@ -65,6 +66,10 @@ class RefreshTaskRecord:
     available_at: datetime | None = None
     max_attempts: int = 5
     lease_token: UUID | None = None
+    result_code: str | None = None
+    result_message: str | None = None
+    source_check_id: UUID | None = None
+    fresh_until: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,6 +92,14 @@ class DomainCheckRecord:
 @dataclass(frozen=True, slots=True)
 class CheckPage:
     items: list[DomainCheckRecord]
+    total: int
+    page: int
+    page_size: int
+
+
+@dataclass(frozen=True, slots=True)
+class TaskPage:
+    items: list[RefreshTaskRecord]
     total: int
     page: int
     page_size: int
@@ -163,6 +176,12 @@ class RefreshTaskService:
             raise TaskNotFoundError("task was not found")
         return task
 
+    async def list(
+        self, user_id: UUID, *, page: int, page_size: int, status: str | None
+    ) -> TaskPage:
+        async with self._unit_of_work() as uow:
+            return await uow.tasks.list(user_id, page, page_size, status)
+
     async def enqueue_as_admin(
         self,
         domain_id: UUID,
@@ -220,6 +239,18 @@ class RefreshTaskService:
                 await uow.commit()
         if task is None:
             return False
+        completed = self._clock()
+        async with self._unit_of_work() as uow:
+            if await uow.tasks.complete_if_fresh(
+                task.id,
+                task.lease_token,
+                completed,
+                fresh_after=completed - self._policy.successful_refresh_ttl,
+                fresh_until=completed + self._policy.successful_refresh_ttl,
+                result_message=self._fresh_message(self._policy.successful_refresh_ttl),
+            ):
+                await uow.commit()
+                return True
         started = monotonic()
         stop_heartbeat = asyncio.Event()
         heartbeat = asyncio.create_task(
@@ -295,3 +326,16 @@ class RefreshTaskService:
     def _is_retryable(error_code: object) -> bool:
         value = getattr(error_code, "value", error_code)
         return value in {"rate_limited", "temporary_failure"}
+
+    @staticmethod
+    def _fresh_message(interval: timedelta) -> str:
+        seconds = int(interval.total_seconds())
+        if seconds % 86_400 == 0:
+            value = f"{seconds // 86_400}天"
+        elif seconds % 3_600 == 0:
+            value = f"{seconds // 3_600}小时"
+        elif seconds % 60 == 0:
+            value = f"{seconds // 60}分钟"
+        else:
+            value = f"{seconds}秒"
+        return f"距上次成功刷新不足{value}"

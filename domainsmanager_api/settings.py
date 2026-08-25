@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     task_retry_base_seconds: int = Field(default=60, ge=1, le=3600)
     task_retry_max_seconds: int = Field(default=3600, ge=1, le=86_400)
     check_interval_seconds: int = Field(default=86_400, ge=60, le=2_592_000)
+    successful_refresh_ttl_seconds: int = Field(default=1_800, ge=60, le=2_592_000)
     worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
     scheduler_poll_interval_seconds: float = Field(default=10.0, gt=0, le=300)
     scheduler_batch_size: int = Field(default=100, ge=1, le=1000)

@@ -113,6 +113,9 @@ def create_resources(settings: Settings) -> Resources:
                 successful_check_interval=timedelta(
                     seconds=settings.check_interval_seconds
                 ),
+                successful_refresh_ttl=timedelta(
+                    seconds=settings.successful_refresh_ttl_seconds
+                ),
             ),
         ),
         scheduler=DomainSchedulerService(

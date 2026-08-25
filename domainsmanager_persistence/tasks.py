@@ -13,6 +13,7 @@ from domainsmanager_application.tasks import (
     CheckPage,
     DomainCheckRecord,
     RefreshTaskRecord,
+    TaskPage,
 )
 from domainsmanager_persistence.models import (
     DomainCheck,
@@ -63,9 +64,13 @@ class SqlAlchemyTaskRepository:
                 force_refresh=task.force_refresh,
                 attempt_count=task.attempt_count,
                 max_attempts=task.max_attempts,
-                available_at=task.created_at,
+                available_at=task.available_at or task.created_at,
                 created_at=task.created_at,
                 updated_at=task.updated_at,
+                result_code=task.result_code,
+                result_message=task.result_message,
+                source_check_id=task.source_check_id,
+                fresh_until=task.fresh_until,
             )
         )
         self._session.add(
@@ -95,6 +100,32 @@ class SqlAlchemyTaskRepository:
         )
         row = result.one_or_none()
         return self._task_record(*row) if row is not None else None
+
+    async def list(
+        self, user_id: UUID, page: int, page_size: int, status: str | None
+    ) -> TaskPage:
+        filters = [DomainRefreshTask.user_id == user_id]
+        if status is not None:
+            filters.append(DomainRefreshTask.status == status)
+        total = await self._session.scalar(
+            select(func.count()).select_from(DomainRefreshTask).where(*filters)
+        )
+        rows = (
+            await self._session.execute(
+                select(DomainRefreshTask, ManagedDomain.name_ascii)
+                .join(ManagedDomain, ManagedDomain.id == DomainRefreshTask.managed_domain_id)
+                .where(*filters)
+                .order_by(DomainRefreshTask.created_at.desc(), DomainRefreshTask.id.desc())
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+            )
+        ).all()
+        return TaskPage(
+            items=[self._task_record(*row) for row in rows],
+            total=total or 0,
+            page=page,
+            page_size=page_size,
+        )
 
     async def claim(
         self, worker_id: str, now: datetime, lease_until: datetime
@@ -194,8 +225,12 @@ class SqlAlchemyTaskRepository:
             domain.next_check_at = next_check_at
             domain.updated_at = at
             domain.version += 1
-        task.status = "succeeded"
+        task.status = "success"
         task.domain_check_id = check.id
+        task.result_code = "refreshed"
+        task.result_message = None
+        task.source_check_id = None
+        task.fresh_until = None
         task.completed_at = at
         task.lease_token = None
         task.lease_owner = None
@@ -206,6 +241,48 @@ class SqlAlchemyTaskRepository:
             await self._queue_notifications(task, check, "status_change", at)
         await self._queue_expiration_notifications(task, check, at)
         return self._check_record(check)
+
+    async def complete_if_fresh(
+        self,
+        task_id: UUID,
+        lease_token: UUID | None,
+        at: datetime,
+        *,
+        fresh_after: datetime,
+        fresh_until: datetime,
+        result_message: str,
+    ) -> bool:
+        task = await self._locked_task(task_id, lease_token)
+        if task is None:
+            return False
+        latest = (
+            await self._session.execute(
+                select(DomainCheck.id, DomainCheck.checked_at)
+                .where(
+                    DomainCheck.managed_domain_id == task.managed_domain_id,
+                    DomainCheck.outcome == "success",
+                    DomainCheck.snapshot.is_not(None),
+                    DomainCheck.checked_at >= fresh_after,
+                )
+                .order_by(DomainCheck.checked_at.desc(), DomainCheck.id.desc())
+                .limit(1)
+            )
+        ).one_or_none()
+        if latest is None:
+            return False
+        task.status = "info"
+        task.domain_check_id = None
+        task.source_check_id = latest.id
+        task.result_code = "data_fresh"
+        task.result_message = result_message[:512]
+        task.fresh_until = fresh_until
+        task.completed_at = at
+        task.lease_token = None
+        task.lease_owner = None
+        task.lease_until = None
+        task.updated_at = at
+        await self._session.flush()
+        return True
 
     async def complete_failure(
         self,
@@ -244,6 +321,10 @@ class SqlAlchemyTaskRepository:
         task.domain_check_id = check.id
         task.error_code = error_code
         task.error_message = error_message[:512]
+        task.result_code = "failed" if retry_at is None else None
+        task.result_message = error_message[:512] if retry_at is None else None
+        task.source_check_id = None
+        task.fresh_until = None
         task.completed_at = at if retry_at is None else None
         task.available_at = retry_at or task.available_at
         task.lease_token = None
@@ -429,6 +510,10 @@ class SqlAlchemyTaskRepository:
             available_at=as_utc(task.available_at),
             max_attempts=task.max_attempts,
             lease_token=task.lease_token,
+            result_code=task.result_code,
+            result_message=task.result_message,
+            source_check_id=task.source_check_id,
+            fresh_until=as_utc(task.fresh_until),
         )
 
     @staticmethod

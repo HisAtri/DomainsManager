@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal, Protocol
 from uuid import UUID, uuid4
@@ -46,10 +46,10 @@ class ManagedDomainRecord:
     monitor_enabled: bool
     renewal_mode: str | None
     notes: str | None
-    registered_at: datetime | None
+    registered_at: datetime | None = field(default=None, kw_only=True)
     expires_at: datetime | None
-    registry_updated_at: datetime | None
-    dnssec_enabled: bool | None
+    registry_updated_at: datetime | None = field(default=None, kw_only=True)
+    dnssec_enabled: bool | None = field(default=None, kw_only=True)
     last_check_at: datetime | None
     last_outcome: str | None
     version: int

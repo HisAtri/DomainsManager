@@ -18,17 +18,33 @@ class TaskErrorResponse(StrictModel):
     message: str
 
 
+class TaskResultResponse(StrictModel):
+    code: Literal["refreshed", "data_fresh", "failed"]
+    message: str | None
+    source_check_id: UUID | None
+    fresh_until: datetime | None
+
+
 class RefreshTaskResponse(StrictModel):
     id: UUID
     kind: Literal["domain_refresh"] = "domain_refresh"
-    status: Literal["queued", "running", "succeeded", "failed", "cancelled"]
+    status: Literal["queued", "running", "success", "info", "warning", "failed"]
     domain_id: UUID
+    domain_name: str
     check_id: UUID | None
     error: TaskErrorResponse | None
+    result: TaskResultResponse | None
     created_at: datetime
     started_at: datetime | None
     completed_at: datetime | None
     updated_at: datetime
+
+
+class RefreshTaskPageResponse(StrictModel):
+    items: list[RefreshTaskResponse]
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+    total: int = Field(ge=0)
 
 
 class DomainCheckResponse(StrictModel):

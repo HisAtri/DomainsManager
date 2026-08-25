@@ -11,8 +11,10 @@ from domainsmanager_api.schemas.tasks import (
     DomainCheckPageResponse,
     DomainCheckResponse,
     RefreshDomainRequest,
+    RefreshTaskPageResponse,
     RefreshTaskResponse,
     TaskErrorResponse,
+    TaskResultResponse,
 )
 from domainsmanager_application.domains import DomainError
 from domainsmanager_application.tasks import (
@@ -33,12 +35,22 @@ def task_response(task: RefreshTaskRecord) -> RefreshTaskResponse:
             code=task.error_code,
             message=task.error_message or "task failed",
         )
+    result = None
+    if task.result_code is not None:
+        result = TaskResultResponse(
+            code=task.result_code,
+            message=task.result_message,
+            source_check_id=task.source_check_id,
+            fresh_until=task.fresh_until,
+        )
     return RefreshTaskResponse(
         id=task.id,
         status=task.status,
         domain_id=task.domain_id,
+        domain_name=task.domain_name,
         check_id=task.check_id,
         error=error,
+        result=result,
         created_at=task.created_at,
         started_at=task.started_at,
         completed_at=task.completed_at,
@@ -113,6 +125,29 @@ async def refresh_domain(
         raise_task_error(error)
     response.headers["Location"] = str(request.url_for("getTask", task_id=task.id))
     return task_response(task)
+
+
+@router.get(
+    "/tasks",
+    response_model=RefreshTaskPageResponse,
+    operation_id="listTasks",
+)
+async def list_tasks(
+    current: CurrentUserDependency,
+    tasks: TaskServiceDependency,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    status: str | None = None,
+) -> RefreshTaskPageResponse:
+    tasks_page = await tasks.list(
+        current.user.id, page=page, page_size=page_size, status=status
+    )
+    return RefreshTaskPageResponse(
+        items=[task_response(task) for task in tasks_page.items],
+        page=tasks_page.page,
+        page_size=tasks_page.page_size,
+        total=tasks_page.total,
+    )
 
 
 @router.get(
