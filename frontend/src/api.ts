@@ -1,4 +1,4 @@
-import type { AdminDomain, AdminUser, AuthResult, Check, Domain, NotificationDelivery, NotificationRule, NotificationRuleInput, NotificationRuleUpdate, Page, Settings, Task, Tokens, User } from "./types";
+import type { AdminCheckPage, AdminDomain, AdminSession, AdminUser, AuthResult, Check, Domain, GlobalSetting, NotificationDelivery, NotificationRule, NotificationRuleInput, NotificationRuleUpdate, Page, Settings, Task, Tokens, User } from "./types";
 
 type ApiErrorBody = { detail?: { code?: string; message?: string } | string; message?: string };
 export class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -57,6 +57,11 @@ class ApiClient {
   adminUsers(params: Record<string, string | number | undefined> = {}) { return this.request<Page<AdminUser>>(`/admin/users?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
   banUser(id: string, reason: string) { return this.request<AdminUser>(`/admin/users/${id}/ban`, { method: "POST", body: JSON.stringify({ reason }) }).then((r) => r.data); }
   unbanUser(id: string) { return this.request<AdminUser>(`/admin/users/${id}/unban`, { method: "POST" }).then((r) => r.data); }
+  adminSessions(id: string) { return this.request<Page<AdminSession>>(`/admin/users/${id}/sessions`).then((r) => r.data); }
+  revokeAdminSession(userId: string, sessionId: string) { return this.request<AdminSession>(`/admin/users/${userId}/sessions/${sessionId}/revoke`, { method: "POST" }).then((r) => r.data); }
   adminDomains(params: Record<string, string | number | undefined> = {}) { return this.request<Page<AdminDomain>>(`/admin/domains?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
+  adminChecks() { return this.request<AdminCheckPage>("/admin/domain-checks").then((r) => r.data); }
+  globalSettings() { return this.request<GlobalSetting[]>("/admin/settings").then((r) => r.data); }
+  updateGlobalSetting(key: string, value: number, version: number) { return this.request<GlobalSetting>(`/admin/settings/${key}`, { method: "PUT", headers: { "If-Match": String(version) }, body: JSON.stringify({ value }) }).then((r) => r.data); }
 }
 export const api = new ApiClient();
