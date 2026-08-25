@@ -132,7 +132,7 @@ class SqlAlchemyDomainRepository:
             raise DuplicateRecordError("domain already exists") from error
 
     async def restore(
-        self, domain_id: UUID, user_id: UUID, at: datetime
+        self, domain_id: UUID, user_id: UUID, at: datetime, *, monitor_enabled: bool
     ) -> ManagedDomainRecord | None:
         result = await self._session.execute(
             update(ManagedDomain)
@@ -144,6 +144,7 @@ class SqlAlchemyDomainRepository:
             .values(
                 deleted_at=None,
                 deleted_by_user_id=None,
+                monitor_enabled=monitor_enabled,
                 updated_at=at,
                 version=ManagedDomain.version + 1,
             )

@@ -101,7 +101,11 @@ def create_resources(settings: Settings) -> Resources:
         sessions=sessions,
         lookup=lookup,
         auth=auth,
-        domains=DomainService(unit_of_work=unit_of_work, lookup=lookup),
+        domains=DomainService(
+            unit_of_work=unit_of_work,
+            lookup=lookup,
+            initial_task_max_attempts=settings.task_max_attempts,
+        ),
         tasks=RefreshTaskService(
             unit_of_work=unit_of_work,
             lookup=lookup,

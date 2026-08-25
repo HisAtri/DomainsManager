@@ -136,6 +136,37 @@ async def test_domain_list_defaults_to_newest_first_with_twenty_items(
 
 @pytest.mark.asyncio
 @pytest.mark.api
+async def test_enabling_monitoring_enqueues_an_initial_refresh(tmp_path: Path) -> None:
+    client = await make_client(tmp_path)
+    with client:
+        headers = register(client, "monitor-user")
+        created = client.post(
+            "/api/v1/domains",
+            json={"name": "example.com", "monitor_enabled": True},
+            headers=headers,
+        )
+        assert created.status_code == 201
+        tasks = client.get("/api/v1/tasks", headers=headers).json()
+        assert tasks["total"] == 1
+        assert tasks["items"][0]["status"] == "queued"
+
+        domain = client.post(
+            "/api/v1/domains",
+            json={"name": "example.net", "monitor_enabled": False},
+            headers=headers,
+        ).json()["domain"]
+        enabled = client.patch(
+            f"/api/v1/domains/{domain['id']}",
+            json={"monitor_enabled": True},
+            headers={**headers, "If-Match": f'"{domain["version"]}"'},
+        )
+        assert enabled.status_code == 200
+        tasks = client.get("/api/v1/tasks", headers=headers).json()
+        assert tasks["total"] == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.api
 async def test_domain_owner_isolation_and_validation(tmp_path: Path) -> None:
     client = await make_client(tmp_path)
     with client:

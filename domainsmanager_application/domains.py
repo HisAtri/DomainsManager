@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from hashlib import sha256
 from typing import Literal, Protocol
 from uuid import UUID, uuid4
 
@@ -113,7 +114,7 @@ class ManagedDomainRepository(Protocol):
     async def add(self, record: ManagedDomainRecord) -> None: ...
 
     async def restore(
-        self, domain_id: UUID, user_id: UUID, at: datetime
+        self, domain_id: UUID, user_id: UUID, at: datetime, *, monitor_enabled: bool
     ) -> ManagedDomainRecord | None: ...
 
     async def update_local(
@@ -145,10 +146,12 @@ class DomainService:
         unit_of_work: UnitOfWorkFactory,
         lookup: DomainLookup,
         clock: Callable[[], datetime] | None = None,
+        initial_task_max_attempts: int = 5,
     ) -> None:
         self._unit_of_work = unit_of_work
         self._lookup = lookup
         self._clock = clock or (lambda: datetime.now(UTC))
+        self._initial_task_max_attempts = initial_task_max_attempts
 
     async def create(
         self, user_id: UUID, name: str, *, monitor_enabled: bool = True
@@ -189,15 +192,21 @@ class DomainService:
             if existing is not None:
                 if existing.deleted_at is None:
                     raise DomainAlreadyManagedError("domain is already managed")
-                restored = await uow.domains.restore(existing.id, user_id, now)
+                restored = await uow.domains.restore(
+                    existing.id, user_id, now, monitor_enabled=monitor_enabled
+                )
                 if restored is None:
                     raise DomainAlreadyManagedError("domain is already managed")
+                if restored.monitor_enabled:
+                    await self._enqueue_initial_refresh(uow, restored, now)
                 await uow.commit()
                 return restored, True
             try:
                 await uow.domains.add(record)
             except DuplicateRecordError as error:
                 raise DomainAlreadyManagedError("domain is already managed") from error
+            if record.monitor_enabled:
+                await self._enqueue_initial_refresh(uow, record, now)
             await uow.commit()
         return record, False
 
@@ -225,6 +234,9 @@ class DomainService:
     ) -> ManagedDomainRecord:
         now = self._clock()
         async with self._unit_of_work() as uow:
+            current = await uow.domains.get(user_id, domain_id)
+            if current is None:
+                raise DomainNotFoundError("domain was not found")
             record = await uow.domains.update_local(
                 domain_id,
                 user_id,
@@ -236,12 +248,45 @@ class DomainService:
                 updated_at=now,
             )
             if record is not None:
+                if (
+                    "monitor_enabled" in fields
+                    and monitor_enabled is True
+                    and not current.monitor_enabled
+                ):
+                    await self._enqueue_initial_refresh(uow, record, now)
                 await uow.commit()
                 return record
-            current = await uow.domains.get(user_id, domain_id)
-        if current is None:
-            raise DomainNotFoundError("domain was not found")
         raise DomainVersionConflictError("domain has changed")
+
+    async def _enqueue_initial_refresh(
+        self, uow: UnitOfWork, record: ManagedDomainRecord, now: datetime
+    ) -> None:
+        from domainsmanager_application.tasks import RefreshTaskRecord
+
+        key = f"monitor-enabled:{record.id}:{now.isoformat()}"
+        await uow.tasks.add(
+            RefreshTaskRecord(
+                id=uuid4(),
+                user_id=record.user_id,
+                domain_id=record.id,
+                domain_name=record.name_ascii,
+                status="queued",
+                force_refresh=False,
+                attempt_count=0,
+                created_at=now,
+                updated_at=now,
+                started_at=None,
+                completed_at=None,
+                check_id=None,
+                error_code=None,
+                error_message=None,
+                available_at=now,
+                max_attempts=self._initial_task_max_attempts,
+            ),
+            key,
+            sha256(b"monitor-enabled-initial-refresh").hexdigest(),
+            now + timedelta(days=1),
+        )
 
     async def delete(self, user_id: UUID, domain_id: UUID) -> None:
         now = self._clock()
