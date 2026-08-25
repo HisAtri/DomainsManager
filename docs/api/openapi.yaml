@@ -485,6 +485,45 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /admin/users/{user_id}/sessions:
+    get:
+      tags: [Admin users]
+      operationId: listUserSessionsAsAdmin
+      summary: 查询用户会话摘要
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 会话分页结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSessionPage' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /admin/users/{user_id}/sessions/{session_id}/revoke:
+    post:
+      tags: [Admin users]
+      operationId: revokeUserSessionAsAdmin
+      summary: 撤销用户会话
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - name: session_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: 已撤销的会话
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSession' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
   /admin/users/{user_id}/reset-password:
     post:
       tags: [Admin users]
@@ -1036,6 +1075,28 @@ components:
         request_id: { type: string }
     UserRole: { type: string, enum: [user, admin] }
     UserStatus: { type: string, enum: [active, banned] }
+    AdminSession:
+      type: object
+      additionalProperties: false
+      required: [id, created_at, last_seen_at, absolute_expires_at, revoked_at, revoke_reason]
+      properties:
+        id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        absolute_expires_at: { type: string, format: date-time }
+        revoked_at: { type: [string, 'null'], format: date-time }
+        revoke_reason: { type: [string, 'null'] }
+    AdminSessionPage:
+      type: object
+      additionalProperties: false
+      required: [items, page, page_size, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AdminSession' }
+        page: { type: integer, minimum: 1 }
+        page_size: { type: integer, minimum: 1, maximum: 100 }
+        total: { type: integer, minimum: 0 }
     User:
       type: object
       additionalProperties: false

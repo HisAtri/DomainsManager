@@ -15,6 +15,8 @@ from domainsmanager_api.dependencies import (
     get_session,
 )
 from domainsmanager_api.schemas.admin import (
+    AdminSessionPageResponse,
+    AdminSessionResponse,
     AdminUpdateUserRequest,
     AdminUserPageResponse,
     AdminUserResponse,
@@ -26,18 +28,22 @@ from domainsmanager_api.schemas.admin_domains import (
     AdminUpdateDomainRequest,
     UserReferenceResponse,
 )
+from domainsmanager_api.schemas.refresh_policy import (
+    RefreshPolicyPatch,
+    RefreshPolicyResponse,
+)
 from domainsmanager_api.schemas.tasks import (
     RefreshTaskResponse,
     TaskErrorResponse,
     TaskResultResponse,
 )
-from domainsmanager_api.schemas.refresh_policy import RefreshPolicyPatch, RefreshPolicyResponse
 from domainsmanager_application.domains import DomainError
 from domainsmanager_application.tasks import IdempotencyConflictError, TaskError
 from domainsmanager_persistence.models import (
     AppUser,
     AuthRefreshToken,
     AuthSession,
+    GlobalSetting,
     ManagedDomain,
     SecurityAuditEvent,
 )
@@ -45,15 +51,65 @@ from domainsmanager_persistence.models import (
 router = APIRouter(prefix="/admin", tags=["Admin users", "Admin domains"])
 
 
-@router.get("/settings/refresh-policy", response_model=RefreshPolicyResponse, operation_id="getRefreshPolicy")
-async def get_refresh_policy(_: AdminUserDependency, tasks: TaskServiceDependency) -> RefreshPolicyResponse:
-    return RefreshPolicyResponse(successful_refresh_ttl_seconds=await tasks.get_successful_refresh_ttl_seconds())
+@router.get(
+    "/settings/refresh-policy",
+    response_model=RefreshPolicyResponse,
+    operation_id="getRefreshPolicy",
+)
+async def get_refresh_policy(
+    _: AdminUserDependency, tasks: TaskServiceDependency
+) -> RefreshPolicyResponse:
+    return RefreshPolicyResponse(
+        successful_refresh_ttl_seconds=await tasks.get_successful_refresh_ttl_seconds()
+    )
 
 
-@router.patch("/settings/refresh-policy", response_model=RefreshPolicyResponse, operation_id="updateRefreshPolicy")
-async def update_refresh_policy(body: RefreshPolicyPatch, _: AdminUserDependency, tasks: TaskServiceDependency) -> RefreshPolicyResponse:
-    await tasks.set_successful_refresh_ttl_seconds(body.successful_refresh_ttl_seconds)
-    return RefreshPolicyResponse(successful_refresh_ttl_seconds=body.successful_refresh_ttl_seconds)
+@router.patch(
+    "/settings/refresh-policy",
+    response_model=RefreshPolicyResponse,
+    operation_id="updateRefreshPolicy",
+)
+async def update_refresh_policy(
+    body: RefreshPolicyPatch,
+    admin: AdminUserDependency,
+    context: AuthContextDependency,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> RefreshPolicyResponse:
+    key = "successful_refresh_ttl_seconds"
+    setting = await session.get(GlobalSetting, key)
+    old_value = int(setting.value) if setting is not None else 1800
+    now = datetime.now(UTC)
+    if setting is None:
+        session.add(
+            GlobalSetting(
+                key=key, value=str(body.successful_refresh_ttl_seconds), updated_at=now
+            )
+        )
+    else:
+        setting.value, setting.updated_at = (
+            str(body.successful_refresh_ttl_seconds),
+            now,
+        )
+    session.add(
+        SecurityAuditEvent(
+            id=uuid4(),
+            actor_user_id=admin.user.id,
+            event_type="admin.global_setting_updated",
+            target_type="global_setting",
+            target_id=None,
+            request_id=context.request_id,
+            event_metadata={
+                "key": key,
+                "old": old_value,
+                "new": body.successful_refresh_ttl_seconds,
+            },
+            occurred_at=now,
+        )
+    )
+    await session.commit()
+    return RefreshPolicyResponse(
+        successful_refresh_ttl_seconds=body.successful_refresh_ttl_seconds
+    )
 
 
 def not_found() -> None:
@@ -281,6 +337,108 @@ async def unban_user(
     )
 
 
+def session_response(auth_session: AuthSession) -> AdminSessionResponse:
+    return AdminSessionResponse(
+        id=auth_session.id,
+        created_at=auth_session.created_at,
+        last_seen_at=auth_session.last_seen_at,
+        absolute_expires_at=auth_session.absolute_expires_at,
+        revoked_at=auth_session.revoked_at,
+        revoke_reason=auth_session.revoke_reason,
+    )
+
+
+@router.get(
+    "/users/{user_id}/sessions",
+    response_model=AdminSessionPageResponse,
+    operation_id="listUserSessionsAsAdmin",
+)
+async def list_user_sessions(
+    user_id: UUID,
+    _: AdminUserDependency,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+) -> AdminSessionPageResponse:
+    if await session.get(AppUser, user_id) is None:
+        not_found()
+    total = await session.scalar(
+        select(func.count())
+        .select_from(AuthSession)
+        .where(AuthSession.user_id == user_id)
+    )
+    rows = (
+        (
+            await session.execute(
+                select(AuthSession)
+                .where(AuthSession.user_id == user_id)
+                .order_by(AuthSession.created_at.desc(), AuthSession.id)
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return AdminSessionPageResponse(
+        items=[session_response(row) for row in rows],
+        page=page,
+        page_size=page_size,
+        total=total or 0,
+    )
+
+
+@router.post(
+    "/users/{user_id}/sessions/{session_id}/revoke",
+    response_model=AdminSessionResponse,
+    operation_id="revokeUserSessionAsAdmin",
+)
+async def revoke_user_session(
+    user_id: UUID,
+    session_id: UUID,
+    admin: AdminUserDependency,
+    context: AuthContextDependency,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> AdminSessionResponse:
+    auth_session = await session.get(AuthSession, session_id)
+    if auth_session is None or auth_session.user_id != user_id:
+        not_found()
+    if session_id == admin.session.id:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "cannot_revoke_current_session",
+                "message": "administrators cannot revoke their current session",
+            },
+        )
+    if auth_session.revoked_at is not None:
+        return session_response(auth_session)
+    now = datetime.now(UTC)
+    auth_session.revoked_at, auth_session.revoke_reason = now, "admin_revoked"
+    await session.execute(
+        update(AuthRefreshToken)
+        .where(
+            AuthRefreshToken.session_id == session_id,
+            AuthRefreshToken.revoked_at.is_(None),
+        )
+        .values(revoked_at=now)
+    )
+    session.add(
+        SecurityAuditEvent(
+            id=uuid4(),
+            actor_user_id=admin.user.id,
+            event_type="admin.session_revoked",
+            target_type="session",
+            target_id=session_id,
+            request_id=context.request_id,
+            event_metadata={"user_id": str(user_id)},
+            occurred_at=now,
+        )
+    )
+    await session.commit()
+    return session_response(auth_session)
+
+
 def admin_domain_response(
     domain: ManagedDomain, owner: AppUser
 ) -> AdminManagedDomainResponse:
@@ -496,7 +654,12 @@ def task_response(task) -> RefreshTaskResponse:
     )
     result = None
     if task.result_code is not None:
-        result = TaskResultResponse(code=task.result_code, message=task.result_message, source_check_id=task.source_check_id, fresh_until=task.fresh_until)
+        result = TaskResultResponse(
+            code=task.result_code,
+            message=task.result_message,
+            source_check_id=task.source_check_id,
+            fresh_until=task.fresh_until,
+        )
     return RefreshTaskResponse(
         id=task.id,
         status=task.status,

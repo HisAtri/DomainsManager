@@ -90,7 +90,6 @@ def test_implemented_health_operations_match_contract() -> None:
 
 @pytest.mark.contract
 def test_implemented_domain_operations_match_contract() -> None:
-    document = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
     expected = {
         ("/api/v1/domains", "get", "listDomains"),
         ("/api/v1/domains", "post", "createDomain"),
@@ -115,8 +114,7 @@ def test_implemented_domain_operations_match_contract() -> None:
     actual = {
         (path, method, operation["operationId"])
         for path, path_item in runtime_document["paths"].items()
-        if path.startswith("/api/v1/domains")
-        or path.startswith("/api/v1/tasks")
+        if path.startswith(("/api/v1/domains", "/api/v1/tasks"))
         for method, operation in path_item.items()
         if method in {"get", "post", "patch", "delete"}
     }
@@ -134,6 +132,8 @@ def test_implemented_admin_operations_match_contract() -> None:
         ("/api/v1/admin/users/{user_id}", "patch", "updateUserAsAdmin"),
         ("/api/v1/admin/users/{user_id}/ban", "post", "banUser"),
         ("/api/v1/admin/users/{user_id}/unban", "post", "unbanUser"),
+        ("/api/v1/admin/users/{user_id}/sessions", "get", "listUserSessionsAsAdmin"),
+        ("/api/v1/admin/users/{user_id}/sessions/{session_id}/revoke", "post", "revokeUserSessionAsAdmin"),
         ("/api/v1/admin/domains", "get", "listDomainsAsAdmin"),
         ("/api/v1/admin/domains/{domain_id}", "get", "getDomainAsAdmin"),
         ("/api/v1/admin/domains/{domain_id}", "patch", "updateDomainAsAdmin"),
