@@ -46,7 +46,10 @@ class ManagedDomainRecord:
     monitor_enabled: bool
     renewal_mode: str | None
     notes: str | None
+    registered_at: datetime | None
     expires_at: datetime | None
+    registry_updated_at: datetime | None
+    dnssec_enabled: bool | None
     last_check_at: datetime | None
     last_outcome: str | None
     version: int
@@ -168,7 +171,10 @@ class DomainService:
             monitor_enabled=monitor_enabled,
             renewal_mode=None,
             notes=None,
+            registered_at=None,
             expires_at=None,
+            registry_updated_at=None,
+            dnssec_enabled=None,
             last_check_at=None,
             last_outcome=None,
             version=1,

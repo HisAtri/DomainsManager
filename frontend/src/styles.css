@@ -76,6 +76,24 @@ button, input { font: inherit; } button { border: 0; cursor: pointer; } button:d
 .toolbar .search { flex: 0 1 380px; width: min(380px, 48%); }
 .domain-name + small { display: none; }
 
+/* Domain list: retain critical lifecycle data in the first viewport, while status is compactly attached to the name. */
+.domain-table { min-width: 840px; table-layout: fixed; }
+.domain-table th:nth-child(1), .domain-table td:nth-child(1) { width: 32%; }
+.domain-table th:nth-child(2), .domain-table td:nth-child(2), .domain-table th:nth-child(3), .domain-table td:nth-child(3) { width: 18%; }
+.domain-table th:nth-child(4), .domain-table td:nth-child(4) { width: 14%; }
+.domain-table th:nth-child(5), .domain-table td:nth-child(5) { width: 18%; }
+.domain-cell { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.domain-cell .domain-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.domain-states { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 5px; }
+.domain-state-tag { position: relative; display: inline-grid; width: 25px; height: 25px; place-items: center; border: 1px solid currentColor; border-radius: 6px; cursor: help; outline: none; }
+.domain-state-tag.enabled { color: #16a34a; background: #f0fdf4; }
+.domain-state-tag.disabled { color: #98a2b3; background: #f8fafc; }
+.domain-state-tag.unknown { color: #d97706; background: #fffbeb; }
+.domain-state-tag::after { position: absolute; z-index: 4; bottom: calc(100% + 8px); left: 50%; width: max-content; max-width: 180px; padding: 6px 8px; border-radius: 6px; color: #fff; background: #1d2939; box-shadow: 0 4px 12px #10182826; content: attr(data-tooltip); font-size: 11px; font-weight: 500; line-height: 1.35; opacity: 0; pointer-events: none; transform: translate(-50%, 3px); transition: opacity .15s ease, transform .15s ease; }
+.domain-state-tag::before { position: absolute; z-index: 4; bottom: calc(100% + 4px); left: 50%; width: 7px; height: 7px; background: #1d2939; content: ""; opacity: 0; pointer-events: none; transform: translate(-50%, 3px) rotate(45deg); transition: opacity .15s ease, transform .15s ease; }
+.domain-state-tag:hover::after, .domain-state-tag:hover::before, .domain-state-tag:focus-visible::after, .domain-state-tag:focus-visible::before { opacity: 1; transform: translate(-50%, 0); }
+.expiry-expired { color: #b42318; font-weight: 600; }
+
 /* Domain details */
 .domain-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 18px 0 0; padding: 14px; border: 1px solid #eaecf0; border-radius: 8px; background: #fcfcfd; }
 .domain-meta div { min-width: 0; }

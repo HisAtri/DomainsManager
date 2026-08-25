@@ -25,6 +25,10 @@ class ManagedDomainResponse(StrictModel):
     monitor_enabled: bool
     renewal_mode: Literal["automatic", "manual", "unknown"] | None
     notes: str | None
+    registered_at: datetime | None
+    expires_at: datetime | None
+    registry_updated_at: datetime | None
+    dnssec_enabled: bool | None
     version: int = Field(ge=1)
     created_at: datetime
     updated_at: datetime
