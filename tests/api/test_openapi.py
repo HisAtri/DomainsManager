@@ -127,6 +127,7 @@ def test_implemented_admin_operations_match_contract() -> None:
     expected = {
         ("/api/v1/admin/settings/refresh-policy", "get", "getRefreshPolicy"),
         ("/api/v1/admin/settings/refresh-policy", "patch", "updateRefreshPolicy"),
+        ("/api/v1/admin/settings", "get", "listGlobalSettings"),
         ("/api/v1/admin/users", "get", "listUsers"),
         ("/api/v1/admin/users/{user_id}", "get", "getUserAsAdmin"),
         ("/api/v1/admin/users/{user_id}", "patch", "updateUserAsAdmin"),

@@ -30,6 +30,10 @@ from domainsmanager_api.schemas.admin_domains import (
     CheckStatisticsResponse,
     UserReferenceResponse,
 )
+from domainsmanager_api.schemas.global_settings import (
+    GlobalSettingPatch,
+    GlobalSettingResponse,
+)
 from domainsmanager_api.schemas.refresh_policy import (
     RefreshPolicyPatch,
     RefreshPolicyResponse,
@@ -53,6 +57,7 @@ from domainsmanager_persistence.models import (
 )
 
 router = APIRouter(prefix="/admin", tags=["Admin users", "Admin domains"])
+GLOBAL_SETTING_KEY = "successful_refresh_ttl_seconds"
 
 
 @router.get(
@@ -79,19 +84,30 @@ async def update_refresh_policy(
     context: AuthContextDependency,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> RefreshPolicyResponse:
-    key = "successful_refresh_ttl_seconds"
+    key = GLOBAL_SETTING_KEY
     setting = await session.get(GlobalSetting, key)
     old_value = int(setting.value) if setting is not None else 1800
     now = datetime.now(UTC)
     if setting is None:
         session.add(
             GlobalSetting(
-                key=key, value=str(body.successful_refresh_ttl_seconds), updated_at=now
+                key=key,
+                value=str(body.successful_refresh_ttl_seconds),
+                version=1,
+                updated_by_user_id=admin.user.id,
+                updated_at=now,
             )
         )
     else:
-        setting.value, setting.updated_at = (
+        (
+            setting.value,
+            setting.version,
+            setting.updated_by_user_id,
+            setting.updated_at,
+        ) = (
             str(body.successful_refresh_ttl_seconds),
+            setting.version + 1,
+            admin.user.id,
             now,
         )
     session.add(
@@ -113,6 +129,102 @@ async def update_refresh_policy(
     await session.commit()
     return RefreshPolicyResponse(
         successful_refresh_ttl_seconds=body.successful_refresh_ttl_seconds
+    )
+
+
+@router.get(
+    "/settings",
+    response_model=list[GlobalSettingResponse],
+    operation_id="listGlobalSettings",
+)
+async def list_global_settings(
+    _: AdminUserDependency,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    tasks: TaskServiceDependency,
+) -> list[GlobalSettingResponse]:
+    setting = await session.get(GlobalSetting, GLOBAL_SETTING_KEY)
+    return [
+        GlobalSettingResponse(
+            key=GLOBAL_SETTING_KEY,
+            value=int(setting.value)
+            if setting
+            else await tasks.get_successful_refresh_ttl_seconds(),
+            version=setting.version if setting else 0,
+            source="database" if setting else "environment_default",
+            updated_at=setting.updated_at if setting else None,
+        )
+    ]
+
+
+@router.put(
+    "/settings/{key}",
+    response_model=GlobalSettingResponse,
+    operation_id="updateGlobalSetting",
+)
+async def update_global_setting(
+    key: str,
+    body: GlobalSettingPatch,
+    admin: AdminUserDependency,
+    context: AuthContextDependency,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    if_match: Annotated[str | None, Header(alias="If-Match")] = None,
+) -> GlobalSettingResponse:
+    if key != GLOBAL_SETTING_KEY:
+        not_found()
+    if if_match is None or not if_match.isdigit():
+        raise HTTPException(
+            status_code=428,
+            detail={
+                "code": "precondition_required",
+                "message": "If-Match version is required",
+            },
+        )
+    setting = await session.get(GlobalSetting, key)
+    version = setting.version if setting else 0
+    if version != int(if_match):
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "version_conflict", "message": "setting has changed"},
+        )
+    now = datetime.now(UTC)
+    if setting is None:
+        setting = GlobalSetting(
+            key=key,
+            value=str(body.value),
+            version=1,
+            updated_by_user_id=admin.user.id,
+            updated_at=now,
+        )
+        session.add(setting)
+    else:
+        (
+            setting.value,
+            setting.version,
+            setting.updated_by_user_id,
+            setting.updated_at,
+        ) = str(body.value), version + 1, admin.user.id, now
+    session.add(
+        SecurityAuditEvent(
+            id=uuid4(),
+            actor_user_id=admin.user.id,
+            event_type="admin.global_setting_updated",
+            target_type="global_setting",
+            request_id=context.request_id,
+            event_metadata={
+                "key": key,
+                "old_version": version,
+                "new_version": setting.version,
+            },
+            occurred_at=now,
+        )
+    )
+    await session.commit()
+    return GlobalSettingResponse(
+        key=key,
+        value=body.value,
+        version=setting.version,
+        source="database",
+        updated_at=setting.updated_at,
     )
 
 

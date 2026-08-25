@@ -90,7 +90,9 @@ async def test_refresh_task_is_idempotent_and_owner_scoped(tmp_path: Path) -> No
         task_list = client.get("/api/v1/tasks?page=1&page_size=10", headers=first)
         assert task_list.status_code == 200
         assert task_list.json()["total"] == 2
-        assert {item["domain_name"] for item in task_list.json()["items"]} == {"example.com"}
+        assert {item["domain_name"] for item in task_list.json()["items"]} == {
+            "example.com"
+        }
         assert {item["status"] for item in task_list.json()["items"]} == {"queued"}
         assert all(item["result"] is None for item in task_list.json()["items"])
 
@@ -106,7 +108,12 @@ async def test_admin_can_override_successful_refresh_ttl(tmp_path: Path) -> None
         )
         assert login.status_code == 200
         headers = {"Authorization": f"Bearer {login.json()['tokens']['access_token']}"}
-        assert client.get("/api/v1/admin/settings/refresh-policy", headers=headers).json()["successful_refresh_ttl_seconds"] == 1800
+        assert (
+            client.get("/api/v1/admin/settings/refresh-policy", headers=headers).json()[
+                "successful_refresh_ttl_seconds"
+            ]
+            == 1800
+        )
         updated = client.patch(
             "/api/v1/admin/settings/refresh-policy",
             json={"successful_refresh_ttl_seconds": 3600},
@@ -114,3 +121,19 @@ async def test_admin_can_override_successful_refresh_ttl(tmp_path: Path) -> None
         )
         assert updated.status_code == 200
         assert updated.json()["successful_refresh_ttl_seconds"] == 3600
+        settings = client.get("/api/v1/admin/settings", headers=headers)
+        assert settings.status_code == 200
+        assert settings.json()[0]["version"] == 1
+        conflict = client.put(
+            "/api/v1/admin/settings/successful_refresh_ttl_seconds",
+            json={"value": 7200},
+            headers={**headers, "If-Match": "0"},
+        )
+        assert conflict.status_code == 409
+        updated_setting = client.put(
+            "/api/v1/admin/settings/successful_refresh_ttl_seconds",
+            json={"value": 7200},
+            headers={**headers, "If-Match": "1"},
+        )
+        assert updated_setting.status_code == 200
+        assert updated_setting.json()["version"] == 2

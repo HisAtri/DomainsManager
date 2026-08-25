@@ -32,15 +32,21 @@ class Base(DeclarativeBase):
 
 
 class TimestampMixin:
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class SystemState(Base):
     __tablename__ = "system_state"
 
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class AppUser(TimestampMixin, Base):
@@ -67,7 +73,9 @@ class AppUser(TimestampMixin, Base):
     role: Mapped[str] = mapped_column(String(16), default="user", nullable=False)
     totp_secret_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
     totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    preferences: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, nullable=False)
+    preferences: Mapped[dict[str, Any]] = mapped_column(
+        JSON_TYPE, default=dict, nullable=False
+    )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     banned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ban_reason: Mapped[str | None] = mapped_column(String(512))
@@ -91,8 +99,12 @@ class AuthSession(Base):
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("app_user.id", ondelete="CASCADE"), nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     absolute_expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
@@ -119,9 +131,13 @@ class AuthRefreshToken(Base):
     replaced_by_token_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("auth_refresh_token.id", ondelete="SET NULL")
     )
-    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), unique=True, nullable=False)
+    token_hash: Mapped[bytes] = mapped_column(
+        LargeBinary(32), unique=True, nullable=False
+    )
     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -155,11 +171,17 @@ class ManagedDomain(TimestampMixin, Base):
     statuses: Mapped[list[str]] = mapped_column(JSON_TYPE, default=list, nullable=False)
     registered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    registry_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    nameservers: Mapped[list[str]] = mapped_column(JSON_TYPE, default=list, nullable=False)
+    registry_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    nameservers: Mapped[list[str]] = mapped_column(
+        JSON_TYPE, default=list, nullable=False
+    )
     dnssec_enabled: Mapped[bool | None] = mapped_column(Boolean)
     latest_source: Mapped[str | None] = mapped_column(String(16))
-    last_successful_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_successful_check_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     last_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     next_check_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_outcome: Mapped[str | None] = mapped_column(String(32))
@@ -186,7 +208,9 @@ class DomainRefreshTask(TimestampMixin, Base):
             "available_at",
             "lease_until",
         ),
-        Index("ix_domain_refresh_task_domain_created", "managed_domain_id", "created_at"),
+        Index(
+            "ix_domain_refresh_task_domain_created", "managed_domain_id", "created_at"
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
@@ -200,7 +224,9 @@ class DomainRefreshTask(TimestampMixin, Base):
     force_refresh: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
-    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    available_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     lease_token: Mapped[UUID | None] = mapped_column(Uuid)
     lease_owner: Mapped[str | None] = mapped_column(String(128))
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -237,8 +263,12 @@ class IdempotencyRecord(Base):
     task_id: Mapped[UUID] = mapped_column(
         ForeignKey("domain_refresh_task.id", ondelete="CASCADE"), nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class GlobalSetting(Base):
@@ -246,7 +276,13 @@ class GlobalSetting(Base):
 
     key: Mapped[str] = mapped_column(String(64), primary_key=True)
     value: Mapped[str] = mapped_column(String(256), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    updated_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("app_user.id", ondelete="SET NULL")
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class LookupRecord(Base):
@@ -274,8 +310,12 @@ class LookupRecord(Base):
     payload_codec: Mapped[str] = mapped_column(String(32), nullable=False)
     plaintext_size: Mapped[int] = mapped_column(Integer, nullable=False)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    fresh_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    fresh_until: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     stale_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     retry_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     is_usable: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -283,7 +323,9 @@ class LookupRecord(Base):
     encryption_scheme: Mapped[str | None] = mapped_column(String(32))
     encryption_key_id: Mapped[str | None] = mapped_column(String(128))
     encryption_nonce: Mapped[bytes | None] = mapped_column(LargeBinary)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class LookupCacheHead(Base):
@@ -294,8 +336,12 @@ class LookupCacheHead(Base):
     record_id: Mapped[UUID] = mapped_column(
         ForeignKey("lookup_record.id", ondelete="RESTRICT"), nullable=False
     )
-    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class LookupRefreshLease(Base):
@@ -306,8 +352,12 @@ class LookupRefreshLease(Base):
     cache_key: Mapped[str] = mapped_column(String(512), primary_key=True)
     lease_token: Mapped[UUID] = mapped_column(Uuid, nullable=False)
     lease_owner: Mapped[str] = mapped_column(String(128), nullable=False)
-    lease_until: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    lease_until: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class ParsedSnapshot(Base):
@@ -344,7 +394,9 @@ class DomainCheck(Base):
     lookup_record_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("lookup_record.id", ondelete="SET NULL")
     )
-    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    checked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     duration_ms: Mapped[int | None] = mapped_column(Integer)
     outcome: Mapped[str] = mapped_column(String(32), nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(64))
@@ -353,18 +405,27 @@ class DomainCheck(Base):
     source: Mapped[str | None] = mapped_column(String(2048))
     snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON_TYPE)
     snapshot_hash: Mapped[str | None] = mapped_column(String(64))
-    changed_fields: Mapped[list[str]] = mapped_column(JSON_TYPE, default=list, nullable=False)
+    changed_fields: Mapped[list[str]] = mapped_column(
+        JSON_TYPE, default=list, nullable=False
+    )
     parser_key: Mapped[str | None] = mapped_column(String(128))
     parser_version: Mapped[str | None] = mapped_column(String(64))
     is_stale: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class NotificationRule(TimestampMixin, Base):
     __tablename__ = "notification_rule"
     __table_args__ = (
-        CheckConstraint("event_type IN ('expiration', 'status_change', 'query_failure')", name="notification_rule_valid_event_type"),
-        CheckConstraint("channel IN ('email', 'webhook')", name="notification_rule_valid_channel"),
+        CheckConstraint(
+            "event_type IN ('expiration', 'status_change', 'query_failure')",
+            name="notification_rule_valid_event_type",
+        ),
+        CheckConstraint(
+            "channel IN ('email', 'webhook')", name="notification_rule_valid_channel"
+        ),
         Index("ix_notification_rule_user_domain", "user_id", "managed_domain_id"),
     )
 
@@ -376,7 +437,9 @@ class NotificationRule(TimestampMixin, Base):
     event_type: Mapped[str] = mapped_column(String(32), nullable=False)
     days_before: Mapped[int | None] = mapped_column(Integer)
     channel: Mapped[str] = mapped_column(String(32), nullable=False)
-    channel_config: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, default=dict, nullable=False)
+    channel_config: Mapped[dict[str, Any]] = mapped_column(
+        JSON_TYPE, default=dict, nullable=False
+    )
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -404,7 +467,9 @@ class NotificationOutbox(TimestampMixin, Base):
     domain_check_id: Mapped[UUID] = mapped_column(
         ForeignKey("domain_check.id", ondelete="CASCADE"), nullable=False
     )
-    deduplication_key: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)
+    deduplication_key: Mapped[str] = mapped_column(
+        String(256), unique=True, nullable=False
+    )
     event_type: Mapped[str] = mapped_column(String(32), nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
     status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)
@@ -440,8 +505,12 @@ class SecurityAuditEvent(Base):
     target_id: Mapped[UUID | None] = mapped_column(Uuid)
     request_id: Mapped[str | None] = mapped_column(String(128))
     ip_hash: Mapped[str | None] = mapped_column(String(64))
-    event_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", JSON_TYPE, default=dict, nullable=False)
-    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    event_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON_TYPE, default=dict, nullable=False
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class PublicSuffixRule(TimestampMixin, Base):
