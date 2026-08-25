@@ -21,6 +21,8 @@ async def make_client(tmp_path: Path) -> TestClient:
                 jwt_secret_key="x",
                 refresh_token_pepper="y",
                 registration_enabled=True,
+                bootstrap_admin_username="task-admin",
+                bootstrap_admin_password="123456",
             )
         )
     )
@@ -91,3 +93,24 @@ async def test_refresh_task_is_idempotent_and_owner_scoped(tmp_path: Path) -> No
         assert {item["domain_name"] for item in task_list.json()["items"]} == {"example.com"}
         assert {item["status"] for item in task_list.json()["items"]} == {"queued"}
         assert all(item["result"] is None for item in task_list.json()["items"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.api
+async def test_admin_can_override_successful_refresh_ttl(tmp_path: Path) -> None:
+    client = await make_client(tmp_path)
+    with client:
+        login = client.post(
+            "/api/v1/auth/login",
+            data={"username": "task-admin", "password": "123456"},
+        )
+        assert login.status_code == 200
+        headers = {"Authorization": f"Bearer {login.json()['tokens']['access_token']}"}
+        assert client.get("/api/v1/admin/settings/refresh-policy", headers=headers).json()["successful_refresh_ttl_seconds"] == 1800
+        updated = client.patch(
+            "/api/v1/admin/settings/refresh-policy",
+            json={"successful_refresh_ttl_seconds": 3600},
+            headers=headers,
+        )
+        assert updated.status_code == 200
+        assert updated.json()["successful_refresh_ttl_seconds"] == 3600

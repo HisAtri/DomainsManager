@@ -713,6 +713,36 @@ paths:
               schema: { $ref: '#/components/schemas/RefreshTask' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+  /admin/settings/refresh-policy:
+    get:
+      tags: [Admin domains]
+      operationId: getRefreshPolicy
+      summary: 查询全局刷新策略
+      responses:
+        '200':
+          description: 当前刷新策略
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RefreshPolicy' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    patch:
+      tags: [Admin domains]
+      operationId: updateRefreshPolicy
+      summary: 更新全局刷新策略
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RefreshPolicy' }
+      responses:
+        '200':
+          description: 已更新的刷新策略
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RefreshPolicy' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /admin/domains:
     get:
       tags: [Admin domains]
@@ -1316,6 +1346,12 @@ components:
         message: { type: [string, 'null'] }
         source_check_id: { type: [string, 'null'], format: uuid }
         fresh_until: { type: [string, 'null'], format: date-time }
+    RefreshPolicy:
+      type: object
+      additionalProperties: false
+      required: [successful_refresh_ttl_seconds]
+      properties:
+        successful_refresh_ttl_seconds: { type: integer, minimum: 60, maximum: 2592000 }
     TaskError:
       type: object
       additionalProperties: false

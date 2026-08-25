@@ -241,6 +241,14 @@ class IdempotencyRecord(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class GlobalSetting(Base):
+    __tablename__ = "global_setting"
+
+    key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    value: Mapped[str] = mapped_column(String(256), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class LookupRecord(Base):
     __tablename__ = "lookup_record"
     __table_args__ = (

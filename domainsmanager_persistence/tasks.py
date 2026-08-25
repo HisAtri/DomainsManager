@@ -19,6 +19,7 @@ from domainsmanager_persistence.models import (
     DomainCheck,
     DomainRefreshTask,
     IdempotencyRecord,
+    GlobalSetting,
     ManagedDomain,
     NotificationOutbox,
     NotificationRule,
@@ -126,6 +127,19 @@ class SqlAlchemyTaskRepository:
             page=page,
             page_size=page_size,
         )
+
+    async def get_global_setting(self, key: str) -> str | None:
+        row = await self._session.get(GlobalSetting, key)
+        return row.value if row is not None else None
+
+    async def set_global_setting(self, key: str, value: str, at: datetime) -> None:
+        row = await self._session.get(GlobalSetting, key)
+        if row is None:
+            self._session.add(GlobalSetting(key=key, value=value, updated_at=at))
+        else:
+            row.value = value
+            row.updated_at = at
+        await self._session.flush()
 
     async def claim(
         self, worker_id: str, now: datetime, lease_until: datetime

@@ -182,6 +182,23 @@ class RefreshTaskService:
         async with self._unit_of_work() as uow:
             return await uow.tasks.list(user_id, page, page_size, status)
 
+    async def get_successful_refresh_ttl_seconds(self) -> int:
+        async with self._unit_of_work() as uow:
+            configured = await uow.tasks.get_global_setting(
+                "successful_refresh_ttl_seconds"
+            )
+        return int(configured) if configured is not None else int(
+            self._policy.successful_refresh_ttl.total_seconds()
+        )
+
+    async def set_successful_refresh_ttl_seconds(self, seconds: int) -> None:
+        now = self._clock()
+        async with self._unit_of_work() as uow:
+            await uow.tasks.set_global_setting(
+                "successful_refresh_ttl_seconds", str(seconds), now
+            )
+            await uow.commit()
+
     async def enqueue_as_admin(
         self,
         domain_id: UUID,
@@ -240,14 +257,16 @@ class RefreshTaskService:
         if task is None:
             return False
         completed = self._clock()
+        ttl_seconds = await self.get_successful_refresh_ttl_seconds()
+        ttl = timedelta(seconds=ttl_seconds)
         async with self._unit_of_work() as uow:
             if await uow.tasks.complete_if_fresh(
                 task.id,
                 task.lease_token,
                 completed,
-                fresh_after=completed - self._policy.successful_refresh_ttl,
-                fresh_until=completed + self._policy.successful_refresh_ttl,
-                result_message=self._fresh_message(self._policy.successful_refresh_ttl),
+                fresh_after=completed - ttl,
+                fresh_until=completed + ttl,
+                result_message=self._fresh_message(ttl),
             ):
                 await uow.commit()
                 return True

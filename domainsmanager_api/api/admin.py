@@ -31,6 +31,7 @@ from domainsmanager_api.schemas.tasks import (
     TaskErrorResponse,
     TaskResultResponse,
 )
+from domainsmanager_api.schemas.refresh_policy import RefreshPolicyPatch, RefreshPolicyResponse
 from domainsmanager_application.domains import DomainError
 from domainsmanager_application.tasks import IdempotencyConflictError, TaskError
 from domainsmanager_persistence.models import (
@@ -42,6 +43,17 @@ from domainsmanager_persistence.models import (
 )
 
 router = APIRouter(prefix="/admin", tags=["Admin users", "Admin domains"])
+
+
+@router.get("/settings/refresh-policy", response_model=RefreshPolicyResponse, operation_id="getRefreshPolicy")
+async def get_refresh_policy(_: AdminUserDependency, tasks: TaskServiceDependency) -> RefreshPolicyResponse:
+    return RefreshPolicyResponse(successful_refresh_ttl_seconds=await tasks.get_successful_refresh_ttl_seconds())
+
+
+@router.patch("/settings/refresh-policy", response_model=RefreshPolicyResponse, operation_id="updateRefreshPolicy")
+async def update_refresh_policy(body: RefreshPolicyPatch, _: AdminUserDependency, tasks: TaskServiceDependency) -> RefreshPolicyResponse:
+    await tasks.set_successful_refresh_ttl_seconds(body.successful_refresh_ttl_seconds)
+    return RefreshPolicyResponse(successful_refresh_ttl_seconds=body.successful_refresh_ttl_seconds)
 
 
 def not_found() -> None:
