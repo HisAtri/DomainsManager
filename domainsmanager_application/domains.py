@@ -76,7 +76,7 @@ class DomainListQuery:
     expires_from: datetime | None = None
     expires_to: datetime | None = None
     last_outcome: str | None = None
-    sort: DomainSort = "name"
+    sort: DomainSort = "-created_at"
 
 
 @dataclass(frozen=True, slots=True)

@@ -108,6 +108,34 @@ async def test_domain_crud_soft_delete_restore_and_etag(tmp_path: Path) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.api
+async def test_domain_list_defaults_to_newest_first_with_twenty_items(
+    tmp_path: Path,
+) -> None:
+    client = await make_client(tmp_path)
+    with client:
+        headers = register(client, "domain-list-user")
+        first = client.post(
+            "/api/v1/domains", json={"name": "alpha.com"}, headers=headers
+        )
+        second = client.post(
+            "/api/v1/domains", json={"name": "zeta.com"}, headers=headers
+        )
+        assert first.status_code == 201
+        assert second.status_code == 201
+
+        listed = client.get("/api/v1/domains", headers=headers)
+
+        assert listed.status_code == 200
+        body = listed.json()
+        assert body["page_size"] == 20
+        assert [item["identity"]["ascii_name"] for item in body["items"]] == [
+            "zeta.com",
+            "alpha.com",
+        ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.api
 async def test_domain_owner_isolation_and_validation(tmp_path: Path) -> None:
     client = await make_client(tmp_path)
     with client:

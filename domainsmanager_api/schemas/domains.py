@@ -69,7 +69,7 @@ class DomainListParameters(StrictModel):
         "-expires_at",
         "last_check_at",
         "-last_check_at",
-    ] = "name"
+    ] = "-created_at"
 
     @model_validator(mode="after")
     def validate_expiry_range(self) -> DomainListParameters:
