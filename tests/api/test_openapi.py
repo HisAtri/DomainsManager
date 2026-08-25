@@ -133,12 +133,17 @@ def test_implemented_admin_operations_match_contract() -> None:
         ("/api/v1/admin/users/{user_id}/ban", "post", "banUser"),
         ("/api/v1/admin/users/{user_id}/unban", "post", "unbanUser"),
         ("/api/v1/admin/users/{user_id}/sessions", "get", "listUserSessionsAsAdmin"),
-        ("/api/v1/admin/users/{user_id}/sessions/{session_id}/revoke", "post", "revokeUserSessionAsAdmin"),
+        (
+            "/api/v1/admin/users/{user_id}/sessions/{session_id}/revoke",
+            "post",
+            "revokeUserSessionAsAdmin",
+        ),
         ("/api/v1/admin/domains", "get", "listDomainsAsAdmin"),
         ("/api/v1/admin/domains/{domain_id}", "get", "getDomainAsAdmin"),
         ("/api/v1/admin/domains/{domain_id}", "patch", "updateDomainAsAdmin"),
         ("/api/v1/admin/domains/{domain_id}", "delete", "deleteDomainAsAdmin"),
         ("/api/v1/admin/domains/{domain_id}/refresh", "post", "refreshDomainAsAdmin"),
+        ("/api/v1/admin/domain-checks", "get", "listDomainChecksAsAdmin"),
     }
     app = create_app(
         Settings(

@@ -10,6 +10,7 @@ from domainsmanager_api.schemas.domains import (
     DomainIdentityResponse,
     StrictModel,
 )
+from domainsmanager_api.schemas.tasks import DomainCheckResponse
 
 
 class UserReferenceResponse(StrictModel):
@@ -46,3 +47,15 @@ class AdminUpdateDomainRequest(StrictModel):
 
 class AdminRefreshDomainRequest(StrictModel):
     force_refresh: bool = True
+
+
+class CheckStatisticsResponse(StrictModel):
+    count_by_outcome: dict[str, int]
+
+
+class AdminDomainCheckPageResponse(StrictModel):
+    items: list[DomainCheckResponse]
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+    total: int = Field(ge=0)
+    statistics: CheckStatisticsResponse

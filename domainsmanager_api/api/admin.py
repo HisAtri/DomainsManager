@@ -23,9 +23,11 @@ from domainsmanager_api.schemas.admin import (
     BanUserRequest,
 )
 from domainsmanager_api.schemas.admin_domains import (
+    AdminDomainCheckPageResponse,
     AdminDomainPageResponse,
     AdminManagedDomainResponse,
     AdminUpdateDomainRequest,
+    CheckStatisticsResponse,
     UserReferenceResponse,
 )
 from domainsmanager_api.schemas.refresh_policy import (
@@ -33,6 +35,7 @@ from domainsmanager_api.schemas.refresh_policy import (
     RefreshPolicyResponse,
 )
 from domainsmanager_api.schemas.tasks import (
+    DomainCheckResponse,
     RefreshTaskResponse,
     TaskErrorResponse,
     TaskResultResponse,
@@ -43,6 +46,7 @@ from domainsmanager_persistence.models import (
     AppUser,
     AuthRefreshToken,
     AuthSession,
+    DomainCheck,
     GlobalSetting,
     ManagedDomain,
     SecurityAuditEvent,
@@ -460,6 +464,84 @@ def admin_domain_response(
         owner=UserReferenceResponse(id=owner.id, username=owner.username),
         deleted_at=domain.deleted_at,
         deleted_by_user_id=domain.deleted_by_user_id,
+    )
+
+
+def admin_check_response(check: DomainCheck) -> DomainCheckResponse:
+    return DomainCheckResponse(
+        id=check.id,
+        domain_id=check.managed_domain_id,
+        checked_at=check.checked_at,
+        duration_ms=check.duration_ms,
+        outcome=check.outcome,
+        error_code=check.error_code,
+        error_message=check.error_message,
+        protocol=check.protocol if check.protocol in {"rdap", "whois"} else None,
+        source=check.source,
+        snapshot=check.snapshot,
+        changed_fields=check.changed_fields,
+        is_stale=check.is_stale,
+        created_at=check.created_at,
+    )
+
+
+@router.get(
+    "/domain-checks",
+    response_model=AdminDomainCheckPageResponse,
+    operation_id="listDomainChecksAsAdmin",
+)
+async def list_domain_checks_as_admin(
+    _: AdminUserDependency,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    domain_id: UUID | None = None,
+    user_id: UUID | None = None,
+    outcome: str | None = None,
+    protocol: Literal["rdap", "whois"] | None = None,
+) -> AdminDomainCheckPageResponse:
+    filters = []
+    if domain_id is not None:
+        filters.append(DomainCheck.managed_domain_id == domain_id)
+    if user_id is not None:
+        filters.append(ManagedDomain.user_id == user_id)
+    if outcome is not None:
+        filters.append(DomainCheck.outcome == outcome)
+    if protocol is not None:
+        filters.append(DomainCheck.protocol == protocol)
+    base = (
+        select(DomainCheck)
+        .join(ManagedDomain, ManagedDomain.id == DomainCheck.managed_domain_id)
+        .where(*filters)
+    )
+    total = await session.scalar(select(func.count()).select_from(base.subquery()))
+    rows = (
+        (
+            await session.execute(
+                base.order_by(DomainCheck.checked_at.desc(), DomainCheck.id)
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    grouped = (
+        await session.execute(
+            select(DomainCheck.outcome, func.count())
+            .join(ManagedDomain, ManagedDomain.id == DomainCheck.managed_domain_id)
+            .where(*filters)
+            .group_by(DomainCheck.outcome)
+        )
+    ).all()
+    return AdminDomainCheckPageResponse(
+        items=[admin_check_response(row) for row in rows],
+        page=page,
+        page_size=page_size,
+        total=total or 0,
+        statistics=CheckStatisticsResponse(
+            count_by_outcome={outcome: count for outcome, count in grouped}
+        ),
     )
 
 

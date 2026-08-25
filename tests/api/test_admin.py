@@ -68,6 +68,17 @@ async def test_admin_user_and_domain_access(tmp_path: Path) -> None:
         )
         assert queued.status_code == 202
         assert queued.json()["domain_id"] == domain["id"]
+        checks = client.get(
+            f"/api/v1/admin/domain-checks?domain_id={domain['id']}", headers=admin
+        )
+        assert checks.status_code == 200
+        assert checks.json() == {
+            "items": [],
+            "page": 1,
+            "page_size": 20,
+            "total": 0,
+            "statistics": {"count_by_outcome": {}},
+        }
 
         banned = client.post(
             f"/api/v1/admin/users/{member_id}/ban",
@@ -82,7 +93,9 @@ async def test_admin_user_and_domain_access(tmp_path: Path) -> None:
         assert unbanned.status_code == 200
         assert unbanned.json()["status"] == "active"
         member = login(client, "member")
-        sessions = client.get(f"/api/v1/admin/users/{member_id}/sessions", headers=admin)
+        sessions = client.get(
+            f"/api/v1/admin/users/{member_id}/sessions", headers=admin
+        )
         assert sessions.status_code == 200
         assert sessions.json()["total"] == 2
         session_id = next(
