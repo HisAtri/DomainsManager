@@ -17,6 +17,23 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
+    with op.batch_alter_table("domain_refresh_task") as batch:
+        batch.drop_constraint(
+            op.f("ck_domain_refresh_task_domain_refresh_task_valid_status"),
+            type_="check",
+        )
+        batch.create_check_constraint(
+            op.f("ck_domain_refresh_task_domain_refresh_task_valid_status"),
+            "status IN ('queued', 'running', 'succeeded', 'success', 'info', 'warning', 'failed', 'cancelled')",
+        )
+        batch.add_column(sa.Column("source_check_id", sa.Uuid(), nullable=True))
+        batch.add_column(sa.Column("result_code", sa.String(length=64), nullable=True))
+        batch.add_column(sa.Column("result_message", sa.String(length=512), nullable=True))
+        batch.add_column(sa.Column("fresh_until", sa.DateTime(timezone=True), nullable=True))
+        batch.create_foreign_key(
+            "fk_domain_refresh_task_source_check_id_domain_check",
+            "domain_check", ["source_check_id"], ["id"], ondelete="SET NULL"
+        )
     op.execute("UPDATE domain_refresh_task SET status = 'success' WHERE status = 'succeeded'")
     with op.batch_alter_table("domain_refresh_task") as batch:
         batch.drop_constraint(
@@ -26,14 +43,6 @@ def upgrade() -> None:
         batch.create_check_constraint(
             op.f("ck_domain_refresh_task_domain_refresh_task_valid_status"),
             "status IN ('queued', 'running', 'success', 'info', 'warning', 'failed')",
-        )
-        batch.add_column(sa.Column("source_check_id", sa.Uuid(), nullable=True))
-        batch.add_column(sa.Column("result_code", sa.String(length=64), nullable=True))
-        batch.add_column(sa.Column("result_message", sa.String(length=512), nullable=True))
-        batch.add_column(sa.Column("fresh_until", sa.DateTime(timezone=True), nullable=True))
-        batch.create_foreign_key(
-            "fk_domain_refresh_task_source_check_id_domain_check",
-            "domain_check", ["source_check_id"], ["id"], ondelete="SET NULL"
         )
     op.create_index(
         "ix_domain_refresh_task_user_created", "domain_refresh_task", ["user_id", "created_at", "id"]
