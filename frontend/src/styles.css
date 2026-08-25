@@ -62,6 +62,7 @@ button, input { font: inherit; } button { border: 0; cursor: pointer; } button:d
 .notification-tabs button.active { color: #4f46e5; }
 .notification-tabs button.active::after { position: absolute; right: 0; bottom: -1px; left: 0; height: 2px; border-radius: 2px; background: #5b5ce2; content: ""; }
 .notification-panel { min-height: 260px; }
+.notification-actions { display: inline-flex; justify-content: flex-end; gap: 8px; white-space: nowrap; }
 .notification-dialog { width: min(470px, calc(100vw - 32px)); }
 .notification-dialog .field-label { margin-top: 15px; }
 .notification-dialog .field-label select { height: 40px; }

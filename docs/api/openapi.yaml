@@ -62,6 +62,44 @@ paths:
               schema: { $ref: '#/components/schemas/NotificationRule' }
         '404': { $ref: '#/components/responses/NotFound' }
         '422': { $ref: '#/components/responses/ValidationError' }
+  /notification-rules/{rule_id}:
+    parameters:
+      - name: rule_id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Notifications]
+      operationId: getNotificationRule
+      responses:
+        '200':
+          description: Notification rule
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationRule' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Notifications]
+      operationId: updateNotificationRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateNotificationRuleRequest' }
+      responses:
+        '200':
+          description: Notification rule updated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NotificationRule' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Notifications]
+      operationId: deleteNotificationRule
+      responses:
+        '204': { description: Notification rule deleted }
+        '404': { $ref: '#/components/responses/NotFound' }
   /health/live:
     get:
       tags: [Health]
@@ -886,6 +924,16 @@ components:
         days_before: { type: [integer, 'null'], minimum: 0, maximum: 365 }
         channel: { type: string, enum: [email, webhook] }
         webhook_url: { type: [string, 'null'], format: uri }
+    UpdateNotificationRuleRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        domain_id: { type: [string, 'null'], format: uuid }
+        event_type: { type: string, enum: [expiration, status_change, query_failure] }
+        days_before: { type: [integer, 'null'], minimum: 0, maximum: 365 }
+        channel: { type: string, enum: [email, webhook] }
+        webhook_url: { type: [string, 'null'], format: uri }
+        enabled: { type: boolean }
     NotificationRule:
       type: object
       additionalProperties: false

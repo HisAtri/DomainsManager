@@ -1,4 +1,4 @@
-import type { AdminDomain, AdminUser, AuthResult, Check, Domain, NotificationDelivery, NotificationRule, Page, Settings, Task, Tokens, User } from "./types";
+import type { AdminDomain, AdminUser, AuthResult, Check, Domain, NotificationDelivery, NotificationRule, NotificationRuleInput, NotificationRuleUpdate, Page, Settings, Task, Tokens, User } from "./types";
 
 type ApiErrorBody = { detail?: { code?: string; message?: string } | string; message?: string };
 export class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
@@ -48,7 +48,10 @@ class ApiClient {
   checks(id: string, params: Record<string, string | number | undefined> = {}) { return this.request<Page<Check>>(`/domains/${id}/checks?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
   task(id: string) { return this.request<Task>(`/tasks/${id}`).then((r) => r.data); }
   notificationRules() { return this.request<NotificationRule[]>("/notification-rules").then((r) => r.data); }
-  createNotificationRule(values: Omit<NotificationRule, "id" | "enabled" | "created_at" | "updated_at" | "webhook_url"> & { webhook_url?: string }) { return this.request<NotificationRule>("/notification-rules", { method: "POST", body: JSON.stringify(values) }).then((r) => r.data); }
+  notificationRule(id: string) { return this.request<NotificationRule>(`/notification-rules/${id}`).then((r) => r.data); }
+  createNotificationRule(values: NotificationRuleInput) { return this.request<NotificationRule>("/notification-rules", { method: "POST", body: JSON.stringify(values) }).then((r) => r.data); }
+  updateNotificationRule(id: string, values: NotificationRuleUpdate) { return this.request<NotificationRule>(`/notification-rules/${id}`, { method: "PATCH", body: JSON.stringify(values) }).then((r) => r.data); }
+  deleteNotificationRule(id: string) { return this.request<void>(`/notification-rules/${id}`, { method: "DELETE" }); }
   notificationDeliveries(limit = 50) { return this.request<NotificationDelivery[]>(`/notification-rules/deliveries?limit=${limit}`).then((r) => r.data); }
   adminUsers(params: Record<string, string | number | undefined> = {}) { return this.request<Page<AdminUser>>(`/admin/users?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
   banUser(id: string, reason: string) { return this.request<AdminUser>(`/admin/users/${id}/ban`, { method: "POST", body: JSON.stringify({ reason }) }).then((r) => r.data); }
