@@ -91,6 +91,16 @@ button, input { font: inherit; } button { border: 0; cursor: pointer; } button:d
 
 @media (max-width: 1280px) { .admin-settings-shell { grid-template-columns: 190px minmax(0, 1fr); }.admin-setting-row { grid-template-columns: minmax(0, 1fr) 250px; } }
 
+/* Final settings composition: tabs above a single, dense working panel. */
+.settings-status-strip { display: none; }
+.admin-settings-shell { display: block; width: min(100%, 1060px); margin-bottom: 36px; }
+.admin-settings-aside { position: static; display: flex; align-items: center; gap: 2px; width: 100%; margin: 0 0 16px; padding: 0; overflow-x: auto; border: 0; border-bottom: 1px solid #eaecf0; border-radius: 0; background: transparent; }
+.settings-nav-title { display: none; }
+.admin-settings-aside > button { flex: 0 0 auto; width: auto; padding: 10px 13px 11px; border-radius: 0; border-bottom: 2px solid transparent; color: #667085; font-size: 13px; }.admin-settings-aside > button:hover { color: #344054; background: transparent; }.admin-settings-aside > button small { display: none; }.admin-settings-aside > button.settings-nav-active { color: #4f46e5; border-bottom-color: #5b5ce2; background: transparent; font-weight: 600; }
+.settings-aside-note { display: none; }
+.admin-settings-content { width: 100%; border-radius: 9px; }.settings-section-head { padding: 20px 24px 16px; }.settings-section-head p { max-width: 720px; line-height: 1.5; }
+.admin-setting-row { grid-template-columns: minmax(0, 1fr) 300px; min-height: 88px; padding: 16px 24px; }.admin-setting-copy p { margin: 4px 0; }.setting-row-title { gap: 7px; }.setting-badge { padding: 2px 6px; }.admin-setting-control { align-items: center; }.setting-input-wrap small { margin-top: 4px; }
+
 /* Notifications */
 .notification-tabs { display: flex; gap: 24px; margin-bottom: 18px; border-bottom: 1px solid #eaecf0; }
 .notification-tabs button { position: relative; padding: 0 1px 12px; color: #667085; background: transparent; font-size: 13px; font-weight: 600; }
