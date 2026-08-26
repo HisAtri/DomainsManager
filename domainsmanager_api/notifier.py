@@ -19,6 +19,7 @@ NOTIFICATION_CONFIGURATION_KEYS = frozenset(
     key for key, definition in GLOBAL_SETTING_BY_KEY.items()
     if definition.group in {"通知", "邮件投递"}
 )
+LEGACY_SMTP_KEYS = frozenset({"smtp_starttls"})
 
 
 async def delivery_settings(
@@ -29,13 +30,17 @@ async def delivery_settings(
             row.key: row.value
             for row in (
                 await session.execute(
-                    select(GlobalSetting).where(GlobalSetting.key.in_(NOTIFICATION_CONFIGURATION_KEYS))
+                    select(GlobalSetting).where(GlobalSetting.key.in_(NOTIFICATION_CONFIGURATION_KEYS | LEGACY_SMTP_KEYS))
                 )
             ).scalars()
         }
     values: dict[str, object] = {}
     for key, raw in rows.items():
-        definition = GLOBAL_SETTING_BY_KEY[key]
+        definition = GLOBAL_SETTING_BY_KEY.get(key)
+        if definition is None:
+            if key == "smtp_starttls":
+                values["smtp_encryption"] = "starttls" if raw == "true" else "none"
+            continue
         if definition.secret:
             values[key] = SecretStr(decrypt_secret(raw, defaults.configuration_encryption_key))
         elif definition.kind == "boolean":
