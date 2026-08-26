@@ -1,7 +1,7 @@
 import type { AdminCheckPage, AdminDomain, AdminSession, AdminUser, AuthResult, Check, Domain, GlobalSetting, NotificationDelivery, NotificationRule, NotificationRuleInput, NotificationRuleUpdate, Page, Settings, Task, Tokens, User } from "./types";
 
 type ApiErrorBody = { detail?: { code?: string; message?: string } | string; message?: string };
-export class ApiError extends Error { constructor(public status: number, message: string) { super(message); } }
+export class ApiError extends Error { constructor(public status: number, message: string, public code?: string) { super(message); } }
 
 class ApiClient {
   private tokens: Tokens | null = null;
@@ -16,7 +16,7 @@ class ApiClient {
     if (response.status === 401 && retry && path !== "/auth/token/refresh") {
       try { const refreshed = await this.refresh(); this.setTokens(refreshed); return this.request(path, init, false); } catch { this.setTokens(null); }
     }
-    if (!response.ok) { const body = await response.json().catch(() => ({})) as ApiErrorBody; const detail = typeof body.detail === "object" ? body.detail.message : body.detail; throw new ApiError(response.status, detail || body.message || `请求失败 (${response.status})`); }
+    if (!response.ok) { const body = await response.json().catch(() => ({})) as ApiErrorBody; const detail = typeof body.detail === "object" ? body.detail : undefined; throw new ApiError(response.status, detail?.code === "configuration_encryption_unavailable" ? "服务器尚未配置设置加密密钥，暂时无法保存密码设置。" : detail?.code === "version_conflict" ? "设置已被其他管理员修改，请刷新后重试。" : "操作未完成，请检查输入后重试。", detail?.code); }
     return { data: response.status === 204 ? undefined as T : await response.json() as T, etag: response.headers.get("ETag") };
   }
   private async refresh() {
