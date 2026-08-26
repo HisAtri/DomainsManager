@@ -20,6 +20,8 @@ class GlobalSettingResponse(StrictModel):
     updated_at: datetime | None
     minimum: float | None
     maximum: float | None
+    unit: str | None
+    choices: tuple[str, ...] | None = None
     live: bool
 
 

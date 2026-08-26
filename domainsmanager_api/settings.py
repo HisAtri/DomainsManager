@@ -73,6 +73,7 @@ class Settings(BaseSettings):
     smtp_from: str | None = None
     smtp_username: str | None = None
     smtp_password: SecretStr | None = None
+    smtp_encryption: Literal["none", "starttls", "ssl_tls"] = "starttls"
     smtp_starttls: bool = True
     configuration_encryption_key: SecretStr | None = None
     bootstrap_admin_username: str | None = None
@@ -108,6 +109,9 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_settings(self) -> "Settings":
+        if "smtp_encryption" not in self.model_fields_set and "smtp_starttls" in self.model_fields_set:
+            self.smtp_encryption = "starttls" if self.smtp_starttls else "none"
+        self.smtp_starttls = self.smtp_encryption == "starttls"
         username_set = self.bootstrap_admin_username is not None
         password_set = self.bootstrap_admin_password is not None
         if username_set != password_set:

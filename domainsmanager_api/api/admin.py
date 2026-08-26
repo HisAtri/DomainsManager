@@ -75,6 +75,8 @@ def setting_value(definition, value: str) -> int | float | bool | str:
         return int(value)
     if definition.kind == "number":
         return float(value)
+    if definition.kind == "choice":
+        return value
     return value
 
 
@@ -97,6 +99,8 @@ def setting_response(definition, setting: GlobalSetting | None, default: float |
         updated_at=setting.updated_at if setting else None,
         minimum=definition.minimum,
         maximum=definition.maximum,
+        unit=definition.unit,
+        choices=definition.choices,
         live=definition.live,
     )
 
@@ -110,6 +114,8 @@ def valid_setting_value(definition, value: object) -> bool:
         return isinstance(value, int) and not isinstance(value, bool) and (definition.minimum is None or definition.minimum <= value) and (definition.maximum is None or value <= definition.maximum)
     if definition.kind == "number":
         return isinstance(value, (int, float)) and not isinstance(value, bool) and (definition.minimum is None or definition.minimum <= value) and (definition.maximum is None or value <= definition.maximum)
+    if definition.kind == "choice":
+        return isinstance(value, str) and value in (definition.choices or ())
     return isinstance(value, str) and len(value) <= 512
 
 
