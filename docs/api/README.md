@@ -7,7 +7,7 @@ Worker 在外部查询期间以任务租约三分之一的间隔续约。成功�
 刷新任务默认最多尝试 5 次。`rate_limited` 与 `temporary_failure` 使用指数退避重新排队；其他错误或达到重试上限后进入 `failed`。可通过 `DOMAINSMANAGER_TASK_MAX_ATTEMPTS`、`DOMAINSMANAGER_TASK_RETRY_BASE_SECONDS`、`DOMAINSMANAGER_TASK_RETRY_MAX_SECONDS` 和 `DOMAINSMANAGER_TASK_LEASE_SECONDS` 调整策略。Worker 租约保持由后续 Worker 心跳实现。
 
 [openapi.yaml](openapi.yaml) 是 FastAPI 后端契约，采用 OpenAPI 3.1，统一前缀为
-`/api/v1`。当前已实现应用骨架、根级健康检查、本地认证、当前用户、用户域名 CRUD、刷新任务、检查历史、Scheduler、通知规则/投递历史，以及基础管理员接口。OAuth2 仅提供 Provider 空配置状态。契约中的管理员密码重置、全局检查历史与失败统计仍属后续 M4/M5 交付，不能仅因已写入 OpenAPI 就视为可用。
+`/api/v1`。当前已实现应用骨架、根级健康检查、本地认证、当前用户、用户域名 CRUD、刷新任务、检查历史、Scheduler、通知规则/投递历史，以及管理员用户、会话撤销、全局域名、全局检查/统计和全局运行配置接口。OAuth2 仅提供 Provider 空配置状态。契约中的管理员密码重置仍属 M5 预留，不能仅因已写入 OpenAPI 就视为可用。
 
 ## 1. 资源和权限边界
 
@@ -160,5 +160,5 @@ WHOIS/RDAP 请求延迟和上游限流不适合占用普通 HTTP 请求，所以
 FastAPI 应用工厂、配置、资源生命周期、请求 ID、统一错误边界、健康检查，本地注册、登录、退出、
 Token 轮换、当前用户资料、改密和设置、用户域名 CRUD、刷新 Worker、Scheduler、Notifier、通知规则与
 投递历史，以及管理员用户和基础全局域名管理均已实现。管理员全局检查/统计、显式会话撤销、完整管理员
-前端和全局运行配置中心仍在 M4；OAuth Provider 集成、密码重置和 TOTP 在 M5。后续实现应以
+后台设置页面和全局运行配置中心已完成；管理员用户详情/会话操作及全局域名详情操作仍待补齐。OAuth Provider 集成、密码重置和 TOTP 在 M5。后续实现应以
 [openapi.yaml](openapi.yaml) 为行为基线，并在修改 HTTP 行为时同步更新规范和契约测试。
