@@ -35,7 +35,7 @@ const timezones = [
 ];
 
 function useRoute() { const [route, setRoute] = useState<Route>(routeFromHash); useEffect(() => { const update = () => setRoute(routeFromHash()); addEventListener("hashchange", update); return () => removeEventListener("hashchange", update); }, []); return [route, (value: Route) => { location.hash = value; }] as const; }
-function Flash({ message }: { message: string | null }) { return message ? <div className="flash"><AlertCircle size={17} />{message}</div> : null; }
+function Flash({ message }: { message: string | null }) { if (!message) return null; const success = /已保存|已更新|已创建|已删除|已启用|已停用|已退出|已添加/.test(message); return <div className={`flash ${success ? "flash-success" : "flash-error"}`}>{success ? <CheckCircle2 size={17} /> : <AlertCircle size={17} />}{message}</div>; }
 function Status({ status }: { status: Task["status"] | Check["outcome"] }) { const failed = status === "failed"; const pending = status === "queued" || status === "running"; const warning = status === "warning"; const label: Record<string, string> = { queued: "排队中", running: "执行中", success: "已完成", info: "提示", warning: "警告", failed: "失败", succeeded: "已完成" }; return <span className={`status ${failed ? "status-failed" : pending ? "status-pending" : warning ? "status-attention" : "status-healthy"}`}><i />{label[status] || status}</span>; }
 function Brand() { return <div className="brand"><span className="brand-mark"><Globe2 size={18} /></span><span className="brand-name">DomainsManager</span></div>; }
 
