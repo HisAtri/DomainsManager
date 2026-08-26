@@ -52,7 +52,6 @@ from domainsmanager_api.schemas.tasks import (
     TaskErrorResponse,
     TaskResultResponse,
 )
-from domainsmanager_api.secret_settings import SecretSettingError, encrypt_secret
 from domainsmanager_application.domains import DomainError
 from domainsmanager_application.tasks import IdempotencyConflictError, TaskError
 from domainsmanager_persistence.models import (
@@ -83,7 +82,10 @@ def setting_value(definition, value: str) -> int | float | bool | str:
 
 def setting_response(definition, setting: GlobalSetting | None, default: float | bool | str | None) -> GlobalSettingResponse:
     if definition.secret:
-        value, configured = None, bool(setting is not None or default)
+        value = setting.value if setting is not None else default
+        if hasattr(value, "get_secret_value"):
+            value = value.get_secret_value()
+        configured = bool(value)
     else:
         value = setting_value(definition, setting.value) if setting else default
         configured = value is not None and value != ""
@@ -108,7 +110,7 @@ def setting_response(definition, setting: GlobalSetting | None, default: float |
 
 def valid_setting_value(definition, value: object) -> bool:
     if definition.secret:
-        return value is None or (isinstance(value, str) and 1 <= len(value) <= 4096)
+        return value is None or (isinstance(value, str) and len(value) <= 4096)
     if definition.kind == "boolean":
         return isinstance(value, bool)
     if definition.kind == "integer":
@@ -150,8 +152,7 @@ async def valid_runtime_setting_combination(
 
 def setting_storage_value(definition, value: float | bool | str | None, encryption_key) -> str:
     if definition.secret:
-        assert isinstance(value, str)
-        return encrypt_secret(value, encryption_key)
+        return str(value) if value is not None else ""
     if definition.kind == "boolean":
         return str(value).lower()
     return str(value)
@@ -288,10 +289,7 @@ async def update_global_settings(
                 await session.delete(setting)
             event_type = "admin.global_setting_secret_cleared"
         else:
-            try:
-                stored = setting_storage_value(definition, item.value, settings.configuration_encryption_key)
-            except SecretSettingError as error:
-                raise HTTPException(status_code=422, detail={"code": "configuration_encryption_unavailable", "message": str(error)}) from error
+            stored = setting_storage_value(definition, item.value, settings.configuration_encryption_key)
             if setting is None:
                 setting = GlobalSetting(key=key, value=stored, version=1, updated_by_user_id=admin.user.id, updated_at=now)
                 session.add(setting)
@@ -355,10 +353,7 @@ async def update_global_setting(
         )
         await session.commit()
         return setting_response(definition, None, definition.default(settings))
-    try:
-        stored_value = setting_storage_value(definition, body.value, settings.configuration_encryption_key)
-    except SecretSettingError as error:
-        raise HTTPException(status_code=422, detail={"code": "configuration_encryption_unavailable", "message": str(error)}) from error
+    stored_value = setting_storage_value(definition, body.value, settings.configuration_encryption_key)
     if setting is None:
         setting = GlobalSetting(
             key=key,

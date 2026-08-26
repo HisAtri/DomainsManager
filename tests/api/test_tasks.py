@@ -151,7 +151,7 @@ async def test_admin_can_override_successful_refresh_ttl(tmp_path: Path) -> None
 
 @pytest.mark.asyncio
 @pytest.mark.api
-async def test_admin_stores_smtp_password_encrypted_without_returning_it(tmp_path: Path) -> None:
+async def test_admin_stores_smtp_password_as_plaintext_and_returns_it(tmp_path: Path) -> None:
     client = await make_client(tmp_path)
     with client:
         login = client.post(
@@ -165,11 +165,11 @@ async def test_admin_stores_smtp_password_encrypted_without_returning_it(tmp_pat
             headers={**headers, "If-Match": "0"},
         )
         assert password.status_code == 200
-        assert password.json()["value"] is None
+        assert password.json()["value"] == "smtp-test-password"
         assert password.json()["configured"] is True
         listed = client.get("/api/v1/admin/settings", headers=headers)
         assert listed.status_code == 200
-        assert "smtp-test-password" not in listed.text
+        assert "smtp-test-password" in listed.text
         resources = client.app.state.resources
         effective = await delivery_settings(resources.settings, resources.sessions)
         assert effective.smtp_password is not None

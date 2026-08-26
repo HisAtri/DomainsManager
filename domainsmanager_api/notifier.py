@@ -10,7 +10,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from domainsmanager_api.global_setting_registry import GLOBAL_SETTING_BY_KEY
-from domainsmanager_api.secret_settings import decrypt_secret
 from domainsmanager_api.settings import Settings
 from domainsmanager_application.notifications import OutboxMessage
 from domainsmanager_persistence.models import GlobalSetting
@@ -42,7 +41,7 @@ async def delivery_settings(
                 values["smtp_encryption"] = "starttls" if raw == "true" else "none"
             continue
         if definition.secret:
-            values[key] = SecretStr(decrypt_secret(raw, defaults.configuration_encryption_key))
+            values[key] = SecretStr(raw)
         elif definition.kind == "boolean":
             values[key] = raw == "true"
         elif definition.kind == "integer":

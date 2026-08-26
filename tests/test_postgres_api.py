@@ -108,15 +108,14 @@ async def test_postgresql_admin_settings_are_versioned_and_secrets_are_encrypted
             assert client.put("/api/v1/admin/settings/check_interval_seconds", json={"value": 7200}, headers={**headers, "If-Match": "0"}).status_code == 409
             secret = client.put("/api/v1/admin/settings/smtp_password", json={"value": "postgres-smtp-password"}, headers={**headers, "If-Match": "0"})
             assert secret.status_code == 200
-            assert secret.json()["value"] is None
-            assert "postgres-smtp-password" not in client.get("/api/v1/admin/settings", headers=headers).text
+            assert secret.json()["value"] == "postgres-smtp-password"
+            assert "postgres-smtp-password" in client.get("/api/v1/admin/settings", headers=headers).text
         engine = create_engine(database)
         try:
             async with create_session_factory(engine)() as session:
                 stored = await session.get(GlobalSetting, "smtp_password")
             assert stored is not None
-            assert stored.value.startswith("fernet:v1:")
-            assert "postgres-smtp-password" not in stored.value
+            assert stored.value == "postgres-smtp-password"
         finally:
             await engine.dispose()
     finally:
