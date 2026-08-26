@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from pydantic import ValidationError
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -106,10 +107,38 @@ def valid_setting_value(definition, value: object) -> bool:
     if definition.kind == "boolean":
         return isinstance(value, bool)
     if definition.kind == "integer":
-        return isinstance(value, int) and not isinstance(value, bool) and definition.minimum <= value <= definition.maximum
+        return isinstance(value, int) and not isinstance(value, bool) and (definition.minimum is None or definition.minimum <= value) and (definition.maximum is None or value <= definition.maximum)
     if definition.kind == "number":
-        return isinstance(value, (int, float)) and not isinstance(value, bool) and definition.minimum <= value <= definition.maximum
+        return isinstance(value, (int, float)) and not isinstance(value, bool) and (definition.minimum is None or definition.minimum <= value) and (definition.maximum is None or value <= definition.maximum)
     return isinstance(value, str) and len(value) <= 512
+
+
+async def valid_runtime_setting_combination(
+    session: AsyncSession,
+    settings,
+    key: str,
+    value: object,
+) -> bool:
+    """Keep per-setting writes from creating an invalid policy combination."""
+    rows = {
+        row.key: row.value
+        for row in (
+            await session.execute(
+                select(GlobalSetting).where(GlobalSetting.key.in_(GLOBAL_SETTING_BY_KEY))
+            )
+        ).scalars()
+    }
+    overrides = {
+        setting_key: setting_value(GLOBAL_SETTING_BY_KEY[setting_key], raw)
+        for setting_key, raw in rows.items()
+        if not GLOBAL_SETTING_BY_KEY[setting_key].secret
+    }
+    overrides[key] = value
+    try:
+        settings.__class__.model_validate({**settings.model_dump(), **overrides})
+    except ValidationError:
+        return False
+    return True
 
 
 def setting_storage_value(definition, value: float | bool | str | None, encryption_key) -> str:
@@ -227,6 +256,8 @@ async def update_global_setting(
         not_found()
     if not valid_setting_value(definition, body.value):
         raise HTTPException(status_code=422, detail={"code": "validation_error", "message": "setting value is invalid"})
+    if not definition.secret and not await valid_runtime_setting_combination(session, settings, key, body.value):
+        raise HTTPException(status_code=422, detail={"code": "validation_error", "message": "setting value conflicts with the active runtime policy"})
     if if_match is None or not if_match.isdigit():
         raise HTTPException(
             status_code=428,

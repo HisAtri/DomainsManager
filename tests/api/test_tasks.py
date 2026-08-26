@@ -174,3 +174,34 @@ async def test_admin_stores_smtp_password_encrypted_without_returning_it(tmp_pat
         effective = await delivery_settings(resources.settings, resources.sessions)
         assert effective.smtp_password is not None
         assert effective.smtp_password.get_secret_value() == "smtp-test-password"
+
+
+@pytest.mark.asyncio
+@pytest.mark.api
+async def test_admin_settings_allow_business_values_but_reject_invalid_combinations(tmp_path: Path) -> None:
+    client = await make_client(tmp_path)
+    with client:
+        login = client.post(
+            "/api/v1/auth/login",
+            data={"username": "task-admin", "password": "123456"},
+        )
+        headers = {"Authorization": f"Bearer {login.json()['tokens']['access_token']}"}
+        wide_interval = client.put(
+            "/api/v1/admin/settings/check_interval_seconds",
+            json={"value": 3_000_000},
+            headers={**headers, "If-Match": "0"},
+        )
+        assert wide_interval.status_code == 200
+        assert wide_interval.json()["maximum"] is None
+        base_delay = client.put(
+            "/api/v1/admin/settings/task_retry_base_seconds",
+            json={"value": 100},
+            headers={**headers, "If-Match": "0"},
+        )
+        assert base_delay.status_code == 200
+        invalid_cap = client.put(
+            "/api/v1/admin/settings/task_retry_max_seconds",
+            json={"value": 99},
+            headers={**headers, "If-Match": "0"},
+        )
+        assert invalid_cap.status_code == 422

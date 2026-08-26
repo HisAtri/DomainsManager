@@ -29,11 +29,13 @@ class GlobalSettingDefinition:
 
 
 def integer(key: str, group: str, label: str, description: str, minimum: int, maximum: int, live: bool = True) -> GlobalSettingDefinition:
-    return GlobalSettingDefinition(key, group, label, description, "integer", minimum, maximum, live)
+    hard_minimum = 0 if key in {"successful_refresh_ttl_seconds", "task_retry_base_seconds", "task_retry_max_seconds", "notification_retry_base_seconds", "notification_retry_max_seconds"} else 1
+    hard_maximum = 65535 if key == "smtp_port" else None
+    return GlobalSettingDefinition(key, group, label, description, "integer", hard_minimum, hard_maximum, live)
 
 
 def number(key: str, group: str, label: str, description: str, minimum: float, maximum: float, live: bool = True) -> GlobalSettingDefinition:
-    return GlobalSettingDefinition(key, group, label, description, "number", minimum, maximum, live)
+    return GlobalSettingDefinition(key, group, label, description, "number", 0.001, None, live)
 
 
 def boolean(key: str, group: str, label: str, description: str, live: bool = True) -> GlobalSettingDefinition:
