@@ -87,5 +87,5 @@ def _send_email(message: OutboxMessage, settings: Settings) -> None:
         if settings.smtp_encryption == "starttls":
             client.starttls()
         if username and settings.smtp_password:
-            client.login(username, settings.smtp_password.get_secret_value())
+            client.login(username, settings.smtp_password)
         client.send_message(email)

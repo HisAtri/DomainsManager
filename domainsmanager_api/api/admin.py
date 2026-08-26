@@ -88,6 +88,8 @@ def setting_response(definition, setting: GlobalSetting | None, default: float |
         configured = bool(value)
     else:
         value = setting_value(definition, setting.value) if setting else default
+        if hasattr(value, "get_secret_value"):
+            value = value.get_secret_value()
         configured = value is not None and value != ""
     return GlobalSettingResponse(
         key=definition.key,

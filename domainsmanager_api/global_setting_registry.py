@@ -101,7 +101,7 @@ GLOBAL_SETTINGS = (
     choice("smtp_encryption", "邮件投递", "加密方式", "", ("none", "starttls", "ssl_tls")),
     string("smtp_from", "邮件投递", "发信邮箱", "包含@后缀的完整邮箱"),
     string("smtp_username", "邮件投递", "SMTP用户名", "通常与发信邮箱相同。部分邮局使用自定义用户名，在此设置"),
-    secret("smtp_password", "邮件投递", "SMTP密码", ""),
+    string("smtp_password", "邮件投递", "SMTP密码", ""),
 
 )
 

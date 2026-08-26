@@ -172,8 +172,7 @@ async def test_admin_stores_smtp_password_as_plaintext_and_returns_it(tmp_path: 
         assert "smtp-test-password" in listed.text
         resources = client.app.state.resources
         effective = await delivery_settings(resources.settings, resources.sessions)
-        assert effective.smtp_password is not None
-        assert effective.smtp_password.get_secret_value() == "smtp-test-password"
+        assert effective.smtp_password == "smtp-test-password"
 
 
 @pytest.mark.asyncio
