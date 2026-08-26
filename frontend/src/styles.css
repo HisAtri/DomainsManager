@@ -74,6 +74,23 @@ button, input { font: inherit; } button { border: 0; cursor: pointer; } button:d
 .admin-setting-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 7px 9px; }.admin-setting-control input { width: 100%; height: 36px; padding: 0 10px; border: 1px solid #d0d5dd; border-radius: 7px; color: #344054; outline: none; }.admin-setting-control input:focus { border-color: #818cf8; box-shadow: 0 0 0 3px #eef2ff; }.admin-setting-control > small { grid-column: 1 / -1; color: #98a2b3; font-size: 11px; }.admin-setting-control .switch { justify-self: end; }
 .content:has(.admin-settings-shell) .page-head { width: min(100%, 1060px); margin-inline: auto; }
 
+/* Administrator settings: one category at a time, with an explicit control hierarchy. */
+.admin-settings-head { padding-bottom: 18px; }
+.page-kicker { display: block; margin-bottom: 7px; color: #667085; font-size: 12px; font-weight: 600; }
+.settings-status-strip { display: grid; grid-template-columns: repeat(3, 1fr); width: min(100%, 1060px); margin: 0 auto 20px; overflow: hidden; border: 1px solid #eaecf0; border-radius: 10px; background: #fff; }
+.settings-status-strip > div { padding: 14px 18px; border-right: 1px solid #eaecf0; }.settings-status-strip > div:last-child { border: 0; }.settings-status-strip span, .settings-status-strip b { display: block; }.settings-status-strip span { color: #667085; font-size: 12px; }.settings-status-strip b { margin-top: 4px; color: #101828; font-size: 16px; }.state-ready { color: #067647 !important; }.state-muted { color: #b54708 !important; }
+.admin-settings-shell { grid-template-columns: 210px minmax(0, 1fr); gap: 22px; align-items: stretch; }
+.admin-settings-aside { top: 18px; height: fit-content; padding: 12px; border: 1px solid #eaecf0; border-radius: 10px; background: #fff; }
+.settings-nav-title { padding: 4px 8px 10px; color: #98a2b3; font-size: 11px; font-weight: 600; letter-spacing: .06em; }
+.admin-settings-aside > button { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 9px 8px; border-radius: 6px; color: #475467; text-align: left; background: transparent; font-size: 13px; }.admin-settings-aside > button:hover { background: #f9fafb; }.admin-settings-aside > button small { color: #98a2b3; font-size: 11px; }.admin-settings-aside > button.settings-nav-active { color: #4f46e5; background: #eef2ff; font-weight: 600; }.admin-settings-aside > button.settings-nav-active small { color: #6366f1; }
+.settings-aside-note { margin: 14px 4px 2px; }.settings-aside-note b { font-size: 12px; }.settings-aside-note span { line-height: 1.55; }
+.admin-settings-content { gap: 0; border: 1px solid #eaecf0; border-radius: 10px; background: #fff; overflow: hidden; }
+.settings-section-head { padding: 20px 22px 17px; border-bottom: 1px solid #eaecf0; background: #fcfcfd; }.settings-section-head h2 { margin: 0; color: #101828; font-size: 17px; }.settings-section-head p { margin: 5px 0 0; color: #667085; font-size: 12px; }
+.admin-setting-row { grid-template-columns: minmax(0, 1fr) 290px; gap: 28px; padding: 18px 22px; }.setting-row-title { display: flex; align-items: center; gap: 8px; }.setting-badge { display: inline-flex; padding: 3px 6px; border-radius: 4px; color: #667085; background: #f2f4f7; font-size: 11px; font-weight: 500; }.setting-badge.live { color: #067647; background: #ecfdf3; }.admin-setting-copy p { max-width: 560px; }
+.admin-setting-control { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }.setting-input-wrap { min-width: 0; }.setting-input-wrap input { width: 100%; }.setting-input-wrap small { display: block; margin-top: 5px; color: #98a2b3; font-size: 11px; }.admin-setting-control .action-button { min-width: 56px; height: 36px; }
+
+@media (max-width: 1280px) { .admin-settings-shell { grid-template-columns: 190px minmax(0, 1fr); }.admin-setting-row { grid-template-columns: minmax(0, 1fr) 250px; } }
+
 /* Notifications */
 .notification-tabs { display: flex; gap: 24px; margin-bottom: 18px; border-bottom: 1px solid #eaecf0; }
 .notification-tabs button { position: relative; padding: 0 1px 12px; color: #667085; background: transparent; font-size: 13px; font-weight: 600; }
