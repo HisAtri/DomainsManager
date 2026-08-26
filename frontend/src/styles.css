@@ -115,6 +115,10 @@ button, input { font: inherit; } button { border: 0; cursor: pointer; } button:d
 .admin-settings-card .settings-card-head p,
 .admin-setting-preference > span > small:first-of-type { display: none; }
 
+/* Ranges stay enforced by the API and input constraints; lifecycle feedback is shown after save. */
+.admin-setting-preference .setting-badge,
+.admin-setting-editor input[type="number"] + small { display: none; }
+
 /* Notifications */
 .notification-tabs { display: flex; gap: 24px; margin-bottom: 18px; border-bottom: 1px solid #eaecf0; }
 .notification-tabs button { position: relative; padding: 0 1px 12px; color: #667085; background: transparent; font-size: 13px; font-weight: 600; }
