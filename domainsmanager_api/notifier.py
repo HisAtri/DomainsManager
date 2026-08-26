@@ -44,6 +44,8 @@ async def delivery_settings(
             values[key] = int(raw)
         elif definition.kind == "number":
             values[key] = float(raw)
+        elif definition.kind == "choice":
+            values[key] = raw
         else:
             values[key] = raw or None
     return defaults.model_copy(update=values)
@@ -75,9 +77,11 @@ def _send_email(message: OutboxMessage, settings: Settings) -> None:
     email["From"], email["To"] = settings.smtp_from, message.recipient_email
     email["Subject"] = f"DomainsManager: {message.payload['event_type']}"
     email.set_content(str(message.payload))
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=settings.notification_delivery_timeout_seconds) as client:
-        if settings.smtp_starttls:
+    username = settings.smtp_username or settings.smtp_from
+    client_factory = smtplib.SMTP_SSL if settings.smtp_encryption == "ssl_tls" else smtplib.SMTP
+    with client_factory(settings.smtp_host, settings.smtp_port, timeout=settings.notification_delivery_timeout_seconds) as client:
+        if settings.smtp_encryption == "starttls":
             client.starttls()
-        if settings.smtp_username and settings.smtp_password:
-            client.login(settings.smtp_username, settings.smtp_password.get_secret_value())
+        if username and settings.smtp_password:
+            client.login(username, settings.smtp_password.get_secret_value())
         client.send_message(email)
