@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domainsmanager_api.dependencies import (
     AdminUserDependency,
     AuthContextDependency,
+    ResourcesDependency,
     RuntimeSettingsDependency,
     TaskServiceDependency,
     get_session,
@@ -218,6 +219,7 @@ async def update_global_setting(
     context: AuthContextDependency,
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: RuntimeSettingsDependency,
+    resources: ResourcesDependency,
     if_match: Annotated[str | None, Header(alias="If-Match")] = None,
 ) -> GlobalSettingResponse:
     definition = GLOBAL_SETTING_BY_KEY.get(key)
@@ -289,6 +291,7 @@ async def update_global_setting(
         )
     )
     await session.commit()
+    await resources.reload_global_policies()
     return setting_response(definition, setting, definition.default(settings))
 
 

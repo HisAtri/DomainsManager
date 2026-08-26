@@ -28,6 +28,8 @@ async def run(
     stopped = stop or Event()
     try:
         while not stopped.is_set():
+            if isinstance(resources, Resources):
+                effective = await resources.reload_global_policies()
             if not await resources.notifier.run_once(default_worker_id()):
                 try:
                     await asyncio.wait_for(stopped.wait(), effective.notification_worker_poll_interval_seconds)

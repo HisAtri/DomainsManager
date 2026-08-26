@@ -125,6 +125,7 @@ async def test_admin_can_override_successful_refresh_ttl(tmp_path: Path) -> None
         assert updated.json()["successful_refresh_ttl_seconds"] == 3600
         settings = client.get("/api/v1/admin/settings", headers=headers)
         assert settings.status_code == 200
+        assert all(item["live"] is True for item in settings.json())
         refresh_setting = next(item for item in settings.json() if item["key"] == "successful_refresh_ttl_seconds")
         assert refresh_setting["version"] == 1
         conflict = client.put(
@@ -140,6 +141,12 @@ async def test_admin_can_override_successful_refresh_ttl(tmp_path: Path) -> None
         )
         assert updated_setting.status_code == 200
         assert updated_setting.json()["version"] == 2
+        assert (
+            client.get("/api/v1/admin/settings/refresh-policy", headers=headers).json()[
+                "successful_refresh_ttl_seconds"
+            ]
+            == 7200
+        )
 
 
 @pytest.mark.asyncio

@@ -28,24 +28,24 @@ class GlobalSettingDefinition:
         return value.get_secret_value() if self.secret and value is not None else value
 
 
-def integer(key: str, group: str, label: str, description: str, minimum: int, maximum: int, live: bool = False) -> GlobalSettingDefinition:
+def integer(key: str, group: str, label: str, description: str, minimum: int, maximum: int, live: bool = True) -> GlobalSettingDefinition:
     return GlobalSettingDefinition(key, group, label, description, "integer", minimum, maximum, live)
 
 
-def number(key: str, group: str, label: str, description: str, minimum: float, maximum: float, live: bool = False) -> GlobalSettingDefinition:
+def number(key: str, group: str, label: str, description: str, minimum: float, maximum: float, live: bool = True) -> GlobalSettingDefinition:
     return GlobalSettingDefinition(key, group, label, description, "number", minimum, maximum, live)
 
 
-def boolean(key: str, group: str, label: str, description: str, live: bool = False) -> GlobalSettingDefinition:
+def boolean(key: str, group: str, label: str, description: str, live: bool = True) -> GlobalSettingDefinition:
     return GlobalSettingDefinition(key, group, label, description, "boolean", live=live)
 
 
 def string(key: str, group: str, label: str, description: str) -> GlobalSettingDefinition:
-    return GlobalSettingDefinition(key, group, label, description, "string")
+    return GlobalSettingDefinition(key, group, label, description, "string", live=True)
 
 
 def secret(key: str, group: str, label: str, description: str) -> GlobalSettingDefinition:
-    return GlobalSettingDefinition(key, group, label, description, "secret")
+    return GlobalSettingDefinition(key, group, label, description, "secret", live=True)
 
 
 GLOBAL_SETTINGS = (

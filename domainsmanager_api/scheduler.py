@@ -33,6 +33,8 @@ async def run(
     effective_stop = stop or Event()
     try:
         while not effective_stop.is_set():
+            if isinstance(resources, Resources):
+                effective_settings = await resources.reload_global_policies()
             scheduled = await resources.scheduler.run_once()
             if not scheduled:
                 try:

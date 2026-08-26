@@ -47,7 +47,7 @@ class Resources:
     notifier: NotificationOutboxService
 
     async def reload_global_policies(self) -> Settings:
-        """Apply persisted non-secret settings when a process starts."""
+        """Refresh runtime policies from persisted settings without restarting the process."""
         keys = [key for key, definition in GLOBAL_SETTING_BY_KEY.items() if not definition.secret]
         async with self.sessions() as session:
             rows = {
