@@ -38,6 +38,7 @@ from domainsmanager_api.schemas.admin_domains import (
     UserReferenceResponse,
 )
 from domainsmanager_api.schemas.global_settings import (
+    GlobalSettingBatchPatch,
     GlobalSettingPatch,
     GlobalSettingResponse,
 )
@@ -239,6 +240,68 @@ async def list_global_settings(
     settings: RuntimeSettingsDependency,
 ) -> list[GlobalSettingResponse]:
     rows = {row.key: row for row in (await session.execute(select(GlobalSetting).where(GlobalSetting.key.in_(GLOBAL_SETTING_BY_KEY)))).scalars()}
+    return [setting_response(definition, rows.get(definition.key), definition.default(settings)) for definition in GLOBAL_SETTINGS]
+
+
+@router.put(
+    "/settings",
+    response_model=list[GlobalSettingResponse],
+    operation_id="updateGlobalSettings",
+)
+async def update_global_settings(
+    body: GlobalSettingBatchPatch,
+    admin: AdminUserDependency,
+    context: AuthContextDependency,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: RuntimeSettingsDependency,
+    resources: ResourcesDependency,
+) -> list[GlobalSettingResponse]:
+    items = {item.key: item for item in body.settings}
+    if len(items) != len(body.settings):
+        raise HTTPException(status_code=422, detail={"code": "validation_error", "message": "duplicate setting keys"})
+    for key, item in items.items():
+        definition = GLOBAL_SETTING_BY_KEY.get(key)
+        if definition is None:
+            not_found()
+        if not valid_setting_value(definition, item.value):
+            raise HTTPException(status_code=422, detail={"code": "validation_error", "message": "setting value is invalid"})
+    rows = {row.key: row for row in (await session.execute(select(GlobalSetting).where(GlobalSetting.key.in_(items)))).scalars()}
+    for key, item in items.items():
+        if (rows[key].version if key in rows else 0) != item.version:
+            raise HTTPException(status_code=409, detail={"code": "version_conflict", "message": "setting has changed"})
+    overrides = {key: item.value for key, item in items.items() if not GLOBAL_SETTING_BY_KEY[key].secret}
+    current = {
+        row.key: setting_value(GLOBAL_SETTING_BY_KEY[row.key], row.value)
+        for row in (await session.execute(select(GlobalSetting).where(GlobalSetting.key.in_(GLOBAL_SETTING_BY_KEY)))).scalars()
+        if not GLOBAL_SETTING_BY_KEY[row.key].secret
+    }
+    try:
+        settings.__class__.model_validate({**settings.model_dump(), **current, **overrides})
+    except ValidationError as error:
+        raise HTTPException(status_code=422, detail={"code": "validation_error", "message": "settings conflict with the active runtime policy"}) from error
+    now = datetime.now(UTC)
+    for key, item in items.items():
+        definition = GLOBAL_SETTING_BY_KEY[key]
+        setting = rows.get(key)
+        if definition.secret and item.value is None:
+            if setting is not None:
+                await session.delete(setting)
+            event_type = "admin.global_setting_secret_cleared"
+        else:
+            try:
+                stored = setting_storage_value(definition, item.value, settings.configuration_encryption_key)
+            except SecretSettingError as error:
+                raise HTTPException(status_code=422, detail={"code": "configuration_encryption_unavailable", "message": str(error)}) from error
+            if setting is None:
+                setting = GlobalSetting(key=key, value=stored, version=1, updated_by_user_id=admin.user.id, updated_at=now)
+                session.add(setting)
+                rows[key] = setting
+            else:
+                setting.value, setting.version, setting.updated_by_user_id, setting.updated_at = stored, setting.version + 1, admin.user.id, now
+            event_type = "admin.global_setting_updated"
+        session.add(SecurityAuditEvent(id=uuid4(), actor_user_id=admin.user.id, event_type=event_type, target_type="global_setting", target_id=None, request_id=context.request_id, event_metadata={"key": key}, occurred_at=now))
+    await session.commit()
+    await resources.reload_global_policies()
     return [setting_response(definition, rows.get(definition.key), definition.default(settings)) for definition in GLOBAL_SETTINGS]
 
 

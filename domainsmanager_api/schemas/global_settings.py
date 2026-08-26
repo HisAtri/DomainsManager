@@ -27,3 +27,13 @@ class GlobalSettingResponse(StrictModel):
 
 class GlobalSettingPatch(StrictModel):
     value: int | float | bool | str | None
+
+
+class GlobalSettingBatchItem(StrictModel):
+    key: str
+    value: int | float | bool | str | None
+    version: int = Field(ge=0)
+
+
+class GlobalSettingBatchPatch(StrictModel):
+    settings: list[GlobalSettingBatchItem] = Field(min_length=1)
