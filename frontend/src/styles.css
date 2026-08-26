@@ -101,6 +101,15 @@ button, input { font: inherit; } button { border: 0; cursor: pointer; } button:d
 .admin-settings-content { width: 100%; border-radius: 9px; }.settings-section-head { padding: 20px 24px 16px; }.settings-section-head p { max-width: 720px; line-height: 1.5; }
 .admin-setting-row { grid-template-columns: minmax(0, 1fr) 300px; min-height: 88px; padding: 16px 24px; }.admin-setting-copy p { margin: 4px 0; }.setting-row-title { gap: 7px; }.setting-badge { padding: 2px 6px; }.admin-setting-control { align-items: center; }.setting-input-wrap small { margin-top: 4px; }
 
+/* Administrator settings deliberately reuse the personal-settings card language. */
+.admin-settings-layout { gap: 16px; }
+.admin-settings-card .settings-card-head { min-height: 146px; }
+.admin-settings-list { width: 100%; gap: 0; }
+.admin-setting-preference { align-items: center; min-height: 76px; padding: 13px 0; }
+.admin-setting-preference > span { min-width: 0; }.admin-setting-preference b { display: flex; align-items: center; gap: 7px; }.admin-setting-preference b em { font-style: normal; }.admin-setting-preference small { max-width: 430px; line-height: 1.45; }
+.admin-setting-editor { display: flex; align-items: center; justify-content: flex-end; gap: 9px; min-width: 270px; }.admin-setting-editor > label { width: 190px; }.admin-setting-editor input { width: 100%; height: 38px; margin: 0; padding: 0 10px; border: 1px solid #d0d5dd; border-radius: 7px; color: #344054; outline: none; }.admin-setting-editor input:focus { border-color: #818cf8; box-shadow: 0 0 0 3px #eef2ff; }.admin-setting-editor label small { display: block; margin-top: 4px; color: #98a2b3; font-size: 11px; font-weight: 400; text-align: right; }.admin-setting-editor .action-button { min-width: 56px; height: 36px; }
+.settings-legacy-notice { width: min(100%, 1040px); margin: -5px auto 16px; padding: 11px 14px; border: 1px solid #fedf89; border-radius: 8px; color: #93370d; background: #fffaeb; font-size: 12px; line-height: 1.5; }
+
 /* Notifications */
 .notification-tabs { display: flex; gap: 24px; margin-bottom: 18px; border-bottom: 1px solid #eaecf0; }
 .notification-tabs button { position: relative; padding: 0 1px 12px; color: #667085; background: transparent; font-size: 13px; font-weight: 600; }
