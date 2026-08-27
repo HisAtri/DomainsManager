@@ -3,12 +3,16 @@ from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 
 from domainsmanager_api.main import create_app
 from domainsmanager_api.settings import Settings
-from domainsmanager_persistence.db import create_engine, run_migrations
-from domainsmanager_persistence.models import ManagedDomain
+from domainsmanager_persistence.db import (
+    create_engine,
+    create_session_factory,
+    run_migrations,
+)
+from domainsmanager_persistence.models import ManagedDomain, SecurityAuditEvent
 from tests.database import sqlite_database
 
 
@@ -101,11 +105,21 @@ async def test_admin_user_and_domain_access(tmp_path: Path) -> None:
         )
         assert banned.status_code == 200
         assert banned.json()["status"] == "banned"
+        repeated_ban = client.post(
+            f"/api/v1/admin/users/{member_id}/ban",
+            json={"reason": "test ban"},
+            headers=admin,
+        )
+        assert repeated_ban.status_code == 200
         assert client.get("/api/v1/auth/me", headers=member).status_code == 403
 
         unbanned = client.post(f"/api/v1/admin/users/{member_id}/unban", headers=admin)
         assert unbanned.status_code == 200
         assert unbanned.json()["status"] == "active"
+        repeated_unban = client.post(
+            f"/api/v1/admin/users/{member_id}/unban", headers=admin
+        )
+        assert repeated_unban.status_code == 200
         member = login(client, "member")
         sessions = client.get(
             f"/api/v1/admin/users/{member_id}/sessions", headers=admin
@@ -123,4 +137,35 @@ async def test_admin_user_and_domain_access(tmp_path: Path) -> None:
         )
         assert revoked.status_code == 200
         assert revoked.json()["revoke_reason"] == "admin_revoked"
+        repeated_revoke = client.post(
+            f"/api/v1/admin/users/{member_id}/sessions/{session_id}/revoke",
+            headers=admin,
+        )
+        assert repeated_revoke.status_code == 200
         assert client.get("/api/v1/auth/me", headers=member).status_code == 401
+
+        engine = create_engine(sqlite_database(tmp_path / "admin-api.db"))
+        async with create_session_factory(engine)() as session:
+            audit_counts = dict(
+                (
+                    await session.execute(
+                        select(SecurityAuditEvent.event_type, func.count())
+                        .where(
+                            SecurityAuditEvent.event_type.in_(
+                                {
+                                    "admin.user_banned",
+                                    "admin.user_unbanned",
+                                    "admin.session_revoked",
+                                }
+                            )
+                        )
+                        .group_by(SecurityAuditEvent.event_type)
+                    )
+                ).all()
+            )
+        await engine.dispose()
+        assert audit_counts == {
+            "admin.session_revoked": 1,
+            "admin.user_banned": 1,
+            "admin.user_unbanned": 1,
+        }

@@ -570,37 +570,68 @@ async def set_ban_state(
     if user is None:
         not_found()
     now = datetime.now(UTC)
-    user.banned_at, user.ban_reason, user.banned_by_user_id, user.updated_at = (
-        (now, reason, admin_id, now) if reason else (None, None, None, now)
-    )
     event = "admin.user_banned" if reason else "admin.user_unbanned"
     if reason:
-        session_ids = select(AuthSession.id).where(AuthSession.user_id == user_id)
-        await session.execute(
-            update(AuthSession)
-            .where(AuthSession.user_id == user_id, AuthSession.revoked_at.is_(None))
-            .values(revoked_at=now, revoke_reason="admin_banned")
-        )
-        await session.execute(
-            update(AuthRefreshToken)
+        changed = await session.execute(
+            update(AppUser)
             .where(
-                AuthRefreshToken.session_id.in_(session_ids),
-                AuthRefreshToken.revoked_at.is_(None),
+                AppUser.id == user_id,
+                AppUser.banned_at.is_(None),
+                AppUser.is_active.is_(True),
             )
-            .values(revoked_at=now)
+            .values(
+                banned_at=now,
+                ban_reason=reason,
+                banned_by_user_id=admin_id,
+                updated_at=now,
+            )
         )
-    session.add(
-        SecurityAuditEvent(
-            id=uuid4(),
-            actor_user_id=admin_id,
-            event_type=event,
-            target_type="user",
-            target_id=user_id,
-            request_id=context_id,
-            event_metadata={"reason": reason} if reason else {},
-            occurred_at=now,
+    else:
+        changed = await session.execute(
+            update(AppUser)
+            .where(
+                AppUser.id == user_id,
+                AppUser.banned_at.is_not(None) | AppUser.is_active.is_(False),
+            )
+            .values(
+                is_active=True,
+                banned_at=None,
+                ban_reason=None,
+                banned_by_user_id=None,
+                updated_at=now,
+            )
         )
-    )
+    if changed.rowcount == 1:
+        if reason:
+            session_ids = select(AuthSession.id).where(AuthSession.user_id == user_id)
+            await session.execute(
+                update(AuthSession)
+                .where(
+                    AuthSession.user_id == user_id,
+                    AuthSession.revoked_at.is_(None),
+                )
+                .values(revoked_at=now, revoke_reason="admin_banned")
+            )
+            await session.execute(
+                update(AuthRefreshToken)
+                .where(
+                    AuthRefreshToken.session_id.in_(session_ids),
+                    AuthRefreshToken.revoked_at.is_(None),
+                )
+                .values(revoked_at=now)
+            )
+        session.add(
+            SecurityAuditEvent(
+                id=uuid4(),
+                actor_user_id=admin_id,
+                event_type=event,
+                target_type="user",
+                target_id=user_id,
+                request_id=context_id,
+                event_metadata={"reason": reason} if reason else {},
+                occurred_at=now,
+            )
+        )
     await session.commit()
     row = await user_with_count(session, user_id)
     assert row is not None
@@ -718,31 +749,39 @@ async def revoke_user_session(
                 "message": "administrators cannot revoke their current session",
             },
         )
-    if auth_session.revoked_at is not None:
-        return session_response(auth_session)
     now = datetime.now(UTC)
-    auth_session.revoked_at, auth_session.revoke_reason = now, "admin_revoked"
-    await session.execute(
-        update(AuthRefreshToken)
+    changed = await session.execute(
+        update(AuthSession)
         .where(
-            AuthRefreshToken.session_id == session_id,
-            AuthRefreshToken.revoked_at.is_(None),
+            AuthSession.id == session_id,
+            AuthSession.user_id == user_id,
+            AuthSession.revoked_at.is_(None),
         )
-        .values(revoked_at=now)
+        .values(revoked_at=now, revoke_reason="admin_revoked")
     )
-    session.add(
-        SecurityAuditEvent(
-            id=uuid4(),
-            actor_user_id=admin.user.id,
-            event_type="admin.session_revoked",
-            target_type="session",
-            target_id=session_id,
-            request_id=context.request_id,
-            event_metadata={"user_id": str(user_id)},
-            occurred_at=now,
+    if changed.rowcount == 1:
+        await session.execute(
+            update(AuthRefreshToken)
+            .where(
+                AuthRefreshToken.session_id == session_id,
+                AuthRefreshToken.revoked_at.is_(None),
+            )
+            .values(revoked_at=now)
         )
-    )
+        session.add(
+            SecurityAuditEvent(
+                id=uuid4(),
+                actor_user_id=admin.user.id,
+                event_type="admin.session_revoked",
+                target_type="session",
+                target_id=session_id,
+                request_id=context.request_id,
+                event_metadata={"user_id": str(user_id)},
+                occurred_at=now,
+            )
+        )
     await session.commit()
+    await session.refresh(auth_session)
     return session_response(auth_session)
 
 
