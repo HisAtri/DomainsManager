@@ -1,5 +1,6 @@
+from datetime import UTC, datetime
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -12,7 +13,11 @@ from domainsmanager_persistence.db import (
     create_session_factory,
     run_migrations,
 )
-from domainsmanager_persistence.models import ManagedDomain, SecurityAuditEvent
+from domainsmanager_persistence.models import (
+    DomainCheck,
+    ManagedDomain,
+    SecurityAuditEvent,
+)
 from tests.database import sqlite_database
 
 
@@ -169,3 +174,110 @@ async def test_admin_user_and_domain_access(tmp_path: Path) -> None:
             "admin.user_banned": 1,
             "admin.user_unbanned": 1,
         }
+
+
+@pytest.mark.asyncio
+@pytest.mark.api
+async def test_admin_list_filters_and_stable_sorting(tmp_path: Path) -> None:
+    client = await make_client(tmp_path)
+    with client:
+        admin = login(client, "admin")
+        domains: dict[str, dict] = {}
+        for username, name in (("zebra", "zeta.net"), ("alpha", "alpha.com")):
+            registered = client.post(
+                "/api/v1/auth/register",
+                json={"username": username, "password": "123456"},
+            )
+            headers = {
+                "Authorization": f"Bearer {registered.json()['tokens']['access_token']}"
+            }
+            domains[name] = client.post(
+                "/api/v1/domains",
+                json={"name": name},
+                headers=headers,
+            ).json()["domain"]
+
+        checked_early = datetime(2026, 1, 1, tzinfo=UTC)
+        checked_late = datetime(2026, 6, 1, tzinfo=UTC)
+        engine = create_engine(sqlite_database(tmp_path / "admin-api.db"))
+        async with create_session_factory(engine)() as session:
+            alpha_id = UUID(domains["alpha.com"]["id"])
+            zeta_id = UUID(domains["zeta.net"]["id"])
+            await session.execute(
+                update(ManagedDomain)
+                .where(ManagedDomain.id == alpha_id)
+                .values(
+                    expires_at=datetime(2026, 12, 1, tzinfo=UTC),
+                    last_check_at=checked_late,
+                    last_outcome="success",
+                )
+            )
+            await session.execute(
+                update(ManagedDomain)
+                .where(ManagedDomain.id == zeta_id)
+                .values(
+                    monitor_enabled=False,
+                    expires_at=datetime(2027, 12, 1, tzinfo=UTC),
+                    last_check_at=checked_early,
+                    last_outcome="not_found",
+                )
+            )
+            session.add_all(
+                [
+                    DomainCheck(
+                        id=uuid4(),
+                        managed_domain_id=zeta_id,
+                        checked_at=checked_early,
+                        outcome="not_found",
+                        protocol="whois",
+                        changed_fields=[],
+                        is_stale=False,
+                        created_at=checked_early,
+                    ),
+                    DomainCheck(
+                        id=uuid4(),
+                        managed_domain_id=alpha_id,
+                        checked_at=checked_late,
+                        outcome="success",
+                        protocol="rdap",
+                        snapshot={"domain": "alpha.com"},
+                        changed_fields=[],
+                        is_stale=False,
+                        created_at=checked_late,
+                    ),
+                ]
+            )
+            await session.commit()
+        await engine.dispose()
+
+        users = client.get("/api/v1/admin/users?sort=username", headers=admin).json()
+        assert [item["username"] for item in users["items"]] == [
+            "admin",
+            "alpha",
+            "zebra",
+        ]
+
+        ordered = client.get(
+            "/api/v1/admin/domains?sort=name", headers=admin
+        ).json()
+        assert [item["identity"]["ascii_name"] for item in ordered["items"]] == [
+            "alpha.com",
+            "zeta.net",
+        ]
+        filtered = client.get(
+            "/api/v1/admin/domains"
+            "?public_suffix=com&monitor_enabled=true&last_outcome=success"
+            "&expires_from=2026-01-01T00:00:00Z&expires_to=2026-12-31T23:59:59Z",
+            headers=admin,
+        ).json()
+        assert filtered["total"] == 1
+        assert filtered["items"][0]["id"] == domains["alpha.com"]["id"]
+
+        checks = client.get(
+            "/api/v1/admin/domain-checks"
+            "?checked_from=2026-02-01T00:00:00Z&checked_to=2026-12-31T23:59:59Z",
+            headers=admin,
+        ).json()
+        assert checks["total"] == 1
+        assert checks["items"][0]["domain_id"] == domains["alpha.com"]["id"]
+        assert checks["statistics"]["count_by_outcome"] == {"success": 1}

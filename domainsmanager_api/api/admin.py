@@ -467,8 +467,16 @@ async def list_users(
     session: Annotated[AsyncSession, Depends(get_session)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
-    query: str | None = None,
+    query: Annotated[str | None, Query(max_length=320)] = None,
     status: Literal["active", "banned"] | None = None,
+    sort: Literal[
+        "created_at",
+        "-created_at",
+        "username",
+        "-username",
+        "last_login_at",
+        "-last_login_at",
+    ] = "-created_at",
 ) -> AdminUserPageResponse:
     filters = []
     if query:
@@ -480,6 +488,14 @@ async def list_users(
     total = await session.scalar(
         select(func.count()).select_from(AppUser).where(*filters)
     )
+    sort_columns = {
+        "created_at": (AppUser.created_at.asc(), AppUser.id),
+        "-created_at": (AppUser.created_at.desc(), AppUser.id),
+        "username": (AppUser.username_normalized.asc(), AppUser.id),
+        "-username": (AppUser.username_normalized.desc(), AppUser.id),
+        "last_login_at": (AppUser.last_login_at.asc(), AppUser.id),
+        "-last_login_at": (AppUser.last_login_at.desc(), AppUser.id),
+    }
     rows = (
         await session.execute(
             select(AppUser, func.count(ManagedDomain.id))
@@ -490,7 +506,7 @@ async def list_users(
             )
             .where(*filters)
             .group_by(AppUser.id)
-            .order_by(AppUser.created_at.desc(), AppUser.id)
+            .order_by(*sort_columns[sort])
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
@@ -840,8 +856,20 @@ async def list_domain_checks_as_admin(
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
     domain_id: UUID | None = None,
     user_id: UUID | None = None,
-    outcome: str | None = None,
+    outcome: Literal[
+        "success",
+        "invalid_domain",
+        "not_found",
+        "unsupported",
+        "rate_limited",
+        "temporary_failure",
+        "unexpected_response",
+        "cancelled",
+    ]
+    | None = None,
     protocol: Literal["rdap", "whois"] | None = None,
+    checked_from: datetime | None = None,
+    checked_to: datetime | None = None,
 ) -> AdminDomainCheckPageResponse:
     filters = []
     if domain_id is not None:
@@ -852,6 +880,10 @@ async def list_domain_checks_as_admin(
         filters.append(DomainCheck.outcome == outcome)
     if protocol is not None:
         filters.append(DomainCheck.protocol == protocol)
+    if checked_from is not None:
+        filters.append(DomainCheck.checked_at >= checked_from)
+    if checked_to is not None:
+        filters.append(DomainCheck.checked_at <= checked_to)
     base = (
         select(DomainCheck)
         .join(ManagedDomain, ManagedDomain.id == DomainCheck.managed_domain_id)
@@ -898,15 +930,50 @@ async def list_domains_as_admin(
     session: Annotated[AsyncSession, Depends(get_session)],
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=100)] = 20,
-    query: str | None = None,
+    query: Annotated[str | None, Query(max_length=253)] = None,
     user_id: UUID | None = None,
+    public_suffix: Annotated[str | None, Query(max_length=253)] = None,
+    monitor_enabled: bool | None = None,
+    expires_from: datetime | None = None,
+    expires_to: datetime | None = None,
+    last_outcome: Literal[
+        "success",
+        "invalid_domain",
+        "not_found",
+        "unsupported",
+        "rate_limited",
+        "temporary_failure",
+        "unexpected_response",
+        "cancelled",
+    ]
+    | None = None,
     deleted: Literal["exclude", "include", "only"] = "exclude",
+    sort: Literal[
+        "created_at",
+        "-created_at",
+        "name",
+        "-name",
+        "expires_at",
+        "-expires_at",
+        "last_check_at",
+        "-last_check_at",
+    ] = "-created_at",
 ) -> AdminDomainPageResponse:
     filters = []
     if query:
         filters.append(ManagedDomain.name_ascii.ilike(f"%{query}%"))
     if user_id is not None:
         filters.append(ManagedDomain.user_id == user_id)
+    if public_suffix is not None:
+        filters.append(ManagedDomain.public_suffix == public_suffix)
+    if monitor_enabled is not None:
+        filters.append(ManagedDomain.monitor_enabled.is_(monitor_enabled))
+    if expires_from is not None:
+        filters.append(ManagedDomain.expires_at >= expires_from)
+    if expires_to is not None:
+        filters.append(ManagedDomain.expires_at <= expires_to)
+    if last_outcome is not None:
+        filters.append(ManagedDomain.last_outcome == last_outcome)
     if deleted == "exclude":
         filters.append(ManagedDomain.deleted_at.is_(None))
     elif deleted == "only":
@@ -914,12 +981,22 @@ async def list_domains_as_admin(
     total = await session.scalar(
         select(func.count()).select_from(ManagedDomain).where(*filters)
     )
+    sort_columns = {
+        "created_at": (ManagedDomain.created_at.asc(), ManagedDomain.id),
+        "-created_at": (ManagedDomain.created_at.desc(), ManagedDomain.id),
+        "name": (ManagedDomain.name_ascii.asc(), ManagedDomain.id),
+        "-name": (ManagedDomain.name_ascii.desc(), ManagedDomain.id),
+        "expires_at": (ManagedDomain.expires_at.asc(), ManagedDomain.id),
+        "-expires_at": (ManagedDomain.expires_at.desc(), ManagedDomain.id),
+        "last_check_at": (ManagedDomain.last_check_at.asc(), ManagedDomain.id),
+        "-last_check_at": (ManagedDomain.last_check_at.desc(), ManagedDomain.id),
+    }
     rows = (
         await session.execute(
             select(ManagedDomain, AppUser)
             .join(AppUser, AppUser.id == ManagedDomain.user_id)
             .where(*filters)
-            .order_by(ManagedDomain.created_at.desc(), ManagedDomain.id)
+            .order_by(*sort_columns[sort])
             .offset((page - 1) * page_size)
             .limit(page_size)
         )
