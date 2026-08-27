@@ -734,6 +734,7 @@ def admin_domain_response(
         monitor_enabled=domain.monitor_enabled,
         renewal_mode=domain.renewal_mode,
         notes=domain.notes,
+        last_outcome=domain.last_outcome,
         version=domain.version,
         created_at=domain.created_at,
         updated_at=domain.updated_at,

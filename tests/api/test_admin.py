@@ -1,11 +1,14 @@
 from pathlib import Path
+from uuid import UUID
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import update
 
 from domainsmanager_api.main import create_app
 from domainsmanager_api.settings import Settings
-from domainsmanager_persistence.db import run_migrations
+from domainsmanager_persistence.db import create_engine, run_migrations
+from domainsmanager_persistence.models import ManagedDomain
 from tests.database import sqlite_database
 
 
@@ -62,6 +65,17 @@ async def test_admin_user_and_domain_access(tmp_path: Path) -> None:
         domains = client.get("/api/v1/admin/domains", headers=admin)
         assert domains.status_code == 200
         assert domains.json()["items"][0]["id"] == domain["id"]
+        assert domains.json()["items"][0]["last_outcome"] is None
+        engine = create_engine(sqlite_database(tmp_path / "admin-api.db"))
+        async with engine.begin() as connection:
+            await connection.execute(
+                update(ManagedDomain)
+                .where(ManagedDomain.id == UUID(domain["id"]))
+                .values(last_outcome="not_found")
+            )
+        await engine.dispose()
+        failed_domains = client.get("/api/v1/admin/domains", headers=admin)
+        assert failed_domains.json()["items"][0]["last_outcome"] == "not_found"
         queued = client.post(
             f"/api/v1/admin/domains/{domain['id']}/refresh",
             headers={**admin, "Idempotency-Key": "admin-refresh-123"},

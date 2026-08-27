@@ -24,6 +24,7 @@ class AdminManagedDomainResponse(StrictModel):
     monitor_enabled: bool
     renewal_mode: Literal["automatic", "manual", "unknown"] | None
     notes: str | None
+    last_outcome: str | None
     version: int = Field(ge=1)
     created_at: datetime
     updated_at: datetime

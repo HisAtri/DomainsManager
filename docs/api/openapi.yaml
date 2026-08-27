@@ -1521,7 +1521,7 @@ components:
     AdminManagedDomain:
       type: object
       additionalProperties: false
-      required: [id, identity, monitor_enabled, version, created_at, updated_at, owner, deleted_at]
+      required: [id, identity, monitor_enabled, last_outcome, version, created_at, updated_at, owner, deleted_at]
       properties:
         id: { type: string, format: uuid }
         identity: { $ref: '#/components/schemas/DomainIdentity' }
@@ -1530,6 +1530,7 @@ components:
         monitor_enabled: { type: boolean }
         renewal_mode: { $ref: '#/components/schemas/RenewalMode' }
         notes: { type: [string, 'null'], maxLength: 5000 }
+        last_outcome: { type: [string, 'null'], maxLength: 32 }
         next_check_at: { type: [string, 'null'], format: date-time }
         version: { type: integer, minimum: 1 }
         created_at: { type: string, format: date-time }
