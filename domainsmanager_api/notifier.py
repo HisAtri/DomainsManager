@@ -5,12 +5,62 @@ import smtplib
 from email.message import EmailMessage
 
 import httpx
+from pydantic import SecretStr
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from domainsmanager_api.global_setting_registry import GLOBAL_SETTING_BY_KEY
 from domainsmanager_api.settings import Settings
 from domainsmanager_application.notifications import OutboxMessage
+from domainsmanager_persistence.models import GlobalSetting
+
+NOTIFICATION_CONFIGURATION_KEYS = frozenset(
+    key for key, definition in GLOBAL_SETTING_BY_KEY.items()
+    if definition.group in {"通知", "邮件投递"}
+)
+LEGACY_SMTP_KEYS = frozenset({"smtp_starttls"})
 
 
-async def deliver(message: OutboxMessage, settings: Settings) -> None:
+async def delivery_settings(
+    defaults: Settings, sessions: async_sessionmaker[AsyncSession]
+) -> Settings:
+    async with sessions() as session:
+        rows = {
+            row.key: row.value
+            for row in (
+                await session.execute(
+                    select(GlobalSetting).where(GlobalSetting.key.in_(NOTIFICATION_CONFIGURATION_KEYS | LEGACY_SMTP_KEYS))
+                )
+            ).scalars()
+        }
+    values: dict[str, object] = {}
+    for key, raw in rows.items():
+        definition = GLOBAL_SETTING_BY_KEY.get(key)
+        if definition is None:
+            if key == "smtp_starttls":
+                values["smtp_encryption"] = "starttls" if raw == "true" else "none"
+            continue
+        if definition.secret:
+            values[key] = SecretStr(raw)
+        elif definition.kind == "boolean":
+            values[key] = raw == "true"
+        elif definition.kind == "integer":
+            values[key] = int(raw)
+        elif definition.kind == "number":
+            values[key] = float(raw)
+        elif definition.kind == "choice":
+            values[key] = raw
+        else:
+            values[key] = raw or None
+    return defaults.model_copy(update=values)
+
+
+async def deliver(
+    message: OutboxMessage,
+    settings: Settings,
+    sessions: async_sessionmaker[AsyncSession],
+) -> None:
+    settings = await delivery_settings(settings, sessions)
     if message.channel == "webhook":
         url = message.channel_config.get("webhook_url")
         if not isinstance(url, str):
@@ -31,9 +81,11 @@ def _send_email(message: OutboxMessage, settings: Settings) -> None:
     email["From"], email["To"] = settings.smtp_from, message.recipient_email
     email["Subject"] = f"DomainsManager: {message.payload['event_type']}"
     email.set_content(str(message.payload))
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=settings.notification_delivery_timeout_seconds) as client:
-        if settings.smtp_starttls:
+    username = settings.smtp_username or settings.smtp_from
+    client_factory = smtplib.SMTP_SSL if settings.smtp_encryption == "ssl_tls" else smtplib.SMTP
+    with client_factory(settings.smtp_host, settings.smtp_port, timeout=settings.notification_delivery_timeout_seconds) as client:
+        if settings.smtp_encryption == "starttls":
             client.starttls()
-        if settings.smtp_username and settings.smtp_password:
-            client.login(settings.smtp_username, settings.smtp_password.get_secret_value())
+        if username and settings.smtp_password:
+            client.login(username, settings.smtp_password)
         client.send_message(email)

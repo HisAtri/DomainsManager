@@ -6,8 +6,8 @@ Worker 在外部查询期间以任务租约三分之一的间隔续约。成功�
 
 刷新任务默认最多尝试 5 次。`rate_limited` 与 `temporary_failure` 使用指数退避重新排队；其他错误或达到重试上限后进入 `failed`。可通过 `DOMAINSMANAGER_TASK_MAX_ATTEMPTS`、`DOMAINSMANAGER_TASK_RETRY_BASE_SECONDS`、`DOMAINSMANAGER_TASK_RETRY_MAX_SECONDS` 和 `DOMAINSMANAGER_TASK_LEASE_SECONDS` 调整策略。Worker 租约保持由后续 Worker 心跳实现。
 
-[openapi.yaml](openapi.yaml) 是 FastAPI 后端的初版契约，采用 OpenAPI 3.1，统一前缀为
-`/api/v1`。当前已实现应用骨架、根级健康检查、本地认证、当前用户、用户域名 CRUD、刷新任务、检查历史和基础管理员接口。OAuth2 仅提供 Provider 空配置状态；其余业务路由按本文档约定逐步交付。
+[openapi.yaml](openapi.yaml) 是 FastAPI 后端契约，采用 OpenAPI 3.1，统一前缀为
+`/api/v1`。当前已实现应用骨架、根级健康检查、本地认证、当前用户、用户域名 CRUD、刷新任务、检查历史、Scheduler、通知规则/投递历史，以及管理员用户、会话撤销、全局域名、全局检查/统计和全局运行配置接口。OAuth2 仅提供 Provider 空配置状态。契约中的管理员密码重置仍属 M5 预留，不能仅因已写入 OpenAPI 就视为可用。
 
 ## 1. 资源和权限边界
 
@@ -58,9 +58,13 @@ Provider 还应验证 `nonce`、issuer 和 audience。解绑前必须确认用�
 `active` 和 `banned`，把权限规范为 `user` 和 `admin`。
 
 管理员接口不会返回 `password_hash`、TOTP Secret、Access/Refresh Token 或 OAuth Provider
-Token。封禁要求原因并立即撤销会话；管理员不能封禁自己。管理员密码重置只创建一次性重置
+Token。封禁要求原因并立即撤销会话；管理员不能封禁自己。管理员密码重置属于 M5，只创建一次性重置
 流程，响应不得包含明文密码或重置 Token。管理员写操作和密码、OAuth 绑定等安全操作均写入
 `SecurityAuditEvent`，至少记录操作者、目标、事件类型、请求 ID、时间和脱敏元数据。
+
+管理员可配置的全局运行策略遵循[全局运行配置管理方案](../global-configuration-management.md)：只有注册表中
+非敏感、可审计的业务策略可写入数据库；SMTP 密码也可由管理员写入加密数据库记录（仅写入，不回显，解密主密钥由环境变量提供）；数据库连接、JWT/Token Secret、TLS、CORS、监听与
+首次管理员引导仍由部署环境或 Secret 管理器提供。
 
 用户设置采用白名单 Schema，目前预留：
 
@@ -130,7 +134,7 @@ WHOIS/RDAP 请求延迟和上游限流不适合占用普通 HTTP 请求，所以
 | 域名标准化 | `DomainLookup.normalize()` | 调用并映射 `InvalidDomainError` |
 | 域名查询 | `DomainLookup.lookup()` | 后台 Worker 和任务编排 |
 | 查询缓存 | `SqlAlchemyLookupStore` | 在应用生命周期注入 `DomainLookup` |
-| 用户数据 | `AppUser`、认证会话 | User/UoW/认证服务已实现；管理员管理待实现 |
+| 用户数据 | `AppUser`、认证会话 | User/UoW/认证服务与管理员基础管理已实现；会话撤销端点待补齐 |
 | 管理域名 | `ManagedDomain` | Domain Repository、M1 CRUD、软删除和 M2 快照写入已实现 |
 | 检查历史 | `DomainCheck` | 成功/失败检查持久化、快照哈希和变化比较已实现 |
 | 安全审计 | `SecurityAuditEvent` | Audit Repository 和统一审计服务 |
@@ -153,7 +157,8 @@ WHOIS/RDAP 请求延迟和上游限流不适合占用普通 HTTP 请求，所以
 
 ## 9. 当前状态
 
-FastAPI 应用工厂、配置、资源生命周期、请求 ID、统一错误边界、健康检查，本地注册、登录、
-退出、Token 轮换、当前用户资料、改密和设置，以及用户域名列表、创建、详情、ETag 更新与软删除
-已实现。管理员业务路由、后台 Worker、OAuth Provider 集成和对应后续迁移仍待实现。后续实现应以
+FastAPI 应用工厂、配置、资源生命周期、请求 ID、统一错误边界、健康检查，本地注册、登录、退出、
+Token 轮换、当前用户资料、改密和设置、用户域名 CRUD、刷新 Worker、Scheduler、Notifier、通知规则与
+投递历史，以及管理员用户和基础全局域名管理均已实现。管理员全局检查/统计、显式会话撤销、完整管理员
+后台设置页面和全局运行配置中心已完成；管理员用户详情/会话操作及全局域名详情操作仍待补齐。OAuth Provider 集成、密码重置和 TOTP 在 M5。后续实现应以
 [openapi.yaml](openapi.yaml) 为行为基线，并在修改 HTTP 行为时同步更新规范和契约测试。

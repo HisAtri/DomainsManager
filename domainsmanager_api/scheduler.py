@@ -28,9 +28,13 @@ async def run(
 ) -> None:
     effective_settings = settings or get_settings()
     resources = await resource_factory(effective_settings)
+    if isinstance(resources, Resources):
+        effective_settings = await resources.reload_global_policies()
     effective_stop = stop or Event()
     try:
         while not effective_stop.is_set():
+            if isinstance(resources, Resources):
+                effective_settings = await resources.reload_global_policies()
             scheduled = await resources.scheduler.run_once()
             if not scheduled:
                 try:

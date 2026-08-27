@@ -4,12 +4,12 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from domainsmanager_api.api.auth import router as auth_router
 from domainsmanager_api.api.admin import router as admin_router
+from domainsmanager_api.api.auth import router as auth_router
 from domainsmanager_api.api.domains import router as domains_router
 from domainsmanager_api.api.health import router as health_router
-from domainsmanager_api.api.oauth import router as oauth_router
 from domainsmanager_api.api.notifications import router as notifications_router
+from domainsmanager_api.api.oauth import router as oauth_router
 from domainsmanager_api.api.tasks import router as tasks_router
 from domainsmanager_api.errors import install_exception_handlers
 from domainsmanager_api.middleware import RequestIdMiddleware
@@ -33,6 +33,8 @@ def create_app(
         resources = resource_factory(effective_settings)
         app.state.resources = resources
         try:
+            if isinstance(resources, Resources):
+                await resources.reload_global_policies()
             if (
                 effective_settings.bootstrap_admin_username is not None
                 and effective_settings.bootstrap_admin_password is not None

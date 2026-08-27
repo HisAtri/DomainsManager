@@ -5,9 +5,9 @@ from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from domainsmanager_lookup import DomainLookup
+from domainsmanager_api.resources import Resources
+from domainsmanager_api.settings import Settings
 from domainsmanager_application.domains import DomainService
-from domainsmanager_application.tasks import RefreshTaskService
 from domainsmanager_application.notifications import NotificationRuleService
 from domainsmanager_application.services import (
     AccountBannedError,
@@ -16,8 +16,8 @@ from domainsmanager_application.services import (
     AuthService,
     InvalidTokenError,
 )
-
-from domainsmanager_api.resources import Resources
+from domainsmanager_application.tasks import RefreshTaskService
+from domainsmanager_lookup import DomainLookup
 
 
 def get_resources(request: Request) -> Resources:
@@ -25,6 +25,13 @@ def get_resources(request: Request) -> Resources:
 
 
 ResourcesDependency = Annotated[Resources, Depends(get_resources)]
+
+
+def get_runtime_settings(resources: ResourcesDependency) -> Settings:
+    return resources.settings
+
+
+RuntimeSettingsDependency = Annotated[Settings, Depends(get_runtime_settings)]
 bearer_scheme = HTTPBearer(auto_error=False)
 
 

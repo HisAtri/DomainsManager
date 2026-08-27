@@ -54,26 +54,28 @@ class Settings(BaseSettings):
     refresh_cookie_secure: bool = False
     refresh_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
     jwt_clock_skew_seconds: int = Field(default=30, ge=0, le=300)
-    task_lease_seconds: int = Field(default=120, ge=30, le=3600)
-    task_max_attempts: int = Field(default=5, ge=1, le=100)
-    task_retry_base_seconds: int = Field(default=60, ge=1, le=3600)
-    task_retry_max_seconds: int = Field(default=3600, ge=1, le=86_400)
-    check_interval_seconds: int = Field(default=86_400, ge=60, le=2_592_000)
-    successful_refresh_ttl_seconds: int = Field(default=1_800, ge=60, le=2_592_000)
-    worker_poll_interval_seconds: float = Field(default=1.0, gt=0, le=60)
-    scheduler_poll_interval_seconds: float = Field(default=10.0, gt=0, le=300)
-    scheduler_batch_size: int = Field(default=100, ge=1, le=1000)
-    notification_delivery_timeout_seconds: float = Field(default=10, gt=0, le=120)
-    notification_worker_poll_interval_seconds: float = Field(default=1, gt=0, le=60)
-    notification_max_attempts: int = Field(default=5, ge=1, le=100)
-    notification_retry_base_seconds: int = Field(default=60, ge=1, le=3600)
-    notification_retry_max_seconds: int = Field(default=3600, ge=1, le=86_400)
+    task_lease_seconds: int = Field(default=120, ge=1)
+    task_max_attempts: int = Field(default=5, ge=1)
+    task_retry_base_seconds: int = Field(default=60, ge=0)
+    task_retry_max_seconds: int = Field(default=3600, ge=0)
+    check_interval_seconds: int = Field(default=86_400, ge=1)
+    successful_refresh_ttl_seconds: int = Field(default=1_800, ge=0)
+    worker_poll_interval_seconds: float = Field(default=1.0, gt=0)
+    scheduler_poll_interval_seconds: float = Field(default=10.0, gt=0)
+    scheduler_batch_size: int = Field(default=100, ge=1)
+    notification_delivery_timeout_seconds: float = Field(default=10, gt=0)
+    notification_worker_poll_interval_seconds: float = Field(default=1, gt=0)
+    notification_max_attempts: int = Field(default=5, ge=1)
+    notification_retry_base_seconds: int = Field(default=60, ge=0)
+    notification_retry_max_seconds: int = Field(default=3600, ge=0)
     smtp_host: str | None = None
     smtp_port: int = Field(default=587, ge=1, le=65535)
     smtp_from: str | None = None
     smtp_username: str | None = None
     smtp_password: SecretStr | None = None
+    smtp_encryption: Literal["none", "starttls", "ssl_tls"] = "starttls"
     smtp_starttls: bool = True
+    configuration_encryption_key: SecretStr | None = None
     bootstrap_admin_username: str | None = None
     bootstrap_admin_password: SecretStr | None = None
     request_id_header: str = "X-Request-ID"
@@ -107,6 +109,9 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_settings(self) -> "Settings":
+        if "smtp_encryption" not in self.model_fields_set and "smtp_starttls" in self.model_fields_set:
+            self.smtp_encryption = "starttls" if self.smtp_starttls else "none"
+        self.smtp_starttls = self.smtp_encryption == "starttls"
         username_set = self.bootstrap_admin_username is not None
         password_set = self.bootstrap_admin_password is not None
         if username_set != password_set:

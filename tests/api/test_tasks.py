@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from domainsmanager_api.main import create_app
+from domainsmanager_api.notifier import delivery_settings
 from domainsmanager_api.settings import Settings
 from domainsmanager_persistence.db import run_migrations
 from tests.database import sqlite_database
@@ -23,6 +24,7 @@ async def make_client(tmp_path: Path) -> TestClient:
                 registration_enabled=True,
                 bootstrap_admin_username="task-admin",
                 bootstrap_admin_password="123456",
+                configuration_encryption_key="eAbLHc58_pjXLGKKZNoeuQLHYKkN9orkVRxMVokhGTY=",
             )
         )
     )
@@ -90,7 +92,9 @@ async def test_refresh_task_is_idempotent_and_owner_scoped(tmp_path: Path) -> No
         task_list = client.get("/api/v1/tasks?page=1&page_size=10", headers=first)
         assert task_list.status_code == 200
         assert task_list.json()["total"] == 2
-        assert {item["domain_name"] for item in task_list.json()["items"]} == {"example.com"}
+        assert {item["domain_name"] for item in task_list.json()["items"]} == {
+            "example.com"
+        }
         assert {item["status"] for item in task_list.json()["items"]} == {"queued"}
         assert all(item["result"] is None for item in task_list.json()["items"])
 
@@ -106,7 +110,12 @@ async def test_admin_can_override_successful_refresh_ttl(tmp_path: Path) -> None
         )
         assert login.status_code == 200
         headers = {"Authorization": f"Bearer {login.json()['tokens']['access_token']}"}
-        assert client.get("/api/v1/admin/settings/refresh-policy", headers=headers).json()["successful_refresh_ttl_seconds"] == 1800
+        assert (
+            client.get("/api/v1/admin/settings/refresh-policy", headers=headers).json()[
+                "successful_refresh_ttl_seconds"
+            ]
+            == 1800
+        )
         updated = client.patch(
             "/api/v1/admin/settings/refresh-policy",
             json={"successful_refresh_ttl_seconds": 3600},
@@ -114,3 +123,84 @@ async def test_admin_can_override_successful_refresh_ttl(tmp_path: Path) -> None
         )
         assert updated.status_code == 200
         assert updated.json()["successful_refresh_ttl_seconds"] == 3600
+        settings = client.get("/api/v1/admin/settings", headers=headers)
+        assert settings.status_code == 200
+        assert all(item["live"] is True for item in settings.json())
+        refresh_setting = next(item for item in settings.json() if item["key"] == "successful_refresh_ttl_seconds")
+        assert refresh_setting["version"] == 1
+        conflict = client.put(
+            "/api/v1/admin/settings/successful_refresh_ttl_seconds",
+            json={"value": 7200},
+            headers={**headers, "If-Match": "0"},
+        )
+        assert conflict.status_code == 409
+        updated_setting = client.put(
+            "/api/v1/admin/settings/successful_refresh_ttl_seconds",
+            json={"value": 7200},
+            headers={**headers, "If-Match": "1"},
+        )
+        assert updated_setting.status_code == 200
+        assert updated_setting.json()["version"] == 2
+        assert (
+            client.get("/api/v1/admin/settings/refresh-policy", headers=headers).json()[
+                "successful_refresh_ttl_seconds"
+            ]
+            == 7200
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.api
+async def test_admin_stores_smtp_password_as_plaintext_and_returns_it(tmp_path: Path) -> None:
+    client = await make_client(tmp_path)
+    with client:
+        login = client.post(
+            "/api/v1/auth/login",
+            data={"username": "task-admin", "password": "123456"},
+        )
+        headers = {"Authorization": f"Bearer {login.json()['tokens']['access_token']}"}
+        password = client.put(
+            "/api/v1/admin/settings/smtp_password",
+            json={"value": "smtp-test-password"},
+            headers={**headers, "If-Match": "0"},
+        )
+        assert password.status_code == 200
+        assert password.json()["value"] == "smtp-test-password"
+        assert password.json()["configured"] is True
+        listed = client.get("/api/v1/admin/settings", headers=headers)
+        assert listed.status_code == 200
+        assert "smtp-test-password" in listed.text
+        resources = client.app.state.resources
+        effective = await delivery_settings(resources.settings, resources.sessions)
+        assert effective.smtp_password == "smtp-test-password"
+
+
+@pytest.mark.asyncio
+@pytest.mark.api
+async def test_admin_settings_allow_business_values_but_reject_invalid_combinations(tmp_path: Path) -> None:
+    client = await make_client(tmp_path)
+    with client:
+        login = client.post(
+            "/api/v1/auth/login",
+            data={"username": "task-admin", "password": "123456"},
+        )
+        headers = {"Authorization": f"Bearer {login.json()['tokens']['access_token']}"}
+        wide_interval = client.put(
+            "/api/v1/admin/settings/check_interval_seconds",
+            json={"value": 3_000_000},
+            headers={**headers, "If-Match": "0"},
+        )
+        assert wide_interval.status_code == 200
+        assert wide_interval.json()["maximum"] is None
+        base_delay = client.put(
+            "/api/v1/admin/settings/task_retry_base_seconds",
+            json={"value": 100},
+            headers={**headers, "If-Match": "0"},
+        )
+        assert base_delay.status_code == 200
+        invalid_cap = client.put(
+            "/api/v1/admin/settings/task_retry_max_seconds",
+            json={"value": 99},
+            headers={**headers, "If-Match": "0"},
+        )
+        assert invalid_cap.status_code == 422

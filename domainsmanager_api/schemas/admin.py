@@ -38,3 +38,19 @@ class AdminUpdateUserRequest(StrictModel):
 
 class BanUserRequest(StrictModel):
     reason: str = Field(min_length=3, max_length=512)
+
+
+class AdminSessionResponse(StrictModel):
+    id: UUID
+    created_at: datetime
+    last_seen_at: datetime
+    absolute_expires_at: datetime
+    revoked_at: datetime | None
+    revoke_reason: str | None
+
+
+class AdminSessionPageResponse(StrictModel):
+    items: list[AdminSessionResponse]
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+    total: int = Field(ge=0)
