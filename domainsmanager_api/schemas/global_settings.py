@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import Field
 
@@ -13,7 +14,7 @@ class GlobalSettingResponse(StrictModel):
     label: str
     description: str
     kind: str
-    value: int | float | bool | str | None
+    value: Any
     configured: bool = False
     version: int = Field(ge=0)
     source: str
@@ -23,15 +24,18 @@ class GlobalSettingResponse(StrictModel):
     unit: str | None
     choices: tuple[str, ...] | None = None
     live: bool
+    editor: str = "input"
+    language: str | None = None
+    placeholder: str | None = None
 
 
 class GlobalSettingPatch(StrictModel):
-    value: int | float | bool | str | None
+    value: Any
 
 
 class GlobalSettingBatchItem(StrictModel):
     key: str
-    value: int | float | bool | str | None
+    value: Any
     version: int = Field(ge=0)
 
 

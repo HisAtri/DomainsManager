@@ -89,6 +89,21 @@ def test_implemented_health_operations_match_contract() -> None:
 
 
 @pytest.mark.contract
+def test_public_site_config_operation_matches_contract() -> None:
+    document = yaml.safe_load(OPENAPI_PATH.read_text(encoding="utf-8"))
+    expected = document["paths"]["/site/config"]["get"]["operationId"]
+    app = create_app(
+        Settings(
+            database_type="sqlite",
+            database_path=":memory:",
+            jwt_secret_key="x",
+            refresh_token_pepper="y",
+        )
+    )
+    assert app.openapi()["paths"]["/api/v1/site/config"]["get"]["operationId"] == expected
+
+
+@pytest.mark.contract
 def test_implemented_domain_operations_match_contract() -> None:
     expected = {
         ("/api/v1/domains", "get", "listDomains"),

@@ -1,4 +1,4 @@
-import type { AdminCheckPage, AdminDomain, AdminSession, AdminUser, AuthResult, Check, Domain, GlobalSetting, NotificationDelivery, NotificationRule, NotificationRuleInput, NotificationRuleUpdate, Page, Settings, Task, Tokens, User } from "./types";
+import type { AdminCheckPage, AdminDomain, AdminSession, AdminUser, AuthResult, Check, Domain, GlobalSetting, NotificationDelivery, NotificationRule, NotificationRuleInput, NotificationRuleUpdate, Page, PublicSiteConfig, Settings, Task, Tokens, User } from "./types";
 
 type ApiErrorDetail = { location?: string; message?: string; code?: string };
 type ApiErrorBody = { code?: string; message?: string; details?: ApiErrorDetail[]; request_id?: string };
@@ -122,7 +122,8 @@ class ApiClient {
   adminDomains(params: Record<string, string | number | undefined> = {}) { return this.request<Page<AdminDomain>>(`/admin/domains?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
   adminChecks() { return this.request<AdminCheckPage>("/admin/domain-checks").then((r) => r.data); }
   globalSettings() { return this.request<GlobalSetting[]>("/admin/settings").then((r) => r.data); }
-  updateGlobalSetting(key: string, value: number | boolean | string | null, version: number) { return this.request<GlobalSetting>(`/admin/settings/${key}`, { method: "PUT", headers: { "If-Match": String(version) }, body: JSON.stringify({ value }) }).then((r) => r.data); }
-  updateGlobalSettings(settings: { key: string; value: number | boolean | string | null; version: number }[]) { return this.request<GlobalSetting[]>("/admin/settings", { method: "PUT", body: JSON.stringify({ settings }) }).then((r) => r.data); }
+  updateGlobalSetting(key: string, value: unknown, version: number) { return this.request<GlobalSetting>(`/admin/settings/${key}`, { method: "PUT", headers: { "If-Match": String(version) }, body: JSON.stringify({ value }) }).then((r) => r.data); }
+  updateGlobalSettings(settings: { key: string; value: unknown; version: number }[]) { return this.request<GlobalSetting[]>("/admin/settings", { method: "PUT", body: JSON.stringify({ settings }) }).then((r) => r.data); }
+  siteConfig() { return this.request<PublicSiteConfig>("/site/config", { method: "GET" }, false).then((r) => r.data); }
 }
 export const api = new ApiClient();

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Annotated, Literal
 from uuid import UUID, uuid4
@@ -68,7 +69,7 @@ router = APIRouter(prefix="/admin", tags=["Admin users", "Admin domains"])
 GLOBAL_SETTING_KEY = "successful_refresh_ttl_seconds"
 
 
-def setting_value(definition, value: str) -> int | float | bool | str:
+def setting_value(definition, value: str) -> object:
     if definition.kind == "boolean":
         return value == "true"
     if definition.kind == "integer":
@@ -77,6 +78,8 @@ def setting_value(definition, value: str) -> int | float | bool | str:
         return float(value)
     if definition.kind == "choice":
         return value
+    if definition.kind == "json":
+        return json.loads(value)
     return value
 
 
@@ -100,13 +103,22 @@ def setting_response(definition, setting: GlobalSetting | None, default: float |
         value=value,
         configured=configured,
         version=setting.version if setting else 0,
-        source="database" if setting else "environment_default",
+        source=(
+            "database"
+            if setting
+            else "registry_default"
+            if definition.uses_registry_default
+            else "environment_default"
+        ),
         updated_at=setting.updated_at if setting else None,
         minimum=definition.minimum,
         maximum=definition.maximum,
         unit=definition.unit,
         choices=definition.choices,
         live=definition.live,
+        editor=definition.editor,
+        language=definition.language,
+        placeholder=definition.placeholder,
     )
 
 
@@ -121,7 +133,20 @@ def valid_setting_value(definition, value: object) -> bool:
         return isinstance(value, (int, float)) and not isinstance(value, bool) and (definition.minimum is None or definition.minimum <= value) and (definition.maximum is None or value <= definition.maximum)
     if definition.kind == "choice":
         return isinstance(value, str) and value in (definition.choices or ())
-    return isinstance(value, str) and len(value) <= 512
+    if definition.kind == "json":
+        if not isinstance(value, list) or len(value) > 20:
+            return False
+        return all(
+            isinstance(item, dict)
+            and set(item) == {"label", "url"}
+            and isinstance(item["label"], str)
+            and 1 <= len(item["label"].strip()) <= 80
+            and isinstance(item["url"], str)
+            and item["url"].startswith(("/", "http://", "https://"))
+            and len(item["url"]) <= 2048
+            for item in value
+        )
+    return isinstance(value, str)
 
 
 async def valid_runtime_setting_combination(
@@ -152,11 +177,13 @@ async def valid_runtime_setting_combination(
     return True
 
 
-def setting_storage_value(definition, value: float | bool | str | None, encryption_key) -> str:
+def setting_storage_value(definition, value: object, encryption_key) -> str:
     if definition.secret:
         return str(value) if value is not None else ""
     if definition.kind == "boolean":
         return str(value).lower()
+    if definition.kind == "json":
+        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
     return str(value)
 
 

@@ -18,9 +18,29 @@ tags:
   - name: Admin domains
   - name: Health
   - name: Notifications
+  - name: Site configuration
 security:
   - bearerAuth: []
 paths:
+  /site/config:
+    get:
+      tags: [Site configuration]
+      operationId: getPublicSiteConfig
+      security: []
+      parameters:
+        - name: If-None-Match
+          in: header
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: Public site presentation configuration
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicSiteConfig' }
+        '304': { description: Configuration has not changed }
   /notification-rules/deliveries:
     get:
       tags: [Notifications]
@@ -1460,27 +1480,55 @@ components:
     GlobalSetting:
       type: object
       additionalProperties: false
-      required: [key, group, label, description, kind, value, configured, version, source, updated_at, minimum, maximum, live]
+      required: [key, group, label, description, kind, value, configured, version, source, updated_at, minimum, maximum, live, editor, language, placeholder]
       properties:
         key: { type: string }
         group: { type: string }
         label: { type: string }
         description: { type: string }
-        kind: { type: string, enum: [integer, number, boolean, string, secret] }
-        value: { type: [number, boolean, string, 'null'] }
+        kind: { type: string, enum: [integer, number, boolean, string, secret, choice, json] }
+        value: {}
         configured: { type: boolean }
         version: { type: integer, minimum: 0 }
-        source: { type: string, enum: [database, environment_default] }
+        source: { type: string, enum: [database, environment_default, registry_default] }
         updated_at: { type: [string, 'null'], format: date-time }
         minimum: { type: [number, 'null'] }
         maximum: { type: [number, 'null'] }
         live: { type: boolean }
+        editor: { type: string, enum: [input, asset, links, textarea, code] }
+        language: { type: [string, 'null'] }
+        placeholder: { type: [string, 'null'] }
     GlobalSettingPatch:
       type: object
       additionalProperties: false
       required: [value]
       properties:
-        value: { type: [number, boolean, string, 'null'] }
+        value: {}
+    FooterLink:
+      type: object
+      additionalProperties: false
+      required: [label, url]
+      properties:
+        label: { type: string, minLength: 1, maxLength: 80 }
+        url: { type: string, minLength: 1, maxLength: 2048 }
+    PublicSiteConfig:
+      type: object
+      additionalProperties: false
+      required: [revision, site_name, site_logo, site_favicon, footer_links, footer_copyright, icp_number, police_record_number, custom_css, custom_javascript, head_html, body_end_html, analytics_code]
+      properties:
+        revision: { type: string }
+        site_name: { type: string }
+        site_logo: { type: string }
+        site_favicon: { type: string }
+        footer_links: { type: array, items: { $ref: '#/components/schemas/FooterLink' } }
+        footer_copyright: { type: string }
+        icp_number: { type: string }
+        police_record_number: { type: string }
+        custom_css: { type: string }
+        custom_javascript: { type: string }
+        head_html: { type: string }
+        body_end_html: { type: string }
+        analytics_code: { type: string }
     TaskError:
       type: object
       additionalProperties: false

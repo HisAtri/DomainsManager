@@ -48,7 +48,12 @@ class Resources:
 
     async def reload_global_policies(self) -> Settings:
         """Refresh runtime policies from persisted settings without restarting the process."""
-        keys = [key for key, definition in GLOBAL_SETTING_BY_KEY.items() if not definition.secret]
+        runtime_fields = self.settings.__class__.model_fields
+        keys = [
+            key
+            for key, definition in GLOBAL_SETTING_BY_KEY.items()
+            if not definition.secret and key in runtime_fields
+        ]
         async with self.sessions() as session:
             rows = {
                 row.key: row.value

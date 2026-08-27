@@ -589,3 +589,105 @@ tbody tr:hover { background: var(--dm-soft); }
 @media (max-width: 399px) {
   .content { padding-inline: 12px; }
 }
+
+/* Site and page settings */
+.brand-mark img { width: 30px; height: 30px; border-radius: 9px; object-fit: contain; }
+.site-settings-workbench { display: grid; gap: 16px; width: min(100%, 900px); }
+.site-settings-section { overflow: hidden; border: 1px solid var(--dm-border); border-radius: 10px; background: var(--dm-surface); }
+.site-settings-section > header { padding: 16px 20px; border-bottom: 1px solid var(--dm-border); background: var(--dm-raised); }
+.site-settings-section h2 { margin: 0; color: var(--dm-text-soft); font-size: 15px; }
+.site-settings-workbench .admin-setting-preference { align-items: flex-start; margin: 0 20px; padding: 18px 0; }
+.site-settings-workbench .admin-setting-editor { width: min(100%, 560px); }
+.site-settings-workbench input, .site-settings-workbench textarea { width: 100%; border: 1px solid var(--dm-border-strong); border-radius: 7px; color: var(--dm-text); background: var(--dm-raised); outline: none; }
+.site-settings-workbench input { height: 40px; padding: 0 11px; }
+.site-settings-workbench textarea { min-height: 112px; padding: 10px 11px; resize: vertical; line-height: 1.55; }
+.site-settings-workbench input:focus, .site-settings-workbench textarea:focus { border-color: var(--dm-accent); box-shadow: 0 0 0 3px var(--dm-focus); }
+.site-settings-workbench .code-editor { min-height: 190px; tab-size: 2; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; }
+.editor-code, .editor-links { flex-direction: column; gap: 12px; }
+.editor-code > span, .editor-links > span, .editor-code .admin-setting-editor, .editor-links .admin-setting-editor { width: 100%; }
+.asset-preview { display: block; width: 72px; height: 72px; margin-top: 9px; padding: 7px; border: 1px solid var(--dm-border); border-radius: 9px; object-fit: contain; background: var(--dm-raised); }
+.footer-links-editor { display: grid; gap: 8px; }
+.footer-link-row { display: grid; grid-template-columns: minmax(90px, .6fr) minmax(160px, 1.4fr) 34px; gap: 7px; }
+.footer-link-row .icon-action { display: grid; place-items: center; border: 1px solid var(--dm-error-border); border-radius: 7px; color: var(--dm-danger); background: var(--dm-surface); }
+.add-link { justify-self: start; display: inline-flex; align-items: center; gap: 5px; padding: 5px 0; }
+.site-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px 18px; width: min(100%, 1080px); margin: 34px auto 0; padding: 20px 16px 4px; border-top: 1px solid var(--dm-border); color: var(--dm-muted-2); font-size: 12px; }
+.site-footer a { color: var(--dm-muted); text-decoration: none; }
+.site-footer a:hover { color: var(--dm-accent); }
+.site-footer-links, .site-footer-records { display: flex; flex-wrap: wrap; gap: 12px; }
+.site-footer-custom { flex-basis: 100%; text-align: center; }
+
+@media (max-width: 720px) {
+  .footer-link-row { grid-template-columns: 1fr 34px; }
+  .footer-link-row input:nth-child(2) { grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* System settings follows the established Picasso layout: a flat top bar and a
+   centered, two-column form.  The shared settings-route rules above remain for
+   personal settings. */
+.picasso-settings { font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.picasso-settings .settings-index { padding-top: 22px; background: var(--dm-raised); }
+.picasso-settings .settings-index-title { padding-bottom: 28px; }
+.picasso-settings .settings-route-main { padding: 0 24px 48px; }
+.picasso-settings-head { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; height: 64px; margin: 0 -24px; padding: 0 24px; border-bottom: 1px solid var(--dm-border); background: var(--dm-surface); }
+.picasso-settings-head h1 { margin: 0; color: var(--dm-text); font-size: 16px; font-weight: 600; line-height: 1.25; }
+.picasso-settings-head p { margin: 2px 0 0; color: var(--dm-muted); font-size: 12px; line-height: 1.25; }
+.picasso-settings-head .admin-settings-actions { flex-wrap: nowrap; }
+.picasso-settings-form { width: min(100%, 768px); margin: 24px auto 0; }
+.picasso-setting-section + .picasso-setting-section { margin-top: 32px; }
+.picasso-setting-section > header { margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid var(--dm-border); }
+.picasso-setting-section h2 { margin: 0; color: var(--dm-muted); font-size: 14px; font-weight: 500; line-height: 1.25; }
+.picasso-setting-list { display: grid; gap: 20px; }
+.picasso-setting-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; align-items: start; }
+.picasso-setting-copy { padding-top: 8px; }
+.picasso-setting-copy b { display: block; color: var(--dm-text-soft); font-size: 14px; font-weight: 500; line-height: 1.25; }
+.picasso-setting-copy small { display: block; margin-top: 2px; color: var(--dm-muted); font-size: 12px; line-height: 1.25; }
+.picasso-setting-editor { grid-column: span 2 / span 2; min-width: 0; }
+.picasso-setting-editor .stacked-editor { display: grid; gap: 8px; }
+.picasso-setting-editor input, .picasso-setting-editor textarea { box-sizing: border-box; width: 100%; border: 1px solid var(--dm-border-strong); border-radius: 8px; color: var(--dm-text); background: var(--dm-raised); outline: none; font-size: 14px; line-height: 20px; }
+.picasso-setting-editor input { padding: 8px 12px; }
+.picasso-setting-editor textarea { min-height: 98px; padding: 8px 12px; resize: vertical; }
+.picasso-setting-editor .code-editor { min-height: 98px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 14px; }
+.picasso-setting-editor input:focus, .picasso-setting-editor textarea:focus { border-color: var(--dm-accent); box-shadow: 0 0 0 3px var(--dm-focus); }
+.picasso-setting-editor .footer-links-editor { display: grid; gap: 8px; }
+.picasso-setting-editor .asset-preview { margin-top: 0; }
+.picasso-setting-row.editor-code, .picasso-setting-row.editor-links { padding-top: 4px; }
+
+@media (max-width: 767px) {
+  .picasso-settings .settings-route-main { padding: 0 16px 28px; }
+  .picasso-settings-head { min-height: 64px; margin: 0 -16px; padding: 0 16px; }
+  .picasso-settings-head p { display: none; }
+  .picasso-settings-form { width: 100%; margin-top: 24px; }
+  .picasso-setting-section + .picasso-setting-section { margin-top: 30px; }
+  .picasso-setting-row { grid-template-columns: 1fr; gap: 8px; }
+  .picasso-setting-copy { padding-top: 0; }
+  .picasso-settings-head .unsaved-indicator { display: none; }
+}
+
+/* Personal settings mirrors Picasso's ProfileView: one centered page, no
+   secondary navigation, section headings followed by three-column form rows. */
+.personal-settings-page { width: min(100%, 768px); margin: 0 auto; padding: 40px 0; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+.personal-settings-heading { margin-bottom: 24px; }
+.personal-settings-heading h1 { margin: 0; color: var(--dm-text); font-size: 20px; font-weight: 600; line-height: 28px; }
+.personal-settings-heading p { margin: 4px 0 0; color: var(--dm-muted); font-size: 14px; line-height: 20px; }
+.personal-settings-sections { display: grid; gap: 32px; }
+.personal-settings-section > h2 { margin: 0 0 16px; padding-bottom: 8px; border-bottom: 1px solid var(--dm-border); color: var(--dm-muted); font-size: 14px; font-weight: 500; line-height: 20px; }
+.personal-settings-list { display: grid; gap: 20px; }
+.personal-setting-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; align-items: start; }
+.personal-setting-copy { padding-top: 8px; }
+.personal-setting-copy b { display: block; color: var(--dm-text-soft); font-size: 14px; font-weight: 500; line-height: 20px; }
+.personal-setting-copy small { display: block; margin-top: 2px; color: var(--dm-muted); font-size: 12px; line-height: 16px; }
+.personal-setting-control { grid-column: span 2 / span 2; min-width: 0; }
+.personal-setting-control input, .personal-setting-control select { width: 100%; height: auto; min-height: 38px; margin: 0; padding: 8px 12px; border: 1px solid var(--dm-border-strong); border-radius: 8px; color: var(--dm-text); background: var(--dm-raised); outline: none; font-size: 14px; line-height: 20px; }
+.personal-setting-control input:focus, .personal-setting-control select:focus { border-color: var(--dm-accent); box-shadow: 0 0 0 3px var(--dm-focus); }
+.personal-setting-control input:read-only { color: var(--dm-muted); background: var(--dm-soft); cursor: not-allowed; }
+.personal-setting-control.switch-control { padding-top: 8px; }
+.personal-setting-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.personal-setting-actions > button { grid-column: 2 / 4; justify-self: end; }
+
+@media (max-width: 767px) {
+  .personal-settings-page { padding: 28px 0; }
+  .personal-setting-row { grid-template-columns: 1fr; gap: 6px; }
+  .personal-setting-copy { padding-top: 0; }
+  .personal-setting-control { grid-column: auto; }
+  .personal-setting-actions { display: flex; justify-content: flex-end; }
+}
