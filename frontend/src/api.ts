@@ -1,7 +1,63 @@
 import type { AdminCheckPage, AdminDomain, AdminSession, AdminUser, AuthResult, Check, Domain, GlobalSetting, NotificationDelivery, NotificationRule, NotificationRuleInput, NotificationRuleUpdate, Page, Settings, Task, Tokens, User } from "./types";
 
-type ApiErrorBody = { detail?: { code?: string; message?: string } | string; message?: string };
-export class ApiError extends Error { constructor(public status: number, message: string, public code?: string) { super(message); } }
+type ApiErrorDetail = { location?: string; message?: string; code?: string };
+type ApiErrorBody = { code?: string; message?: string; details?: ApiErrorDetail[]; request_id?: string };
+
+const errorMessages: Record<string, string> = {
+  account_banned: "账号已被禁用。",
+  configuration_encryption_unavailable: "服务器尚未配置设置加密密钥，无法保存密码设置。",
+  domain_already_managed: "该域名已在您的列表中。",
+  idempotency_conflict: "该操作与先前请求冲突，请刷新后重试。",
+  invalid_credentials: "用户名或密码不正确。",
+  invalid_domain: "域名格式不正确。",
+  invalid_token: "登录已失效，请重新登录。",
+  not_found: "未找到相关资源。",
+  password_mismatch: "当前密码不正确。",
+  password_reused: "新密码不能与当前密码相同。",
+  precondition_required: "记录已更新，请刷新后重试。",
+  refresh_token_replayed: "登录已失效，请重新登录。",
+  registration_disabled: "当前不允许注册新账号。",
+  subdomain_not_supported: "仅支持可注册域名，不支持子域名。",
+  username_taken: "该用户名已被使用。",
+  version_conflict: "记录已被更新，请刷新后重试。",
+};
+
+const validationMessages: Record<string, string> = {
+  "body.email": "邮箱格式不正确。",
+  "body.name": "域名格式不正确。",
+  "body.password": "密码长度需为 6 至 256 个字符。",
+  "body.new_password": "新密码长度需为 6 至 256 个字符。",
+  "body.reason": "封禁原因至少需 3 个字符。",
+  "body.username": "用户名格式不正确。",
+};
+
+const validationMessageTexts: Record<string, string> = {
+  "duplicate setting keys": "设置项不能重复。",
+  "email is required": "请输入邮箱地址。",
+  "no fields supplied": "请至少修改一项内容。",
+  "no settings supplied": "请至少修改一项设置。",
+  "setting value conflicts with the active runtime policy": "设置组合不符合当前运行规则。",
+  "setting value is invalid": "设置值无效。",
+  "settings conflict with the active runtime policy": "设置组合不符合当前运行规则。",
+};
+
+function messageForError(status: number, code?: string, message?: string, details: ApiErrorDetail[] = []) {
+  if (code && errorMessages[code]) return errorMessages[code];
+  if (code === "validation_error") {
+    const detailMessage = details.map((detail) => detail.location && validationMessages[detail.location]).find(Boolean);
+    return detailMessage || (message && validationMessageTexts[message]) || "输入内容不符合要求。";
+  }
+  if (status === 401) return "登录已失效，请重新登录。";
+  if (status === 403) return "您没有执行此操作的权限。";
+  if (status === 404) return "未找到相关资源。";
+  if (status === 429) return "请求过于频繁，请稍后再试。";
+  if (status >= 500) return "服务暂时不可用，请稍后再试。";
+  return message || "请求未完成。";
+}
+
+export class ApiError extends Error {
+  constructor(public status: number, message: string, public code?: string, public details: ApiErrorDetail[] = [], public requestId?: string) { super(message); }
+}
 
 class ApiClient {
   private tokens: Tokens | null = null;
@@ -16,7 +72,11 @@ class ApiClient {
     if (response.status === 401 && retry && path !== "/auth/token/refresh") {
       try { const refreshed = await this.refresh(); this.setTokens(refreshed); return this.request(path, init, false); } catch { this.setTokens(null); }
     }
-    if (!response.ok) { const body = await response.json().catch(() => ({})) as ApiErrorBody; const detail = typeof body.detail === "object" ? body.detail : undefined; throw new ApiError(response.status, detail?.code === "configuration_encryption_unavailable" ? "服务器尚未配置设置加密密钥，暂时无法保存密码设置。" : detail?.code === "version_conflict" ? "设置已被其他管理员修改，请刷新后重试。" : "操作未完成，请检查输入后重试。", detail?.code); }
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({})) as ApiErrorBody;
+      const details = Array.isArray(body.details) ? body.details : [];
+      throw new ApiError(response.status, messageForError(response.status, body.code, body.message, details), body.code, details, body.request_id);
+    }
     return { data: response.status === 204 ? undefined as T : await response.json() as T, etag: response.headers.get("ETag") };
   }
   private async refresh() {
