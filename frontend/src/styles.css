@@ -336,6 +336,8 @@ button, input { font: inherit; } button { border: 0; cursor: pointer; } button:d
 .admin-session-history .loading-state { min-height: 120px; }
 .admin-session-row > span { display: grid; align-items: start; gap: 3px; }
 .admin-session-row .action-button { align-self: center; }
+.admin-domain-toolbar { align-items: center; }
+.admin-domain-toolbar select { width: auto; min-width: 130px; margin: 0; }
 .admin-domains-table { min-width: 780px; }
 .mobile-admin-list { display: none; }
 

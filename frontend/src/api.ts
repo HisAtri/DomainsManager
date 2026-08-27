@@ -122,7 +122,11 @@ class ApiClient {
   adminSessions(id: string) { return this.request<Page<AdminSession>>(`/admin/users/${id}/sessions`).then((r) => r.data); }
   revokeAdminSession(userId: string, sessionId: string) { return this.request<AdminSession>(`/admin/users/${userId}/sessions/${sessionId}/revoke`, { method: "POST" }).then((r) => r.data); }
   adminDomains(params: Record<string, string | number | undefined> = {}) { return this.request<Page<AdminDomain>>(`/admin/domains?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
-  adminChecks() { return this.request<AdminCheckPage>("/admin/domain-checks").then((r) => r.data); }
+  adminDomain(id: string) { return this.request<AdminDomain>(`/admin/domains/${id}`).then((r) => r.data); }
+  updateAdminDomain(id: string, version: number, values: Partial<Pick<AdminDomain, "monitor_enabled" | "renewal_mode" | "notes">>) { return this.request<AdminDomain>(`/admin/domains/${id}`, { method: "PATCH", headers: { "If-Match": `"${version}"` }, body: JSON.stringify(values) }).then((r) => r.data); }
+  deleteAdminDomain(id: string) { return this.request<void>(`/admin/domains/${id}`, { method: "DELETE", headers: { "X-Confirm-Action": "soft-delete" } }); }
+  refreshAdminDomain(id: string) { return this.request<Task>(`/admin/domains/${id}/refresh`, { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() } }).then((r) => r.data); }
+  adminChecks(params: Record<string, string | number | undefined> = {}) { return this.request<AdminCheckPage>(`/admin/domain-checks?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([key, value]) => [key, String(value)])).toString()}`).then((r) => r.data); }
   globalSettings() { return this.request<GlobalSetting[]>("/admin/settings").then((r) => r.data); }
   updateGlobalSetting(key: string, value: unknown, version: number) { return this.request<GlobalSetting>(`/admin/settings/${key}`, { method: "PUT", headers: { "If-Match": String(version) }, body: JSON.stringify({ value }) }).then((r) => r.data); }
   updateGlobalSettings(settings: { key: string; value: unknown; version: number }[]) { return this.request<GlobalSetting[]>("/admin/settings", { method: "PUT", body: JSON.stringify({ settings }) }).then((r) => r.data); }
