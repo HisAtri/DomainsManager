@@ -1,7 +1,7 @@
 import asyncio
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from domainsmanager_api.api.admin import revoke_user_session, set_ban_state
 from domainsmanager_application.services import AuthContext
@@ -87,6 +87,46 @@ async def test_admin_state_changes_are_concurrently_idempotent() -> None:
             "admin.user_banned": 1,
             "admin.user_unbanned": 1,
         }
+    finally:
+        await engine.dispose()
+        await clean_project_schema(config)
+
+
+@pytest.mark.asyncio
+@pytest.mark.postgres
+@pytest.mark.integration
+async def test_admin_list_queries_use_dedicated_indexes() -> None:
+    config = postgres_database()
+    await clean_project_schema(config)
+    await run_migrations(config)
+    engine, _ = make_auth_service(config)
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(text("SET LOCAL enable_seqscan = off"))
+            plans = []
+            for statement in (
+                (
+                    "EXPLAIN SELECT id FROM managed_domain "
+                    "WHERE deleted_at IS NULL "
+                    "ORDER BY created_at DESC, id DESC LIMIT 20"
+                ),
+                (
+                    "EXPLAIN SELECT id FROM managed_domain "
+                    "WHERE user_id = '00000000-0000-0000-0000-000000000001' "
+                    "AND deleted_at IS NULL "
+                    "ORDER BY created_at DESC, id DESC LIMIT 20"
+                ),
+                (
+                    "EXPLAIN SELECT id FROM domain_check "
+                    "ORDER BY checked_at DESC, id DESC LIMIT 20"
+                ),
+            ):
+                plans.append(
+                    "\n".join((await connection.execute(text(statement))).scalars())
+                )
+        assert "ix_managed_domain_admin_list" in plans[0]
+        assert "ix_managed_domain_admin_owner_created" in plans[1]
+        assert "ix_domain_check_admin_checked" in plans[2]
     finally:
         await engine.dispose()
         await clean_project_schema(config)

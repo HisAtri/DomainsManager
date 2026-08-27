@@ -192,6 +192,8 @@ erDiagram
 - 单用户模式可对 `name_ascii` 建唯一约束；兼容多用户时使用
   `UNIQUE(user_id, name_ascii)`；
 - 为 `expiration_at`、`monitor_enabled`、`last_check_at` 建索引，支持到期扫描和任务调度；
+- 管理员全局列表使用 `(deleted_at, created_at, id)`，按所有者查询使用
+  `(user_id, deleted_at, created_at, id)`，保证默认分页和所有者筛选具有稳定索引路径；
 - `name_ascii` 只保存小写 ASCII，避免数据库 collation 和 Unicode 等价性影响唯一约束；
 - `statuses` 和 `nameservers` 写入前去重并排序，减少无意义的变化记录。
 
@@ -251,7 +253,8 @@ PSL 包含类似 `*.ck` 与 `!www.ck` 的规则，所以不能只保存一个无
 | `error_message` | Text | 是 | 脱敏后的诊断信息 |
 | `duration_ms` | Integer | 是 | 查询耗时 |
 
-建议建立 `(domain_id, checked_at)` 复合索引。历史数据可以按保留策略清理或降采样，
+建议建立 `(domain_id, checked_at)` 复合索引，并为管理员全局时间倒序列表建立
+`(checked_at, id)` 索引。历史数据可以按保留策略清理或降采样，
 但通知和审计所引用的记录不得提前删除。
 
 ### 5.5 `raw_lookup_response`

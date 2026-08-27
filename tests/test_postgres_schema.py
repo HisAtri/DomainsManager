@@ -20,7 +20,7 @@ from tests.postgres import (
 
 NOW = datetime(2026, 1, 1, 12, 30, 15, 123456, tzinfo=UTC)
 OLD_REVISION = "6f0aad6e5b27"
-HEAD_REVISION = "f2a3b4c5d6e7"
+HEAD_REVISION = "b7c6d5e4f3a2"
 
 
 @pytest.mark.asyncio

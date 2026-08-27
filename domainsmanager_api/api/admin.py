@@ -490,11 +490,11 @@ async def list_users(
     )
     sort_columns = {
         "created_at": (AppUser.created_at.asc(), AppUser.id),
-        "-created_at": (AppUser.created_at.desc(), AppUser.id),
+        "-created_at": (AppUser.created_at.desc(), AppUser.id.desc()),
         "username": (AppUser.username_normalized.asc(), AppUser.id),
-        "-username": (AppUser.username_normalized.desc(), AppUser.id),
+        "-username": (AppUser.username_normalized.desc(), AppUser.id.desc()),
         "last_login_at": (AppUser.last_login_at.asc(), AppUser.id),
-        "-last_login_at": (AppUser.last_login_at.desc(), AppUser.id),
+        "-last_login_at": (AppUser.last_login_at.desc(), AppUser.id.desc()),
     }
     rows = (
         await session.execute(
@@ -893,7 +893,7 @@ async def list_domain_checks_as_admin(
     rows = (
         (
             await session.execute(
-                base.order_by(DomainCheck.checked_at.desc(), DomainCheck.id)
+                base.order_by(DomainCheck.checked_at.desc(), DomainCheck.id.desc())
                 .offset((page - 1) * page_size)
                 .limit(page_size)
             )
@@ -983,13 +983,16 @@ async def list_domains_as_admin(
     )
     sort_columns = {
         "created_at": (ManagedDomain.created_at.asc(), ManagedDomain.id),
-        "-created_at": (ManagedDomain.created_at.desc(), ManagedDomain.id),
+        "-created_at": (ManagedDomain.created_at.desc(), ManagedDomain.id.desc()),
         "name": (ManagedDomain.name_ascii.asc(), ManagedDomain.id),
-        "-name": (ManagedDomain.name_ascii.desc(), ManagedDomain.id),
+        "-name": (ManagedDomain.name_ascii.desc(), ManagedDomain.id.desc()),
         "expires_at": (ManagedDomain.expires_at.asc(), ManagedDomain.id),
-        "-expires_at": (ManagedDomain.expires_at.desc(), ManagedDomain.id),
+        "-expires_at": (ManagedDomain.expires_at.desc(), ManagedDomain.id.desc()),
         "last_check_at": (ManagedDomain.last_check_at.asc(), ManagedDomain.id),
-        "-last_check_at": (ManagedDomain.last_check_at.desc(), ManagedDomain.id),
+        "-last_check_at": (
+            ManagedDomain.last_check_at.desc(),
+            ManagedDomain.id.desc(),
+        ),
     }
     rows = (
         await session.execute(

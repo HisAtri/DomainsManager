@@ -155,6 +155,19 @@ class ManagedDomain(TimestampMixin, Base):
             "name_ascii",
             "id",
         ),
+        Index(
+            "ix_managed_domain_admin_list",
+            "deleted_at",
+            "created_at",
+            "id",
+        ),
+        Index(
+            "ix_managed_domain_admin_owner_created",
+            "user_id",
+            "deleted_at",
+            "created_at",
+            "id",
+        ),
         CheckConstraint("version >= 1", name="managed_domain_version_positive"),
     )
 
@@ -385,6 +398,7 @@ class DomainCheck(Base):
     __table_args__ = (
         Index("ix_domain_check_domain_checked", "managed_domain_id", "checked_at"),
         Index("ix_domain_check_outcome_checked", "outcome", "checked_at"),
+        Index("ix_domain_check_admin_checked", "checked_at", "id"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
