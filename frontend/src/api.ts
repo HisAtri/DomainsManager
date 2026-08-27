@@ -115,6 +115,8 @@ class ApiClient {
   deleteNotificationRule(id: string) { return this.request<void>(`/notification-rules/${id}`, { method: "DELETE" }); }
   notificationDeliveries(limit = 50) { return this.request<NotificationDelivery[]>(`/notification-rules/deliveries?limit=${limit}`).then((r) => r.data); }
   adminUsers(params: Record<string, string | number | undefined> = {}) { return this.request<Page<AdminUser>>(`/admin/users?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
+  adminUser(id: string) { return this.request<AdminUser>(`/admin/users/${id}`).then((r) => r.data); }
+  updateAdminUser(id: string, email: string | null) { return this.request<AdminUser>(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify({ email }) }).then((r) => r.data); }
   banUser(id: string, reason: string) { return this.request<AdminUser>(`/admin/users/${id}/ban`, { method: "POST", body: JSON.stringify({ reason }) }).then((r) => r.data); }
   unbanUser(id: string) { return this.request<AdminUser>(`/admin/users/${id}/unban`, { method: "POST" }).then((r) => r.data); }
   adminSessions(id: string) { return this.request<Page<AdminSession>>(`/admin/users/${id}/sessions`).then((r) => r.data); }

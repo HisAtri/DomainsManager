@@ -329,6 +329,13 @@ button, input { font: inherit; } button { border: 0; cursor: pointer; } button:d
 .notification-table th:nth-child(1) { width: 13%; }.notification-table th:nth-child(2) { width: 11%; }.notification-table th:nth-child(3) { width: 12%; }.notification-table th:nth-child(4) { width: 9%; }.notification-table th:nth-child(5) { width: 16%; }.notification-table th:nth-child(6) { width: 14%; }.notification-table th:nth-child(7) { width: 11%; }.notification-table th:nth-child(8) { width: 14%; }
 .notification-actions { flex-wrap: nowrap; }
 .admin-users-table { min-width: 720px; }
+.admin-user-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.admin-user-profile { display: flex; align-items: end; gap: 12px; padding: 18px 0; border-top: 1px solid var(--dm-border, #eaecf0); border-bottom: 1px solid var(--dm-border, #eaecf0); }
+.admin-user-profile .field-label { flex: 1; }
+.admin-user-profile .primary { min-height: 40px; }
+.admin-session-history .loading-state { min-height: 120px; }
+.admin-session-row > span { display: grid; align-items: start; gap: 3px; }
+.admin-session-row .action-button { align-self: center; }
 .admin-domains-table { min-width: 780px; }
 .mobile-admin-list { display: none; }
 
