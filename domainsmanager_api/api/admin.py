@@ -22,6 +22,7 @@ from domainsmanager_api.global_setting_registry import (
     GLOBAL_SETTING_BY_KEY,
     GLOBAL_SETTINGS,
 )
+from domainsmanager_api.operations import collect_operational_metrics
 from domainsmanager_api.schemas.admin import (
     AdminSessionPageResponse,
     AdminSessionResponse,
@@ -63,10 +64,8 @@ from domainsmanager_persistence.models import (
     AuthRefreshToken,
     AuthSession,
     DomainCheck,
-    DomainRefreshTask,
     GlobalSetting,
     ManagedDomain,
-    NotificationOutbox,
     SecurityAuditEvent,
 )
 
@@ -969,65 +968,21 @@ async def get_operational_metrics(
     _: AdminUserDependency,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> OperationalMetricsResponse:
-    now = datetime.now(UTC)
-
-    async def count(*conditions) -> int:
-        return (
-            await session.scalar(
-                select(func.count()).select_from(DomainRefreshTask).where(*conditions)
-            )
-            or 0
-        )
-
-    queued = await count(DomainRefreshTask.status == "queued")
-    running = await count(DomainRefreshTask.status == "running")
-    expired_task_leases = await count(
-        DomainRefreshTask.status == "running",
-        DomainRefreshTask.lease_until.is_not(None),
-        DomainRefreshTask.lease_until <= now,
-    )
-
-    async def outbox_count(*conditions) -> int:
-        return (
-            await session.scalar(
-                select(func.count()).select_from(NotificationOutbox).where(*conditions)
-            )
-            or 0
-        )
-
-    pending = await outbox_count(NotificationOutbox.status == "pending")
-    outbox_running = await outbox_count(NotificationOutbox.status == "running")
-    dead_letter = await outbox_count(NotificationOutbox.status == "dead_letter")
-    expired_outbox_leases = await outbox_count(
-        NotificationOutbox.status == "running",
-        NotificationOutbox.lease_until.is_not(None),
-        NotificationOutbox.lease_until <= now,
-    )
-    overdue_domains = (
-        await session.scalar(
-            select(func.count())
-            .select_from(ManagedDomain)
-            .where(
-                ManagedDomain.monitor_enabled.is_(True),
-                ManagedDomain.deleted_at.is_(None),
-                ManagedDomain.next_check_at.is_not(None),
-                ManagedDomain.next_check_at <= now,
-            )
-        )
-        or 0
-    )
+    metrics = await collect_operational_metrics(session)
     return OperationalMetricsResponse(
-        generated_at=now,
+        generated_at=metrics.generated_at,
         refresh_tasks=RefreshTaskMetricsResponse(
-            queued=queued, running=running, expired_leases=expired_task_leases
+            queued=metrics.refresh_tasks_queued,
+            running=metrics.refresh_tasks_running,
+            expired_leases=metrics.refresh_tasks_expired_leases,
         ),
         notification_outbox=NotificationOutboxMetricsResponse(
-            pending=pending,
-            running=outbox_running,
-            dead_letter=dead_letter,
-            expired_leases=expired_outbox_leases,
+            pending=metrics.notification_outbox_pending,
+            running=metrics.notification_outbox_running,
+            dead_letter=metrics.notification_outbox_dead_letter,
+            expired_leases=metrics.notification_outbox_expired_leases,
         ),
-        overdue_monitored_domains=overdue_domains,
+        overdue_monitored_domains=metrics.overdue_monitored_domains,
     )
 
 

@@ -18,3 +18,7 @@ API 为每个 HTTP 请求写入一条紧凑 JSON 日志，logger 名称为 `doma
 `GET /api/v1/admin/operations/metrics` 仅对管理员开放，返回刷新任务、通知 Outbox、过期租约和到期未执行监控的聚合数量。响应不包含用户、域名、凭据或错误原文；它作为告警规则和管理端状态面板的共同数据源。
 
 前端“运行状态”页面按需读取该快照并提供手动刷新，不启用浏览器端轮询；应由部署侧的监控采集或告警进程负责持续检查。
+
+## 运维监控命令
+
+`domainsmanager-monitor` 读取同一快照并向标准错误输出紧凑 JSON：每次均有一条 `operational_metrics`，死信、过期租约或逾期监控数量非零时另有对应的 `operational_alert`。事件仅包含聚合数量和生成时间，不含域名、用户、凭据或错误原文。该命令不执行迁移，适合由 cron、systemd timer 或外部采集器定期调用。
