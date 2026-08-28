@@ -34,6 +34,7 @@ def test_public_site_config_uses_defaults_and_etag(tmp_path: Path) -> None:
         response = client.get("/api/v1/site/config")
         assert response.status_code == 200
         assert response.json()["site_name"] == "DomainsManager"
+        assert response.json()["registration_enabled"] is False
         assert response.json()["site_logo"] == "/default.svg"
         assert response.json()["footer_links"] == []
         assert response.headers["etag"]
@@ -73,8 +74,26 @@ def test_admin_updates_site_settings_and_public_config(tmp_path: Path) -> None:
 
         public = client.get("/api/v1/site/config")
         assert public.json()["site_name"] == "我的域名"
+        assert public.json()["registration_enabled"] is False
         assert public.json()["footer_links"] == [{"label": "项目主页", "url": "https://example.com"}]
         assert public.json()["custom_css"] == ".brand { color: red; }"
+
+        versions = {item["key"]: item["version"] for item in updated.json()}
+        enabled = client.put(
+            "/api/v1/admin/settings",
+            headers=headers,
+            json={
+                "settings": [
+                    {
+                        "key": "registration_enabled",
+                        "value": True,
+                        "version": versions["registration_enabled"],
+                    }
+                ]
+            },
+        )
+        assert enabled.status_code == 200
+        assert client.get("/api/v1/site/config").json()["registration_enabled"] is True
 
 
 @pytest.mark.api

@@ -5,6 +5,7 @@ import type { PublicSiteConfig } from "./types";
 
 export const defaultSiteConfig: PublicSiteConfig = {
   revision: "default",
+  registration_enabled: false,
   site_name: "DomainsManager",
   site_logo: "/default.svg",
   site_favicon: "/default.svg",

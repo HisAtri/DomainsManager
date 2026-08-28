@@ -54,8 +54,12 @@ class CheckStatisticsResponse(StrictModel):
     count_by_outcome: dict[str, int]
 
 
+class AdminDomainCheckResponse(DomainCheckResponse):
+    domain_name: str
+
+
 class AdminDomainCheckPageResponse(StrictModel):
-    items: list[DomainCheckResponse]
+    items: list[AdminDomainCheckResponse]
     page: int = Field(ge=1)
     page_size: int = Field(ge=1, le=100)
     total: int = Field(ge=0)
@@ -86,8 +90,10 @@ class SecurityAuditEventResponse(StrictModel):
     id: UUID
     event_type: str
     actor_user_id: UUID | None
+    actor_username: str | None
     target_type: str | None
     target_id: UUID | None
+    target_name: str | None
     occurred_at: datetime
 
 

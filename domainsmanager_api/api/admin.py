@@ -33,6 +33,7 @@ from domainsmanager_api.schemas.admin import (
 )
 from domainsmanager_api.schemas.admin_domains import (
     AdminDomainCheckPageResponse,
+    AdminDomainCheckResponse,
     AdminDomainPageResponse,
     AdminManagedDomainResponse,
     AdminUpdateDomainRequest,
@@ -54,7 +55,6 @@ from domainsmanager_api.schemas.refresh_policy import (
     RefreshPolicyResponse,
 )
 from domainsmanager_api.schemas.tasks import (
-    DomainCheckResponse,
     RefreshTaskResponse,
     TaskErrorResponse,
     TaskResultResponse,
@@ -943,10 +943,13 @@ def admin_domain_response(
     )
 
 
-def admin_check_response(check: DomainCheck) -> DomainCheckResponse:
-    return DomainCheckResponse(
+def admin_check_response(check: DomainCheck, domain_name: str | None) -> AdminDomainCheckResponse:
+    snapshot = check.snapshot if isinstance(check.snapshot, dict) else None
+    snapshot_domain = snapshot.get("domain") if snapshot else None
+    return AdminDomainCheckResponse(
         id=check.id,
         domain_id=check.managed_domain_id,
+        domain_name=domain_name or (snapshot_domain if isinstance(snapshot_domain, str) else "") or "",
         checked_at=check.checked_at,
         duration_ms=check.duration_ms,
         outcome=check.outcome,
@@ -1016,24 +1019,74 @@ async def list_security_audit_events(
         select(func.count()).select_from(SecurityAuditEvent).where(*filters)
     )
     events = (
-        await session.execute(
-            select(SecurityAuditEvent)
-            .where(*filters)
-            .order_by(
-                SecurityAuditEvent.occurred_at.desc(), SecurityAuditEvent.id.desc()
+        (
+            await session.execute(
+                select(SecurityAuditEvent)
+                .where(*filters)
+                .order_by(
+                    SecurityAuditEvent.occurred_at.desc(), SecurityAuditEvent.id.desc()
+                )
+                .offset((page - 1) * page_size)
+                .limit(page_size)
             )
-            .offset((page - 1) * page_size)
-            .limit(page_size)
         )
-    ).scalars()
+        .scalars()
+        .all()
+    )
+    actor_ids = {event.actor_user_id for event in events if event.actor_user_id}
+    user_ids = {
+        event.target_id
+        for event in events
+        if event.target_type == "user" and event.target_id
+    }
+    domain_ids = {
+        event.target_id
+        for event in events
+        if event.target_type == "domain" and event.target_id
+    }
+    user_lookup_ids = actor_ids | user_ids
+    usernames = {
+        user.id: user.username
+        for user in (
+            (
+                await session.execute(
+                    select(AppUser).where(AppUser.id.in_(user_lookup_ids))
+                )
+            ).scalars()
+            if user_lookup_ids
+            else []
+        )
+    }
+    domain_names = {
+        domain.id: domain.name_unicode
+        for domain in (
+            (
+                await session.execute(
+                    select(ManagedDomain).where(ManagedDomain.id.in_(domain_ids))
+                )
+            ).scalars()
+            if domain_ids
+            else []
+        )
+    }
     return SecurityAuditEventPageResponse(
         items=[
             SecurityAuditEventResponse(
                 id=event.id,
                 event_type=event.event_type,
                 actor_user_id=event.actor_user_id,
+                actor_username=(
+                    usernames.get(event.actor_user_id) if event.actor_user_id else None
+                ),
                 target_type=event.target_type,
                 target_id=event.target_id,
+                target_name=(
+                    usernames.get(event.target_id)
+                    if event.target_type == "user" and event.target_id
+                    else domain_names.get(event.target_id)
+                    if event.target_type == "domain" and event.target_id
+                    else None
+                ),
                 occurred_at=event.occurred_at,
             )
             for event in events
@@ -1084,12 +1137,18 @@ async def list_domain_checks_as_admin(
         filters.append(DomainCheck.checked_at >= checked_from)
     if checked_to is not None:
         filters.append(DomainCheck.checked_at <= checked_to)
+    domain_join = ManagedDomain.id == DomainCheck.managed_domain_id
     base = (
-        select(DomainCheck)
-        .join(ManagedDomain, ManagedDomain.id == DomainCheck.managed_domain_id)
+        select(DomainCheck, ManagedDomain.name_unicode.label("domain_name"))
+        .outerjoin(ManagedDomain, domain_join)
         .where(*filters)
     )
-    total = await session.scalar(select(func.count()).select_from(base.subquery()))
+    total = await session.scalar(select(func.count()).select_from(
+        select(DomainCheck.id)
+        .outerjoin(ManagedDomain, domain_join)
+        .where(*filters)
+        .subquery()
+    ))
     rows = (
         (
             await session.execute(
@@ -1098,19 +1157,21 @@ async def list_domain_checks_as_admin(
                 .limit(page_size)
             )
         )
-        .scalars()
         .all()
     )
     grouped = (
         await session.execute(
             select(DomainCheck.outcome, func.count())
-            .join(ManagedDomain, ManagedDomain.id == DomainCheck.managed_domain_id)
+            .outerjoin(ManagedDomain, domain_join)
             .where(*filters)
             .group_by(DomainCheck.outcome)
         )
     ).all()
     return AdminDomainCheckPageResponse(
-        items=[admin_check_response(row) for row in rows],
+        items=[
+            admin_check_response(row[0], row.domain_name)
+            for row in rows
+        ],
         page=page,
         page_size=page_size,
         total=total or 0,

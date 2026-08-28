@@ -110,6 +110,8 @@ async def test_admin_security_audit_events_are_filterable_and_sanitized(
         body = response.json()
         assert body["total"] == 1
         assert body["items"][0]["event_type"] == "admin.user_banned"
+        assert body["items"][0]["actor_username"] == "admin"
+        assert body["items"][0]["actor_user_id"] == str(admin_id)
         assert "event_metadata" not in body["items"][0]
         assert "ip_hash" not in body["items"][0]
         assert "request_id" not in body["items"][0]
@@ -313,8 +315,11 @@ async def test_admin_list_filters_and_stable_sorting(tmp_path: Path) -> None:
                         id=uuid4(),
                         managed_domain_id=zeta_id,
                         checked_at=checked_early,
-                        outcome="not_found",
+                        outcome="unsupported",
+                        error_code="unsupported",
+                        error_message="TLD is not supported",
                         protocol="whois",
+                        snapshot=None,
                         changed_fields=[],
                         is_stale=False,
                         created_at=checked_early,
@@ -363,4 +368,15 @@ async def test_admin_list_filters_and_stable_sorting(tmp_path: Path) -> None:
         ).json()
         assert checks["total"] == 1
         assert checks["items"][0]["domain_id"] == domains["alpha.com"]["id"]
+        assert checks["items"][0]["domain_name"] == "alpha.com"
         assert checks["statistics"]["count_by_outcome"] == {"success": 1}
+
+        failed = client.get(
+            "/api/v1/admin/domain-checks?outcome=unsupported",
+            headers=admin,
+        ).json()
+        assert failed["total"] == 1
+        assert failed["items"][0]["domain_id"] == domains["zeta.net"]["id"]
+        assert failed["items"][0]["domain_name"] == "zeta.net"
+        assert failed["items"][0]["snapshot"] is None
+        assert failed["items"][0]["error_code"] == "unsupported"

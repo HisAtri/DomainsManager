@@ -1547,9 +1547,10 @@ components:
     PublicSiteConfig:
       type: object
       additionalProperties: false
-      required: [revision, site_name, site_logo, site_favicon, footer_links, footer_copyright, icp_number, police_record_number, custom_css, custom_javascript, head_html, body_end_html, analytics_code]
+      required: [revision, registration_enabled, site_name, site_logo, site_favicon, footer_links, footer_copyright, icp_number, police_record_number, custom_css, custom_javascript, head_html, body_end_html, analytics_code]
       properties:
         revision: { type: string }
+        registration_enabled: { type: boolean }
         site_name: { type: string }
         site_logo: { type: string }
         site_favicon: { type: string }
@@ -1651,12 +1652,20 @@ components:
         count_by_outcome:
           type: object
           additionalProperties: { type: integer, minimum: 0 }
+    AdminDomainCheck:
+      allOf:
+        - $ref: '#/components/schemas/DomainCheck'
+        - type: object
+          additionalProperties: false
+          required: [domain_name]
+          properties:
+            domain_name: { type: string }
     AdminDomainCheckPage:
       type: object
       additionalProperties: false
       required: [items, page, page_size, total, statistics]
       properties:
-        items: { type: array, items: { $ref: '#/components/schemas/DomainCheck' } }
+        items: { type: array, items: { $ref: '#/components/schemas/AdminDomainCheck' } }
         page: { type: integer, minimum: 1 }
         page_size: { type: integer, minimum: 1, maximum: 100 }
         total: { type: integer, minimum: 0 }
@@ -1690,13 +1699,15 @@ components:
     SecurityAuditEvent:
       type: object
       additionalProperties: false
-      required: [id, event_type, actor_user_id, target_type, target_id, occurred_at]
+      required: [id, event_type, actor_user_id, actor_username, target_type, target_id, target_name, occurred_at]
       properties:
         id: { type: string, format: uuid }
         event_type: { type: string }
         actor_user_id: { type: string, format: uuid, nullable: true }
+        actor_username: { type: string, nullable: true }
         target_type: { type: string, nullable: true }
         target_id: { type: string, format: uuid, nullable: true }
+        target_name: { type: string, nullable: true }
         occurred_at: { type: string, format: date-time }
     SecurityAuditEventPage:
       type: object

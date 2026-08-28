@@ -12,6 +12,7 @@ class FooterLink(StrictModel):
 
 class PublicSiteConfig(StrictModel):
     revision: str
+    registration_enabled: bool
     site_name: str
     site_logo: str
     site_favicon: str
