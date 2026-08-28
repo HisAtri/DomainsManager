@@ -50,6 +50,73 @@ def login(client: TestClient, username: str) -> dict[str, str]:
 
 @pytest.mark.asyncio
 @pytest.mark.api
+async def test_admin_security_audit_events_are_filterable_and_sanitized(
+    tmp_path: Path,
+) -> None:
+    client = await make_client(tmp_path)
+    with client:
+        admin = login(client, "admin")
+        member_response = client.post(
+            "/api/v1/auth/register",
+            json={"username": "audit-member", "password": "123456"},
+        )
+        member = {
+            "Authorization": f"Bearer {member_response.json()['tokens']['access_token']}"
+        }
+        admin_id = UUID(client.get("/api/v1/auth/me", headers=admin).json()["id"])
+        now = datetime(2026, 8, 28, tzinfo=UTC)
+        engine = create_engine(sqlite_database(tmp_path / "admin-api.db"))
+        try:
+            async with create_session_factory(engine).begin() as session:
+                session.add_all(
+                    [
+                        SecurityAuditEvent(
+                            id=uuid4(),
+                            actor_user_id=admin_id,
+                            event_type="admin.user_banned",
+                            target_type="user",
+                            target_id=uuid4(),
+                            request_id="request-secret",
+                            ip_hash="ip-secret",
+                            event_metadata={"secret": "do-not-return"},
+                            occurred_at=now,
+                        ),
+                        SecurityAuditEvent(
+                            id=uuid4(),
+                            actor_user_id=admin_id,
+                            event_type="admin.user_unbanned",
+                            target_type="user",
+                            target_id=uuid4(),
+                            event_metadata={},
+                            occurred_at=now.replace(day=27),
+                        ),
+                    ]
+                )
+        finally:
+            await engine.dispose()
+
+        assert (
+            client.get(
+                "/api/v1/admin/security-audit-events", headers=member
+            ).status_code
+            == 403
+        )
+        response = client.get(
+            "/api/v1/admin/security-audit-events",
+            params={"event_type": "admin.user_banned", "actor_user_id": str(admin_id)},
+            headers=admin,
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["total"] == 1
+        assert body["items"][0]["event_type"] == "admin.user_banned"
+        assert "event_metadata" not in body["items"][0]
+        assert "ip_hash" not in body["items"][0]
+        assert "request_id" not in body["items"][0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.api
 async def test_admin_user_and_domain_access(tmp_path: Path) -> None:
     client = await make_client(tmp_path)
     with client:
@@ -102,7 +169,10 @@ async def test_admin_user_and_domain_access(tmp_path: Path) -> None:
             "total": 0,
             "statistics": {"count_by_outcome": {}},
         }
-        assert client.get("/api/v1/admin/operations/metrics", headers=member).status_code == 403
+        assert (
+            client.get("/api/v1/admin/operations/metrics", headers=member).status_code
+            == 403
+        )
         metrics = client.get("/api/v1/admin/operations/metrics", headers=admin)
         assert metrics.status_code == 200
         assert metrics.json()["refresh_tasks"] == {

@@ -40,6 +40,8 @@ from domainsmanager_api.schemas.admin_domains import (
     NotificationOutboxMetricsResponse,
     OperationalMetricsResponse,
     RefreshTaskMetricsResponse,
+    SecurityAuditEventPageResponse,
+    SecurityAuditEventResponse,
     UserReferenceResponse,
 )
 from domainsmanager_api.schemas.global_settings import (
@@ -983,6 +985,62 @@ async def get_operational_metrics(
             expired_leases=metrics.notification_outbox_expired_leases,
         ),
         overdue_monitored_domains=metrics.overdue_monitored_domains,
+    )
+
+
+@router.get(
+    "/security-audit-events",
+    response_model=SecurityAuditEventPageResponse,
+    operation_id="listSecurityAuditEvents",
+)
+async def list_security_audit_events(
+    _: AdminUserDependency,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=100)] = 20,
+    event_type: Annotated[str | None, Query(min_length=1, max_length=64)] = None,
+    actor_user_id: UUID | None = None,
+    occurred_from: datetime | None = None,
+    occurred_to: datetime | None = None,
+) -> SecurityAuditEventPageResponse:
+    filters = []
+    if event_type:
+        filters.append(SecurityAuditEvent.event_type == event_type)
+    if actor_user_id:
+        filters.append(SecurityAuditEvent.actor_user_id == actor_user_id)
+    if occurred_from:
+        filters.append(SecurityAuditEvent.occurred_at >= occurred_from)
+    if occurred_to:
+        filters.append(SecurityAuditEvent.occurred_at <= occurred_to)
+    total = await session.scalar(
+        select(func.count()).select_from(SecurityAuditEvent).where(*filters)
+    )
+    events = (
+        await session.execute(
+            select(SecurityAuditEvent)
+            .where(*filters)
+            .order_by(
+                SecurityAuditEvent.occurred_at.desc(), SecurityAuditEvent.id.desc()
+            )
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    ).scalars()
+    return SecurityAuditEventPageResponse(
+        items=[
+            SecurityAuditEventResponse(
+                id=event.id,
+                event_type=event.event_type,
+                actor_user_id=event.actor_user_id,
+                target_type=event.target_type,
+                target_id=event.target_id,
+                occurred_at=event.occurred_at,
+            )
+            for event in events
+        ],
+        page=page,
+        page_size=page_size,
+        total=total or 0,
     )
 
 

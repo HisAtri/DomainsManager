@@ -80,3 +80,19 @@ class OperationalMetricsResponse(StrictModel):
     refresh_tasks: RefreshTaskMetricsResponse
     notification_outbox: NotificationOutboxMetricsResponse
     overdue_monitored_domains: int = Field(ge=0)
+
+
+class SecurityAuditEventResponse(StrictModel):
+    id: UUID
+    event_type: str
+    actor_user_id: UUID | None
+    target_type: str | None
+    target_id: UUID | None
+    occurred_at: datetime
+
+
+class SecurityAuditEventPageResponse(StrictModel):
+    items: list[SecurityAuditEventResponse]
+    page: int = Field(ge=1)
+    page_size: int = Field(ge=1, le=100)
+    total: int = Field(ge=0)

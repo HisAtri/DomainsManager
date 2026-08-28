@@ -22,3 +22,7 @@ API 为每个 HTTP 请求写入一条紧凑 JSON 日志，logger 名称为 `doma
 ## 运维监控命令
 
 `domainsmanager-monitor` 读取同一快照并向标准错误输出紧凑 JSON：每次均有一条 `operational_metrics`，死信、过期租约或逾期监控数量非零时另有对应的 `operational_alert`。事件仅包含聚合数量和生成时间，不含域名、用户、凭据或错误原文。该命令不执行迁移，适合由 cron、systemd timer 或外部采集器定期调用。
+
+## 安全审计查询
+
+管理员可通过 `GET /api/v1/admin/security-audit-events` 按事件类型、操作者和发生时间筛选审计记录。响应仅提供事件标识、事件类型、操作者/目标标识及发生时间；审计元数据、IP 哈希和请求 ID 不通过该接口返回。

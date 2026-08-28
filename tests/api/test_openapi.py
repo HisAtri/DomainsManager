@@ -100,7 +100,9 @@ def test_public_site_config_operation_matches_contract() -> None:
             refresh_token_pepper="y",
         )
     )
-    assert app.openapi()["paths"]["/api/v1/site/config"]["get"]["operationId"] == expected
+    assert (
+        app.openapi()["paths"]["/api/v1/site/config"]["get"]["operationId"] == expected
+    )
 
 
 @pytest.mark.contract
@@ -158,9 +160,14 @@ def test_implemented_admin_operations_match_contract() -> None:
         ("/api/v1/admin/domains/{domain_id}", "get", "getDomainAsAdmin"),
         ("/api/v1/admin/domains/{domain_id}", "patch", "updateDomainAsAdmin"),
         ("/api/v1/admin/domains/{domain_id}", "delete", "deleteDomainAsAdmin"),
-            ("/api/v1/admin/domains/{domain_id}/refresh", "post", "refreshDomainAsAdmin"),
-            ("/api/v1/admin/domain-checks", "get", "listDomainChecksAsAdmin"),
-            ("/api/v1/admin/operations/metrics", "get", "getOperationalMetrics"),
+        ("/api/v1/admin/domains/{domain_id}/refresh", "post", "refreshDomainAsAdmin"),
+        ("/api/v1/admin/domain-checks", "get", "listDomainChecksAsAdmin"),
+        ("/api/v1/admin/operations/metrics", "get", "getOperationalMetrics"),
+        (
+            "/api/v1/admin/security-audit-events",
+            "get",
+            "listSecurityAuditEvents",
+        ),
     }
     app = create_app(
         Settings(
