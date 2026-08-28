@@ -53,6 +53,11 @@ class ManagedDomainRecord:
     notes: str | None
     registered_at: datetime | None = field(default=None, kw_only=True)
     expires_at: datetime | None
+    registry_expires_at: datetime | None = field(default=None, kw_only=True)
+    registrar_expires_at: datetime | None = field(default=None, kw_only=True)
+    expiration_status: str = field(default="unknown", kw_only=True)
+    expiration_checked_at: datetime | None = field(default=None, kw_only=True)
+    registrar_rdap_url: str | None = field(default=None, kw_only=True)
     registry_updated_at: datetime | None = field(default=None, kw_only=True)
     dnssec_enabled: bool | None = field(default=None, kw_only=True)
     last_check_at: datetime | None

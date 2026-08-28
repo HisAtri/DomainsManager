@@ -184,6 +184,19 @@ class ManagedDomain(TimestampMixin, Base):
     statuses: Mapped[list[str]] = mapped_column(JSON_TYPE, default=list, nullable=False)
     registered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    registry_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    registrar_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    expiration_status: Mapped[str] = mapped_column(
+        String(32), default="unknown", server_default="unknown", nullable=False
+    )
+    expiration_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    registrar_rdap_url: Mapped[str | None] = mapped_column(String(2048))
     registry_updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )

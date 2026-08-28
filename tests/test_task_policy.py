@@ -41,7 +41,9 @@ def test_task_retry_policy_uses_bounded_exponential_backoff() -> None:
 
 
 @pytest.mark.asyncio
-async def test_task_heartbeat_and_retry_keep_the_task_recoverable(tmp_path: Path) -> None:
+async def test_task_heartbeat_and_retry_keep_the_task_recoverable(
+    tmp_path: Path,
+) -> None:
     database = sqlite_database(tmp_path / "task-policy.db")
     await run_migrations(database)
     engine = create_engine(database)
@@ -168,6 +170,11 @@ def successful_outcome(*, expires_at: datetime) -> LookupOutcome:
             registrar={"name": "Example Registrar"},
             statuses=["ok"],
             expires_at=expires_at,
+            registry_expires_at=expires_at,
+            registrar_expires_at=expires_at,
+            expiration_status="active",
+            expiration_checked_at=expires_at - timedelta(days=1),
+            registrar_rdap_url="https://registrar.example/domain/example.com",
             nameservers=["ns1.example.com"],
             dnssec_enabled=True,
             source="rdap",
@@ -228,9 +235,16 @@ async def test_worker_renews_lease_and_records_snapshot_changes(tmp_path: Path) 
         async with engine.begin() as connection:
             await connection.execute(
                 NotificationRule.__table__.insert().values(
-                    id=uuid4(), user_id=user_id, managed_domain_id=domain_id,
-                    event_type="status_change", days_before=None, channel="email",
-                    channel_config={}, is_enabled=True, created_at=now, updated_at=now,
+                    id=uuid4(),
+                    user_id=user_id,
+                    managed_domain_id=domain_id,
+                    event_type="status_change",
+                    days_before=None,
+                    channel="email",
+                    channel_config={},
+                    is_enabled=True,
+                    created_at=now,
+                    updated_at=now,
                 )
             )
 
@@ -246,9 +260,7 @@ async def test_worker_renews_lease_and_records_snapshot_changes(tmp_path: Path) 
             successful_check_interval=timedelta(hours=6),
             successful_refresh_ttl=timedelta(0),
         )
-        service = RefreshTaskService(
-            unit_of_work=factory, lookup=lookup, policy=policy
-        )
+        service = RefreshTaskService(unit_of_work=factory, lookup=lookup, policy=policy)
         await service.enqueue(
             user_id, domain_id, force_refresh=False, idempotency_key="first-task-key"
         )
@@ -256,9 +268,14 @@ async def test_worker_renews_lease_and_records_snapshot_changes(tmp_path: Path) 
         await lookup.started.wait()
         await asyncio.sleep(0.11)
         async with factory() as uow:
-            assert await uow.tasks.claim(
-                "worker-2", datetime.now(UTC), datetime.now(UTC) + policy.lease_duration
-            ) is None
+            assert (
+                await uow.tasks.claim(
+                    "worker-2",
+                    datetime.now(UTC),
+                    datetime.now(UTC) + policy.lease_duration,
+                )
+                is None
+            )
         assert await running
 
         await service.enqueue(
@@ -275,14 +292,29 @@ async def test_worker_renews_lease_and_records_snapshot_changes(tmp_path: Path) 
                 checked_from=None,
                 checked_to=None,
             )
-        assert [check.changed_fields for check in checks.items] == [["expires_at"], []]
+        assert [check.changed_fields for check in checks.items] == [
+            ["expires_at", "registry_expires_at", "registrar_expires_at"],
+            [],
+        ]
+        async with factory() as uow:
+            stored = await uow.domains.get(user_id, domain_id)
+            assert stored is not None
+            assert stored.registry_expires_at == now + timedelta(days=31)
+            assert stored.registrar_expires_at == now + timedelta(days=31)
+            assert stored.expiration_status == "active"
+            assert (
+                stored.registrar_rdap_url
+                == "https://registrar.example/domain/example.com"
+            )
         assert checks.items[0].snapshot is not None
         async with engine.connect() as connection:
             next_check_at = await connection.scalar(
                 select(ManagedDomain.next_check_at).where(ManagedDomain.id == domain_id)
             )
             outbox_count = await connection.scalar(
-                select(NotificationOutbox).where(NotificationOutbox.event_type == "status_change")
+                select(NotificationOutbox).where(
+                    NotificationOutbox.event_type == "status_change"
+                )
             )
         assert outbox_count is not None
         assert next_check_at is not None
@@ -294,7 +326,9 @@ async def test_worker_renews_lease_and_records_snapshot_changes(tmp_path: Path) 
 
 
 @pytest.mark.asyncio
-async def test_worker_marks_recent_success_as_info_without_another_lookup(tmp_path: Path) -> None:
+async def test_worker_marks_recent_success_as_info_without_another_lookup(
+    tmp_path: Path,
+) -> None:
     database = sqlite_database(tmp_path / "task-fresh.db")
     await run_migrations(database)
     engine = create_engine(database)
@@ -303,14 +337,61 @@ async def test_worker_marks_recent_success_as_info_without_another_lookup(tmp_pa
     user_id, domain_id = uuid4(), uuid4()
     try:
         async with factory() as uow:
-            await uow.users.add(UserRecord(id=user_id, username="fresh-user", username_normalized="fresh-user", password_hash="hash", email=None, role="user", preferences={}, is_active=True, banned_at=None, password_changed_at=now, last_login_at=None, created_at=now, updated_at=now))
-            await uow.domains.add(ManagedDomainRecord(id=domain_id, user_id=user_id, name_ascii="example.com", name_unicode="example.com", registrable_domain="example.com", public_suffix="com", tld="com", monitor_enabled=True, renewal_mode=None, notes=None, expires_at=None, last_check_at=None, last_outcome=None, version=1, created_at=now, updated_at=now, deleted_at=None))
+            await uow.users.add(
+                UserRecord(
+                    id=user_id,
+                    username="fresh-user",
+                    username_normalized="fresh-user",
+                    password_hash="hash",
+                    email=None,
+                    role="user",
+                    preferences={},
+                    is_active=True,
+                    banned_at=None,
+                    password_changed_at=now,
+                    last_login_at=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            await uow.domains.add(
+                ManagedDomainRecord(
+                    id=domain_id,
+                    user_id=user_id,
+                    name_ascii="example.com",
+                    name_unicode="example.com",
+                    registrable_domain="example.com",
+                    public_suffix="com",
+                    tld="com",
+                    monitor_enabled=True,
+                    renewal_mode=None,
+                    notes=None,
+                    expires_at=None,
+                    last_check_at=None,
+                    last_outcome=None,
+                    version=1,
+                    created_at=now,
+                    updated_at=now,
+                    deleted_at=None,
+                )
+            )
             await uow.commit()
-        lookup = DelayedLookup([successful_outcome(expires_at=now + timedelta(days=30))])
-        service = RefreshTaskService(unit_of_work=factory, lookup=lookup, clock=lambda: now, policy=TaskExecutionPolicy(successful_refresh_ttl=timedelta(minutes=30)))
-        await service.enqueue(user_id, domain_id, force_refresh=False, idempotency_key="fresh-first-key")
+        lookup = DelayedLookup(
+            [successful_outcome(expires_at=now + timedelta(days=30))]
+        )
+        service = RefreshTaskService(
+            unit_of_work=factory,
+            lookup=lookup,
+            clock=lambda: now,
+            policy=TaskExecutionPolicy(successful_refresh_ttl=timedelta(minutes=30)),
+        )
+        await service.enqueue(
+            user_id, domain_id, force_refresh=False, idempotency_key="fresh-first-key"
+        )
         assert await service.run_once("worker-1")
-        second = await service.enqueue(user_id, domain_id, force_refresh=True, idempotency_key="fresh-second-key")
+        second = await service.enqueue(
+            user_id, domain_id, force_refresh=True, idempotency_key="fresh-second-key"
+        )
         assert await service.run_once("worker-1")
         assert len(lookup._outcomes) == 0
         task = await service.get(user_id, second.id)

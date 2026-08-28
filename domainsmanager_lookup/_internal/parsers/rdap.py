@@ -78,6 +78,17 @@ class RdapParser:
             parser_version=self.VERSION,
         )
 
+    @classmethod
+    def is_not_found_response(cls, response: RawLookupResponse) -> bool:
+        """Return whether *response* is an RDAP 404 error object."""
+        if response.status_code != 404:
+            return False
+        try:
+            payload = cls._load_payload(response)
+        except ResponseParseError:
+            return False
+        return payload.get("errorCode") == 404
+
     @staticmethod
     def _load_payload(response: RawLookupResponse) -> dict[str, Any]:
         try:

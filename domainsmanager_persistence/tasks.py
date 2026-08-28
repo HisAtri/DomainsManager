@@ -18,8 +18,8 @@ from domainsmanager_application.tasks import (
 from domainsmanager_persistence.models import (
     DomainCheck,
     DomainRefreshTask,
-    IdempotencyRecord,
     GlobalSetting,
+    IdempotencyRecord,
     ManagedDomain,
     NotificationOutbox,
     NotificationRule,
@@ -114,9 +114,14 @@ class SqlAlchemyTaskRepository:
         rows = (
             await self._session.execute(
                 select(DomainRefreshTask, ManagedDomain.name_ascii)
-                .join(ManagedDomain, ManagedDomain.id == DomainRefreshTask.managed_domain_id)
+                .join(
+                    ManagedDomain,
+                    ManagedDomain.id == DomainRefreshTask.managed_domain_id,
+                )
                 .where(*filters)
-                .order_by(DomainRefreshTask.created_at.desc(), DomainRefreshTask.id.desc())
+                .order_by(
+                    DomainRefreshTask.created_at.desc(), DomainRefreshTask.id.desc()
+                )
                 .offset((page - 1) * page_size)
                 .limit(page_size)
             )
@@ -227,9 +232,29 @@ class SqlAlchemyTaskRepository:
         if domain is not None:
             domain.registrar_json = snapshot.get("registrar")
             domain.statuses = snapshot.get("statuses", [])
-            domain.registered_at = self._snapshot_datetime(snapshot.get("registered_at"))
+            domain.registered_at = self._snapshot_datetime(
+                snapshot.get("registered_at")
+            )
             domain.expires_at = self._snapshot_datetime(snapshot.get("expires_at"))
-            domain.registry_updated_at = self._snapshot_datetime(snapshot.get("updated_at"))
+            domain.registry_expires_at = self._snapshot_datetime(
+                snapshot.get("registry_expires_at")
+            )
+            domain.registrar_expires_at = self._snapshot_datetime(
+                snapshot.get("registrar_expires_at")
+            )
+            domain.expiration_status = str(
+                snapshot.get("expiration_status") or "unknown"
+            )
+            domain.expiration_checked_at = self._snapshot_datetime(
+                snapshot.get("expiration_checked_at")
+            )
+            registrar_rdap_url = snapshot.get("registrar_rdap_url")
+            domain.registrar_rdap_url = (
+                registrar_rdap_url if isinstance(registrar_rdap_url, str) else None
+            )
+            domain.registry_updated_at = self._snapshot_datetime(
+                snapshot.get("updated_at")
+            )
             domain.nameservers = snapshot.get("nameservers", [])
             domain.dnssec_enabled = snapshot.get("dnssec_enabled")
             domain.latest_source = snapshot.get("source")
@@ -352,14 +377,24 @@ class SqlAlchemyTaskRepository:
     async def _queue_notifications(
         self, task: DomainRefreshTask, check: DomainCheck, event_type: str, at: datetime
     ) -> None:
-        rules = (await self._session.execute(
-            select(NotificationRule).where(
-                NotificationRule.user_id == task.user_id,
-                NotificationRule.is_enabled.is_(True),
-                NotificationRule.event_type == event_type,
-                or_(NotificationRule.managed_domain_id.is_(None), NotificationRule.managed_domain_id == task.managed_domain_id),
+        rules = (
+            (
+                await self._session.execute(
+                    select(NotificationRule).where(
+                        NotificationRule.user_id == task.user_id,
+                        NotificationRule.is_enabled.is_(True),
+                        NotificationRule.event_type == event_type,
+                        or_(
+                            NotificationRule.managed_domain_id.is_(None),
+                            NotificationRule.managed_domain_id
+                            == task.managed_domain_id,
+                        ),
+                    )
+                )
             )
-        )).scalars().all()
+            .scalars()
+            .all()
+        )
         for rule in rules:
             await self._add_outbox(
                 rule,
@@ -367,27 +402,88 @@ class SqlAlchemyTaskRepository:
                 check,
                 event_type,
                 f"{rule.id}:{check.id}:{event_type}",
-                {"domain_id": str(task.managed_domain_id), "check_id": str(check.id), "event_type": event_type},
+                {
+                    "domain_id": str(task.managed_domain_id),
+                    "check_id": str(check.id),
+                    "event_type": event_type,
+                },
                 at,
             )
 
     async def _queue_expiration_notifications(
         self, task: DomainRefreshTask, check: DomainCheck, at: datetime
     ) -> None:
-        expires_at = self._snapshot_datetime((check.snapshot or {}).get("expires_at"))
+        snapshot = check.snapshot or {}
+        expires_at = self._snapshot_datetime(snapshot.get("registrar_expires_at"))
+        if snapshot.get("expiration_status") not in {"active", "grace_period"}:
+            return
         if expires_at is None:
             return
-        rules = (await self._session.execute(
-            select(NotificationRule).where(NotificationRule.user_id == task.user_id, NotificationRule.is_enabled.is_(True), NotificationRule.event_type == "expiration", or_(NotificationRule.managed_domain_id.is_(None), NotificationRule.managed_domain_id == task.managed_domain_id))
-        )).scalars().all()
+        rules = (
+            (
+                await self._session.execute(
+                    select(NotificationRule).where(
+                        NotificationRule.user_id == task.user_id,
+                        NotificationRule.is_enabled.is_(True),
+                        NotificationRule.event_type == "expiration",
+                        or_(
+                            NotificationRule.managed_domain_id.is_(None),
+                            NotificationRule.managed_domain_id
+                            == task.managed_domain_id,
+                        ),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
         for rule in rules:
-            if rule.days_before is not None and expires_at <= at + timedelta(days=rule.days_before):
-                await self._add_outbox(rule, task, check, "expiration", f"{rule.id}:{expires_at.date()}:{rule.days_before}", {"domain_id": str(task.managed_domain_id), "check_id": str(check.id), "event_type": "expiration", "expires_at": expires_at.isoformat()}, at)
+            if rule.days_before is not None and expires_at <= at + timedelta(
+                days=rule.days_before
+            ):
+                await self._add_outbox(
+                    rule,
+                    task,
+                    check,
+                    "expiration",
+                    f"{rule.id}:{expires_at.date()}:{rule.days_before}",
+                    {
+                        "domain_id": str(task.managed_domain_id),
+                        "check_id": str(check.id),
+                        "event_type": "expiration",
+                        "expires_at": expires_at.isoformat(),
+                    },
+                    at,
+                )
 
-    async def _add_outbox(self, rule: NotificationRule, task: DomainRefreshTask, check: DomainCheck, event_type: str, deduplication_key: str, payload: dict, at: datetime) -> None:
+    async def _add_outbox(
+        self,
+        rule: NotificationRule,
+        task: DomainRefreshTask,
+        check: DomainCheck,
+        event_type: str,
+        deduplication_key: str,
+        payload: dict,
+        at: datetime,
+    ) -> None:
         try:
             async with self._session.begin_nested():
-                self._session.add(NotificationOutbox(id=uuid4(), notification_rule_id=rule.id, managed_domain_id=task.managed_domain_id, domain_check_id=check.id, deduplication_key=deduplication_key, event_type=event_type, payload=payload, status="pending", attempt_count=0, available_at=at, created_at=at, updated_at=at))
+                self._session.add(
+                    NotificationOutbox(
+                        id=uuid4(),
+                        notification_rule_id=rule.id,
+                        managed_domain_id=task.managed_domain_id,
+                        domain_check_id=check.id,
+                        deduplication_key=deduplication_key,
+                        event_type=event_type,
+                        payload=payload,
+                        status="pending",
+                        attempt_count=0,
+                        available_at=at,
+                        created_at=at,
+                        updated_at=at,
+                    )
+                )
                 await self._session.flush()
         except IntegrityError:
             return
@@ -456,9 +552,7 @@ class SqlAlchemyTaskRepository:
         )
         return result.scalar_one_or_none()
 
-    async def _previous_success_snapshot(
-        self, domain_id: UUID
-    ) -> dict | None:
+    async def _previous_success_snapshot(self, domain_id: UUID) -> dict | None:
         result = await self._session.execute(
             select(DomainCheck.snapshot)
             .where(
@@ -488,11 +582,18 @@ class SqlAlchemyTaskRepository:
             "statuses",
             "registered_at",
             "expires_at",
+            "registry_expires_at",
+            "registrar_expires_at",
+            "expiration_status",
             "updated_at",
             "nameservers",
             "dnssec_enabled",
         )
-        return [field for field in monitored_fields if previous.get(field) != current.get(field)]
+        return [
+            field
+            for field in monitored_fields
+            if previous.get(field) != current.get(field)
+        ]
 
     @staticmethod
     def _snapshot_datetime(value: object) -> datetime | None:

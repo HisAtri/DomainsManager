@@ -56,5 +56,7 @@ class DomainInfo(BaseModel):
     source: Literal["rdap", "whois", "unknown"] = "unknown"
     source_url: str | None = None
     registrar_rdap_url: str | None = None
+    expiration_status: str = "unknown"
+    expiration_checked_at: datetime | None = None
     fetched_at: datetime | None = None
     parser_version: str | None = None

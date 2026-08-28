@@ -18,10 +18,12 @@ class RdapClient:
         http_client: httpx.AsyncClient | None = None,
         timeout: float = 20.0,
         cache_ttl: timedelta = timedelta(hours=6),
+        not_found_cache_ttl: timedelta = timedelta(minutes=30),
     ) -> None:
         self._http_client = http_client
         self._timeout = timeout
         self._cache_ttl = cache_ttl
+        self._not_found_cache_ttl = not_found_cache_ttl
 
     async def query(
         self,
@@ -57,8 +59,9 @@ class RdapClient:
         follow_redirects: bool,
     ) -> RawLookupResponse:
         response = await self._get(url, follow_redirects=follow_redirects)
-        response.raise_for_status()
         now = datetime.now(UTC)
+        if response.status_code != 404:
+            response.raise_for_status()
         return RawLookupResponse(
             domain=domain.registrable_domain,
             protocol="rdap",
@@ -67,7 +70,12 @@ class RdapClient:
             status_code=response.status_code,
             content_type=response.headers.get("content-type"),
             fetched_at=now,
-            expires_at=now + self._cache_ttl,
+            expires_at=now
+            + (
+                self._not_found_cache_ttl
+                if response.status_code == 404
+                else self._cache_ttl
+            ),
             rdap_role=role,
         )
 

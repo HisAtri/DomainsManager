@@ -20,7 +20,13 @@ from domainsmanager_lookup._internal.clients.iana import IanaClient
 from domainsmanager_lookup._internal.clients.rdap import RdapClient
 from domainsmanager_lookup._internal.clients.whois import WhoisClient
 from domainsmanager_lookup._internal.errors import DomainManagerError, LookupFailedError
-from domainsmanager_lookup._internal.models.domain import DomainInfo, NormalizedDomain
+from domainsmanager_lookup._internal.lifecycle import determine_expiration_status
+from domainsmanager_lookup._internal.models.domain import (
+    DNSSECInfo,
+    DomainDates,
+    DomainInfo,
+    NormalizedDomain,
+)
 from domainsmanager_lookup._internal.models.registry import RegistryEndpoint
 from domainsmanager_lookup._internal.models.response import (
     LookupProtocol,
@@ -111,7 +117,7 @@ class DomainLookupService:
                     )
                 if response is not None:
                     try:
-                        info = self._parsers[protocol].parse(response, domain)
+                        info = self._parse_response(protocol, response, domain)
                         info, registrar_response = (
                             await self._enrich_rdap(domain, info)
                             if protocol == "rdap"
@@ -150,7 +156,7 @@ class DomainLookupService:
             try:
                 response = await self._clients[protocol].query(domain, endpoint)
                 try:
-                    info = self._parsers[protocol].parse(response, domain)
+                    info = self._parse_response(protocol, response, domain)
                 except (DomainManagerError, ValueError, TypeError):
                     mark_unusable = getattr(self._responses, "mark_unusable", None)
                     if mark_unusable is not None:
@@ -234,11 +240,13 @@ class DomainLookupService:
         registry_info: DomainInfo,
     ) -> tuple[DomainInfo, RawLookupResponse | None]:
         """Fetch the registry-advertised registrar RDAP document when available."""
+        if registry_info.expiration_status == "released":
+            return registry_info, None
         related_url = registry_info.registrar_rdap_url
         client = self._clients.get("rdap")
         parser = self._parsers.get("rdap")
         if related_url is None or not isinstance(client, RdapClient) or parser is None:
-            return registry_info, None
+            return self._with_expiration_status(registry_info), None
         try:
             response = await self._responses.get_fresh(
                 domain.registrable_domain,
@@ -258,11 +266,53 @@ class DomainLookupService:
             ValueError,
             TypeError,
         ):
-            return registry_info, None
+            return self._with_expiration_status(registry_info), None
 
         dates = registry_info.dates.model_copy(
             update={
                 "registrar_expires_at": registrar_info.dates.registrar_expires_at,
             }
         )
-        return registry_info.model_copy(update={"dates": dates}), response
+        return self._with_expiration_status(
+            registry_info.model_copy(update={"dates": dates})
+        ), response
+
+    def _with_expiration_status(self, info: DomainInfo) -> DomainInfo:
+        checked_at = self._clock()
+        return info.model_copy(
+            update={
+                "expiration_status": determine_expiration_status(
+                    registry_exists=True,
+                    registry_expires_at=info.dates.registry_expires_at,
+                    registrar_expires_at=info.dates.registrar_expires_at,
+                    now=checked_at,
+                ).value,
+                "expiration_checked_at": checked_at,
+            }
+        )
+
+    def _parse_response(
+        self,
+        protocol: LookupProtocol,
+        response: RawLookupResponse,
+        domain: NormalizedDomain,
+    ) -> DomainInfo:
+        parser = self._parsers[protocol]
+        if (
+            protocol == "rdap"
+            and isinstance(parser, RdapParser)
+            and parser.is_not_found_response(response)
+        ):
+            checked_at = self._clock()
+            return DomainInfo(
+                domain=domain.registrable_domain,
+                dates=DomainDates(),
+                dnssec=DNSSECInfo(),
+                source="rdap",
+                source_url=response.endpoint,
+                expiration_status="released",
+                expiration_checked_at=checked_at,
+                fetched_at=response.fetched_at,
+                parser_version=parser.VERSION,
+            )
+        return parser.parse(response, domain)

@@ -112,6 +112,8 @@ class DomainLookup:
             expires_at=info.dates.expires_at,
             registry_expires_at=info.dates.registry_expires_at,
             registrar_expires_at=info.dates.registrar_expires_at,
+            expiration_status=info.expiration_status,
+            expiration_checked_at=info.expiration_checked_at,
             updated_at=info.dates.updated_at,
             nameservers=info.nameservers,
             dnssec_enabled=info.dnssec.enabled,

@@ -20,7 +20,7 @@ from tests.postgres import (
 
 NOW = datetime(2026, 1, 1, 12, 30, 15, 123456, tzinfo=UTC)
 OLD_REVISION = "6f0aad6e5b27"
-HEAD_REVISION = "b7c6d5e4f3a2"
+HEAD_REVISION = "c8d9e0f1a2b3"
 
 
 @pytest.mark.asyncio
@@ -87,12 +87,30 @@ async def test_postgresql_migration_schema_and_types() -> None:
                         )
                     )
                 }
+                domain_column_names = {
+                    row.column_name
+                    for row in (
+                        await connection.execute(
+                            text(
+                                "SELECT column_name FROM information_schema.columns "
+                                "WHERE table_schema='public' AND table_name='managed_domain'"
+                            )
+                        )
+                    )
+                }
             assert revision == HEAD_REVISION
             assert user.username_normalized == "existing.user"
             assert user.preferences == {"locale": "zh-CN", "unicode": "域名"}
             assert user.password_changed_at == NOW
             assert column_types["preferences"] == "jsonb"
             assert column_types["password_changed_at"] == "timestamp with time zone"
+            assert {
+                "registry_expires_at",
+                "registrar_expires_at",
+                "expiration_status",
+                "expiration_checked_at",
+                "registrar_rdap_url",
+            } <= domain_column_names
         finally:
             await engine.dispose()
 

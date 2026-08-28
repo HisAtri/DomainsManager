@@ -246,6 +246,33 @@ class DomainLookupServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(whois.calls, 1)
         self.assertEqual(provider.calls, 1)
 
+    async def test_registry_rdap_not_found_marks_domain_released_without_whois(self):
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                404,
+                json={
+                    "errorCode": 404,
+                    "title": "Not Found",
+                    "description": ["The requested domain does not exist."],
+                },
+            )
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler)
+        ) as http_client:
+            service = DomainLookupService(
+                endpoint_provider=FakeEndpointProvider("https://registry.example"),
+                clients={"rdap": RdapClient(http_client=http_client)},
+                parsers={"rdap": RdapParser()},
+                protocol_order=("rdap",),
+                clock=lambda: NOW,
+            )
+            result = await service.lookup("example.com")
+
+        self.assertEqual(result.info.expiration_status, "released")
+        self.assertEqual(result.info.expiration_checked_at, NOW)
+        self.assertEqual(result.response.status_code, 404)
+
     async def test_falls_back_when_rdap_json_has_wrong_root_type(self):
         provider = FakeEndpointProvider()
         rdap = FakeClient("rdap", "[]")

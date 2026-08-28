@@ -211,19 +211,23 @@ class SqlAlchemyDomainRepository:
         self, now: datetime, next_check_at: datetime, limit: int
     ) -> list[ScheduledDomain]:
         rows = (
-            await self._session.execute(
-                select(ManagedDomain)
-                .where(
-                    ManagedDomain.monitor_enabled.is_(True),
-                    ManagedDomain.deleted_at.is_(None),
-                    ManagedDomain.next_check_at.is_not(None),
-                    ManagedDomain.next_check_at <= now,
+            (
+                await self._session.execute(
+                    select(ManagedDomain)
+                    .where(
+                        ManagedDomain.monitor_enabled.is_(True),
+                        ManagedDomain.deleted_at.is_(None),
+                        ManagedDomain.next_check_at.is_not(None),
+                        ManagedDomain.next_check_at <= now,
+                    )
+                    .order_by(ManagedDomain.next_check_at, ManagedDomain.id)
+                    .limit(limit)
+                    .with_for_update(skip_locked=True)
                 )
-                .order_by(ManagedDomain.next_check_at, ManagedDomain.id)
-                .limit(limit)
-                .with_for_update(skip_locked=True)
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         claimed: list[ScheduledDomain] = []
         for domain in rows:
             domain.next_check_at = next_check_at
@@ -254,6 +258,11 @@ class SqlAlchemyDomainRepository:
             notes=row.notes,
             registered_at=as_utc(row.registered_at),
             expires_at=as_utc(row.expires_at),
+            registry_expires_at=as_utc(row.registry_expires_at),
+            registrar_expires_at=as_utc(row.registrar_expires_at),
+            expiration_status=row.expiration_status,
+            expiration_checked_at=as_utc(row.expiration_checked_at),
+            registrar_rdap_url=row.registrar_rdap_url,
             registry_updated_at=as_utc(row.registry_updated_at),
             dnssec_enabled=row.dnssec_enabled,
             last_check_at=as_utc(row.last_check_at),
