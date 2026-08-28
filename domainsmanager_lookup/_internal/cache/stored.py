@@ -19,6 +19,7 @@ from domainsmanager_lookup._internal.models.registry import RegistryEndpoint
 from domainsmanager_lookup._internal.models.response import (
     LookupProtocol,
     RawLookupResponse,
+    RdapResponseRole,
 )
 from domainsmanager_lookup.store import LookupStore, StoredLookupRecord
 
@@ -32,11 +33,12 @@ class StoredDomainResponseCache(DomainResponseCache):
         domain: str,
         protocol: LookupProtocol,
         now: datetime,
+        rdap_role: RdapResponseRole | None = None,
     ) -> RawLookupResponse | None:
         try:
             record = await self._store.get_current(
                 self._namespace(protocol),
-                domain,
+                self._cache_key(domain, rdap_role),
             )
             if record is None or record.fresh_until <= now:
                 return None
@@ -55,12 +57,13 @@ class StoredDomainResponseCache(DomainResponseCache):
                 "expires_at": encode_datetime(response.expires_at),
                 "status_code": response.status_code,
                 "content_type": response.content_type,
+                "rdap_role": response.rdap_role,
             }
         )
         record = StoredLookupRecord(
             record_id=uuid4(),
             namespace=self._namespace(response.protocol),
-            cache_key=response.domain,
+            cache_key=self._cache_key(response.domain, response.rdap_role),
             schema_version=SCHEMA_VERSION,
             payload=payload,
             payload_codec=CODEC,
@@ -76,7 +79,7 @@ class StoredDomainResponseCache(DomainResponseCache):
     async def mark_unusable(self, response: RawLookupResponse, reason: str) -> None:
         record = await self._store.get_current(
             self._namespace(response.protocol),
-            response.domain,
+            self._cache_key(response.domain, response.rdap_role),
         )
         if record is not None and record.content_hash == self._hash_response(response):
             await self._store.mark_unusable(record.record_id, reason)
@@ -84,6 +87,10 @@ class StoredDomainResponseCache(DomainResponseCache):
     @staticmethod
     def _namespace(protocol: LookupProtocol) -> str:
         return f"response:{protocol}:v1"
+
+    @staticmethod
+    def _cache_key(domain: str, rdap_role: RdapResponseRole | None) -> str:
+        return f"{domain}:{rdap_role or 'default'}"
 
     @staticmethod
     def _decode(record: StoredLookupRecord) -> RawLookupResponse:
@@ -99,6 +106,7 @@ class StoredDomainResponseCache(DomainResponseCache):
             expires_at=decode_datetime(data["expires_at"]),
             status_code=data.get("status_code"),
             content_type=data.get("content_type"),
+            rdap_role=data.get("rdap_role"),
         )
 
     @staticmethod
@@ -113,6 +121,7 @@ class StoredDomainResponseCache(DomainResponseCache):
                 "expires_at": encode_datetime(response.expires_at),
                 "status_code": response.status_code,
                 "content_type": response.content_type,
+                "rdap_role": response.rdap_role,
             }
         )
         return content_hash

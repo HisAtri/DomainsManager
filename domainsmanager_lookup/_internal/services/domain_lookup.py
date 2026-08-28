@@ -4,16 +4,29 @@ from datetime import datetime, timezone
 
 import httpx
 
-from domainsmanager_lookup._internal.cache.base import DomainResponseCache, RegistryEndpointCache
-from domainsmanager_lookup._internal.cache.memory import MemoryDomainResponseCache, MemoryRegistryEndpointCache
-from domainsmanager_lookup._internal.clients.base import EndpointProvider, RegistryLookupClient
+from domainsmanager_lookup._internal.cache.base import (
+    DomainResponseCache,
+    RegistryEndpointCache,
+)
+from domainsmanager_lookup._internal.cache.memory import (
+    MemoryDomainResponseCache,
+    MemoryRegistryEndpointCache,
+)
+from domainsmanager_lookup._internal.clients.base import (
+    EndpointProvider,
+    RegistryLookupClient,
+)
 from domainsmanager_lookup._internal.clients.iana import IanaClient
 from domainsmanager_lookup._internal.clients.rdap import RdapClient
 from domainsmanager_lookup._internal.clients.whois import WhoisClient
 from domainsmanager_lookup._internal.errors import DomainManagerError, LookupFailedError
-from domainsmanager_lookup._internal.models.domain import NormalizedDomain
+from domainsmanager_lookup._internal.models.domain import DomainInfo, NormalizedDomain
 from domainsmanager_lookup._internal.models.registry import RegistryEndpoint
-from domainsmanager_lookup._internal.models.response import LookupProtocol, LookupResult
+from domainsmanager_lookup._internal.models.response import (
+    LookupProtocol,
+    LookupResult,
+    RawLookupResponse,
+)
 from domainsmanager_lookup._internal.normalization.domain import DomainNormalizer
 from domainsmanager_lookup._internal.parsers.base import ResponseParser
 from domainsmanager_lookup._internal.parsers.rdap import RdapParser
@@ -42,14 +55,22 @@ class DomainLookupService:
         self._normalizer = normalizer or DomainNormalizer()
         self._endpoint_provider = endpoint_provider or IanaClient()
         profile_registry = build_default_whois_registry()
-        self._clients = clients if clients is not None else {
-            "rdap": RdapClient(),
-            "whois": WhoisClient(profile_registry=profile_registry),
-        }
-        self._parsers = parsers if parsers is not None else {
-            "rdap": RdapParser(),
-            "whois": ProfiledWhoisParser(registry=profile_registry),
-        }
+        self._clients = (
+            clients
+            if clients is not None
+            else {
+                "rdap": RdapClient(),
+                "whois": WhoisClient(profile_registry=profile_registry),
+            }
+        )
+        self._parsers = (
+            parsers
+            if parsers is not None
+            else {
+                "rdap": RdapParser(),
+                "whois": ProfiledWhoisParser(registry=profile_registry),
+            }
+        )
         self._protocol_order = protocol_order
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._endpoint_locks: dict[str, asyncio.Lock] = {}
@@ -78,14 +99,29 @@ class DomainLookupService:
                     domain.registrable_domain,
                     protocol,
                     self._clock(),
+                    rdap_role="registry" if protocol == "rdap" else None,
                 )
+                if response is None and protocol == "rdap":
+                    # Accept pre-role cache records and lightweight test clients
+                    # while the v1 cache namespace ages out naturally.
+                    response = await self._responses.get_fresh(
+                        domain.registrable_domain,
+                        protocol,
+                        self._clock(),
+                    )
                 if response is not None:
                     try:
                         info = self._parsers[protocol].parse(response, domain)
+                        info, registrar_response = (
+                            await self._enrich_rdap(domain, info)
+                            if protocol == "rdap"
+                            else (info, None)
+                        )
                         return LookupResult(
                             domain=domain,
                             info=info,
                             response=response,
+                            registrar_response=registrar_response,
                             response_cache_hit=True,
                         )
                     except (DomainManagerError, ValueError, TypeError) as exc:
@@ -127,10 +163,16 @@ class DomainLookupService:
                     await self._responses.save(response)
                 except Exception:
                     pass
+                info, registrar_response = (
+                    await self._enrich_rdap(domain, info)
+                    if protocol == "rdap"
+                    else (info, None)
+                )
                 return LookupResult(
                     domain=domain,
                     info=info,
                     response=response,
+                    registrar_response=registrar_response,
                     endpoint_cache_hit=endpoint_cache_hit,
                 )
             except (
@@ -185,3 +227,42 @@ class DomainLookupService:
             endpoint = await self._endpoint_provider.discover(domain)
             await self._endpoints.save(endpoint)
             return endpoint, False
+
+    async def _enrich_rdap(
+        self,
+        domain: NormalizedDomain,
+        registry_info: DomainInfo,
+    ) -> tuple[DomainInfo, RawLookupResponse | None]:
+        """Fetch the registry-advertised registrar RDAP document when available."""
+        related_url = registry_info.registrar_rdap_url
+        client = self._clients.get("rdap")
+        parser = self._parsers.get("rdap")
+        if related_url is None or not isinstance(client, RdapClient) or parser is None:
+            return registry_info, None
+        try:
+            response = await self._responses.get_fresh(
+                domain.registrable_domain,
+                "rdap",
+                self._clock(),
+                rdap_role="registrar",
+            )
+            if response is None:
+                response = await client.query_related(domain, related_url)
+                await self._responses.save(response)
+            registrar_info = parser.parse(response, domain)
+        except (
+            DomainManagerError,
+            httpx.HTTPError,
+            OSError,
+            TimeoutError,
+            ValueError,
+            TypeError,
+        ):
+            return registry_info, None
+
+        dates = registry_info.dates.model_copy(
+            update={
+                "registrar_expires_at": registrar_info.dates.registrar_expires_at,
+            }
+        )
+        return registry_info.model_copy(update={"dates": dates}), response

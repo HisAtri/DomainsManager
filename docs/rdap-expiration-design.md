@@ -4,6 +4,8 @@
 
 域名生命周期只使用 RDAP 报文的可验证日期和存在性，不使用 EPP/RDAP 状态标签。查询先获取注册局 RDAP 报文，再从域名对象顶层 `links` 选择 `rel=related` 且 `type=application/rdap+json` 的 HTTPS 链接查询注册商 RDAP。
 
+注册局和注册商报文使用独立缓存角色（`registry`、`registrar`），不会以同一个 `domain + rdap` 键互相覆盖。注册商链接必须是 HTTPS、没有用户凭据且只允许标准 HTTPS 端口；注册商请求不跟随重定向，并且其响应仍须由 RDAP 解析器验证为同一个域名对象。
+
 ## 状态规则
 
 | 条件 | 状态 |

@@ -11,6 +11,7 @@ from domainsmanager_lookup._internal.cache.memory import (
 )
 from domainsmanager_lookup._internal.clients.iana import IanaClient
 from domainsmanager_lookup._internal.clients.iana_whois import IanaWhoisRecord
+from domainsmanager_lookup._internal.clients.rdap import RdapClient
 from domainsmanager_lookup._internal.models.registry import RegistryEndpoint
 from domainsmanager_lookup._internal.models.response import RawLookupResponse
 from domainsmanager_lookup._internal.normalization.domain import DomainNormalizer
@@ -22,8 +23,9 @@ NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 class FakeEndpointProvider:
-    def __init__(self) -> None:
+    def __init__(self, rdap_url: str = "https://rdap.example") -> None:
         self.calls = 0
+        self.rdap_url = rdap_url
 
     async def discover(self, domain):
         self.calls += 1
@@ -32,7 +34,7 @@ class FakeEndpointProvider:
             key=domain.public_suffix,
             tld=domain.tld,
             whois_server="whois.example",
-            rdap_urls=["https://rdap.example"],
+            rdap_urls=[self.rdap_url],
             fetched_at=NOW,
             expires_at=NOW + timedelta(days=1),
         )
@@ -128,9 +130,7 @@ class IanaClientTests(unittest.IsolatedAsyncioTestCase):
         ) as http_client:
             endpoint = await IanaClient(
                 http_client=http_client, whois_client=whois_client
-            ).discover(
-                DomainNormalizer().normalize("example.co.uk")
-            )
+            ).discover(DomainNormalizer().normalize("example.co.uk"))
 
         self.assertEqual(whois_client.name, "example.co.uk")
         self.assertNotIn("/domains/root/db/uk.html", requested_paths)
@@ -140,6 +140,72 @@ class IanaClientTests(unittest.IsolatedAsyncioTestCase):
 
 
 class DomainLookupServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_uses_registry_related_rdap_for_registrar_expiration(self):
+        requests: list[str] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(str(request.url))
+            if request.url.host == "registry.example":
+                return httpx.Response(
+                    200,
+                    json={
+                        "objectClassName": "domain",
+                        "ldhName": "example.com",
+                        "events": [
+                            {
+                                "eventAction": "expiration",
+                                "eventDate": "2027-08-04T00:00:00Z",
+                            }
+                        ],
+                        "links": [
+                            {
+                                "rel": "related",
+                                "type": "application/rdap+json",
+                                "href": "https://registrar.example/domain/example.com",
+                            }
+                        ],
+                    },
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "objectClassName": "domain",
+                    "ldhName": "example.com",
+                    "events": [
+                        {
+                            "eventAction": "registrar expiration",
+                            "eventDate": "2026-08-04T00:00:00Z",
+                        }
+                    ],
+                },
+            )
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler)
+        ) as http_client:
+            service = DomainLookupService(
+                response_cache=MemoryDomainResponseCache(),
+                endpoint_provider=FakeEndpointProvider("https://registry.example"),
+                clients={"rdap": RdapClient(http_client=http_client)},
+                parsers={"rdap": RdapParser()},
+                protocol_order=("rdap",),
+                clock=lambda: NOW,
+            )
+            first = await service.lookup("example.com")
+            second = await service.lookup("example.com")
+
+        self.assertEqual(first.info.dates.registry_expires_at.year, 2027)
+        self.assertEqual(first.info.dates.registrar_expires_at.year, 2026)
+        self.assertIsNotNone(first.registrar_response)
+        self.assertTrue(second.response_cache_hit)
+        self.assertEqual(
+            requests,
+            [
+                "https://registry.example/domain/example.com",
+                "https://registrar.example/domain/example.com",
+            ],
+        )
+
     async def test_reuses_raw_response_cache(self):
         provider = FakeEndpointProvider()
         rdap = FakeClient("rdap", RDAP_BODY)
@@ -232,9 +298,7 @@ class DomainLookupServiceTests(unittest.IsolatedAsyncioTestCase):
         provider = FakeEndpointProvider()
         rdap = FakeClient(
             "rdap",
-            lambda domain: RDAP_BODY.replace(
-                "example.com", domain.registrable_domain
-            ),
+            lambda domain: RDAP_BODY.replace("example.com", domain.registrable_domain),
         )
         service = DomainLookupService(
             endpoint_provider=provider,

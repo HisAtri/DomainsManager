@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from domainsmanager_lookup._internal.models.domain import DomainInfo, NormalizedDomain
 
 LookupProtocol = Literal["rdap", "whois"]
+RdapResponseRole = Literal["registry", "registrar"]
 
 
 class RawLookupResponse(BaseModel):
@@ -19,6 +20,7 @@ class RawLookupResponse(BaseModel):
     expires_at: datetime
     status_code: int | None = None
     content_type: str | None = None
+    rdap_role: RdapResponseRole | None = None
 
     def is_fresh(self, now: datetime) -> bool:
         return self.expires_at > now
@@ -28,5 +30,6 @@ class LookupResult(BaseModel):
     domain: NormalizedDomain
     info: DomainInfo
     response: RawLookupResponse
+    registrar_response: RawLookupResponse | None = None
     response_cache_hit: bool = False
     endpoint_cache_hit: bool = False

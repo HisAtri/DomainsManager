@@ -1,11 +1,15 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from urllib.parse import urlsplit
 
 import httpx
 
 from domainsmanager_lookup._internal.errors import ProtocolUnavailableError
 from domainsmanager_lookup._internal.models.domain import NormalizedDomain
 from domainsmanager_lookup._internal.models.registry import RegistryEndpoint
-from domainsmanager_lookup._internal.models.response import RawLookupResponse
+from domainsmanager_lookup._internal.models.response import (
+    RawLookupResponse,
+    RdapResponseRole,
+)
 
 
 class RdapClient:
@@ -30,9 +34,31 @@ class RdapClient:
             )
 
         url = f"{endpoint.rdap_urls[0].rstrip('/')}/domain/{domain.registrable_domain}"
-        response = await self._get(url)
+        return await self._query_url(
+            domain, url, role="registry", follow_redirects=True
+        )
+
+    async def query_related(
+        self,
+        domain: NormalizedDomain,
+        url: str,
+    ) -> RawLookupResponse:
+        self._validate_related_url(url)
+        return await self._query_url(
+            domain, url, role="registrar", follow_redirects=False
+        )
+
+    async def _query_url(
+        self,
+        domain: NormalizedDomain,
+        url: str,
+        *,
+        role: RdapResponseRole,
+        follow_redirects: bool,
+    ) -> RawLookupResponse:
+        response = await self._get(url, follow_redirects=follow_redirects)
         response.raise_for_status()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return RawLookupResponse(
             domain=domain.registrable_domain,
             protocol="rdap",
@@ -42,16 +68,29 @@ class RdapClient:
             content_type=response.headers.get("content-type"),
             fetched_at=now,
             expires_at=now + self._cache_ttl,
+            rdap_role=role,
         )
 
-    async def _get(self, url: str) -> httpx.Response:
+    async def _get(self, url: str, *, follow_redirects: bool) -> httpx.Response:
         headers = {"accept": "application/rdap+json, application/json"}
         if self._http_client is not None:
             return await self._http_client.get(
                 url,
                 headers=headers,
                 timeout=self._timeout,
-                follow_redirects=True,
+                follow_redirects=follow_redirects,
             )
-        async with httpx.AsyncClient(follow_redirects=True) as client:
+        async with httpx.AsyncClient(follow_redirects=follow_redirects) as client:
             return await client.get(url, headers=headers, timeout=self._timeout)
+
+    @staticmethod
+    def _validate_related_url(url: str) -> None:
+        parsed = urlsplit(url)
+        if (
+            parsed.scheme.casefold() != "https"
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.port not in {None, 443}
+        ):
+            raise ProtocolUnavailableError("注册局提供的注册商 RDAP 链接不安全")

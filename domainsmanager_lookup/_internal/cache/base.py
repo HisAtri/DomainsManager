@@ -2,7 +2,11 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 
 from domainsmanager_lookup._internal.models.registry import RegistryEndpoint
-from domainsmanager_lookup._internal.models.response import LookupProtocol, RawLookupResponse
+from domainsmanager_lookup._internal.models.response import (
+    LookupProtocol,
+    RawLookupResponse,
+    RdapResponseRole,
+)
 
 
 class DomainResponseCache(ABC):
@@ -14,6 +18,7 @@ class DomainResponseCache(ABC):
         domain: str,
         protocol: LookupProtocol,
         now: datetime,
+        rdap_role: RdapResponseRole | None = None,
     ) -> RawLookupResponse | None:
         raise NotImplementedError
 
