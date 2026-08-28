@@ -1,5 +1,10 @@
 # 实施变更记录
 
+## 2026-08-28 — M6 验收状态对账
+
+- 仓库内日志、指标、告警、限流、清理、独立 migration、发布预检和 PostgreSQL 故障测试已形成闭环。
+- M6 继续保持“进行中”：等待 CI 实际 PostgreSQL 结果、隔离环境备份恢复演练记录，以及生产是否要求外部 Tracing 后端的确认。
+
 ## 2026-08-28 — M6 发布前只读预检
 
 - 新增 `domainsmanager-verify-release`，只读验证数据库连接与 Alembic head，并输出队列快照和当前告警。

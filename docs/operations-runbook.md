@@ -32,6 +32,8 @@ API 默认不会自动迁移数据库。不要通过 `DOMAINSMANAGER_MIGRATE_ON_
 
 完成 migration、配置注入且尚未切入流量时运行 `domainsmanager-verify-release`。命令只读校验数据库连接与 Alembic head，并输出当前队列快照和非零告警；数据库未就绪时返回非零退出码。它不执行 migration、不修改数据，也不访问外部网络。预检通过后仍需分别确认 `/health/ready`、前端静态资源和各后台组件启动日志。
 
+演练记录至少保存：应用版本、迁移前后 revision、备份文件校验值、恢复目标、`domainsmanager-verify-release` 输出、`/health/ready` 结果、后台组件重连结果，以及 PostgreSQL 专项测试摘要。缺少上述证据时不得仅凭手册存在宣称完成生产恢复验收。
+
 ## Migration 回滚
 
 回滚应用前先确认目标旧版本能读取当前 schema。若 migration 向后不兼容，优先从备份恢复，而不是直接降级。只有在隔离环境验证过的 revision 才可执行：
