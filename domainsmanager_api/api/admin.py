@@ -83,7 +83,9 @@ def setting_value(definition, value: str) -> object:
     return value
 
 
-def setting_response(definition, setting: GlobalSetting | None, default: float | bool | str | None) -> GlobalSettingResponse:
+def setting_response(
+    definition, setting: GlobalSetting | None, default: float | bool | str | None
+) -> GlobalSettingResponse:
     if definition.secret:
         value = setting.value if setting is not None else default
         if hasattr(value, "get_secret_value"):
@@ -128,9 +130,19 @@ def valid_setting_value(definition, value: object) -> bool:
     if definition.kind == "boolean":
         return isinstance(value, bool)
     if definition.kind == "integer":
-        return isinstance(value, int) and not isinstance(value, bool) and (definition.minimum is None or definition.minimum <= value) and (definition.maximum is None or value <= definition.maximum)
+        return (
+            isinstance(value, int)
+            and not isinstance(value, bool)
+            and (definition.minimum is None or definition.minimum <= value)
+            and (definition.maximum is None or value <= definition.maximum)
+        )
     if definition.kind == "number":
-        return isinstance(value, (int, float)) and not isinstance(value, bool) and (definition.minimum is None or definition.minimum <= value) and (definition.maximum is None or value <= definition.maximum)
+        return (
+            isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and (definition.minimum is None or definition.minimum <= value)
+            and (definition.maximum is None or value <= definition.maximum)
+        )
     if definition.kind == "choice":
         return isinstance(value, str) and value in (definition.choices or ())
     if definition.kind == "json":
@@ -160,7 +172,9 @@ async def valid_runtime_setting_combination(
         row.key: row.value
         for row in (
             await session.execute(
-                select(GlobalSetting).where(GlobalSetting.key.in_(GLOBAL_SETTING_BY_KEY))
+                select(GlobalSetting).where(
+                    GlobalSetting.key.in_(GLOBAL_SETTING_BY_KEY)
+                )
             )
         ).scalars()
     }
@@ -269,8 +283,22 @@ async def list_global_settings(
     session: Annotated[AsyncSession, Depends(get_session)],
     settings: RuntimeSettingsDependency,
 ) -> list[GlobalSettingResponse]:
-    rows = {row.key: row for row in (await session.execute(select(GlobalSetting).where(GlobalSetting.key.in_(GLOBAL_SETTING_BY_KEY)))).scalars()}
-    return [setting_response(definition, rows.get(definition.key), definition.default(settings)) for definition in GLOBAL_SETTINGS]
+    rows = {
+        row.key: row
+        for row in (
+            await session.execute(
+                select(GlobalSetting).where(
+                    GlobalSetting.key.in_(GLOBAL_SETTING_BY_KEY)
+                )
+            )
+        ).scalars()
+    }
+    return [
+        setting_response(
+            definition, rows.get(definition.key), definition.default(settings)
+        )
+        for definition in GLOBAL_SETTINGS
+    ]
 
 
 @router.put(
@@ -288,27 +316,64 @@ async def update_global_settings(
 ) -> list[GlobalSettingResponse]:
     items = {item.key: item for item in body.settings}
     if len(items) != len(body.settings):
-        raise HTTPException(status_code=422, detail={"code": "validation_error", "message": "duplicate setting keys"})
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "validation_error", "message": "duplicate setting keys"},
+        )
     for key, item in items.items():
         definition = GLOBAL_SETTING_BY_KEY.get(key)
         if definition is None:
             not_found()
         if not valid_setting_value(definition, item.value):
-            raise HTTPException(status_code=422, detail={"code": "validation_error", "message": "setting value is invalid"})
-    rows = {row.key: row for row in (await session.execute(select(GlobalSetting).where(GlobalSetting.key.in_(items)))).scalars()}
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "validation_error",
+                    "message": "setting value is invalid",
+                },
+            )
+    rows = {
+        row.key: row
+        for row in (
+            await session.execute(
+                select(GlobalSetting).where(GlobalSetting.key.in_(items))
+            )
+        ).scalars()
+    }
     for key, item in items.items():
         if (rows[key].version if key in rows else 0) != item.version:
-            raise HTTPException(status_code=409, detail={"code": "version_conflict", "message": "setting has changed"})
-    overrides = {key: item.value for key, item in items.items() if not GLOBAL_SETTING_BY_KEY[key].secret}
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "version_conflict", "message": "setting has changed"},
+            )
+    overrides = {
+        key: item.value
+        for key, item in items.items()
+        if not GLOBAL_SETTING_BY_KEY[key].secret
+    }
     current = {
         row.key: setting_value(GLOBAL_SETTING_BY_KEY[row.key], row.value)
-        for row in (await session.execute(select(GlobalSetting).where(GlobalSetting.key.in_(GLOBAL_SETTING_BY_KEY)))).scalars()
+        for row in (
+            await session.execute(
+                select(GlobalSetting).where(
+                    GlobalSetting.key.in_(GLOBAL_SETTING_BY_KEY)
+                )
+            )
+        ).scalars()
         if not GLOBAL_SETTING_BY_KEY[row.key].secret
     }
     try:
-        settings.__class__.model_validate({**settings.model_dump(), **current, **overrides})
+        settings.__class__.model_validate(
+            {**settings.model_dump(), **current, **overrides}
+        )
     except ValidationError as error:
-        raise HTTPException(status_code=422, detail={"code": "validation_error", "message": "settings conflict with the active runtime policy"}) from error
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "validation_error",
+                "message": "settings conflict with the active runtime policy",
+            },
+        ) from error
     now = datetime.now(UTC)
     for key, item in items.items():
         definition = GLOBAL_SETTING_BY_KEY[key]
@@ -318,18 +383,47 @@ async def update_global_settings(
                 await session.delete(setting)
             event_type = "admin.global_setting_secret_cleared"
         else:
-            stored = setting_storage_value(definition, item.value, settings.configuration_encryption_key)
+            stored = setting_storage_value(
+                definition, item.value, settings.configuration_encryption_key
+            )
             if setting is None:
-                setting = GlobalSetting(key=key, value=stored, version=1, updated_by_user_id=admin.user.id, updated_at=now)
+                setting = GlobalSetting(
+                    key=key,
+                    value=stored,
+                    version=1,
+                    updated_by_user_id=admin.user.id,
+                    updated_at=now,
+                )
                 session.add(setting)
                 rows[key] = setting
             else:
-                setting.value, setting.version, setting.updated_by_user_id, setting.updated_at = stored, setting.version + 1, admin.user.id, now
+                (
+                    setting.value,
+                    setting.version,
+                    setting.updated_by_user_id,
+                    setting.updated_at,
+                ) = stored, setting.version + 1, admin.user.id, now
             event_type = "admin.global_setting_updated"
-        session.add(SecurityAuditEvent(id=uuid4(), actor_user_id=admin.user.id, event_type=event_type, target_type="global_setting", target_id=None, request_id=context.request_id, event_metadata={"key": key}, occurred_at=now))
+        session.add(
+            SecurityAuditEvent(
+                id=uuid4(),
+                actor_user_id=admin.user.id,
+                event_type=event_type,
+                target_type="global_setting",
+                target_id=None,
+                request_id=context.request_id,
+                event_metadata={"key": key},
+                occurred_at=now,
+            )
+        )
     await session.commit()
     await resources.reload_global_policies()
-    return [setting_response(definition, rows.get(definition.key), definition.default(settings)) for definition in GLOBAL_SETTINGS]
+    return [
+        setting_response(
+            definition, rows.get(definition.key), definition.default(settings)
+        )
+        for definition in GLOBAL_SETTINGS
+    ]
 
 
 @router.put(
@@ -351,9 +445,20 @@ async def update_global_setting(
     if definition is None:
         not_found()
     if not valid_setting_value(definition, body.value):
-        raise HTTPException(status_code=422, detail={"code": "validation_error", "message": "setting value is invalid"})
-    if not definition.secret and not await valid_runtime_setting_combination(session, settings, key, body.value):
-        raise HTTPException(status_code=422, detail={"code": "validation_error", "message": "setting value conflicts with the active runtime policy"})
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "validation_error", "message": "setting value is invalid"},
+        )
+    if not definition.secret and not await valid_runtime_setting_combination(
+        session, settings, key, body.value
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "validation_error",
+                "message": "setting value conflicts with the active runtime policy",
+            },
+        )
     if if_match is None or not if_match.isdigit():
         raise HTTPException(
             status_code=428,
@@ -375,14 +480,20 @@ async def update_global_setting(
             await session.delete(setting)
         session.add(
             SecurityAuditEvent(
-                id=uuid4(), actor_user_id=admin.user.id,
-                event_type="admin.global_setting_secret_cleared", target_type="global_setting",
-                request_id=context.request_id, event_metadata={"key": key}, occurred_at=now,
+                id=uuid4(),
+                actor_user_id=admin.user.id,
+                event_type="admin.global_setting_secret_cleared",
+                target_type="global_setting",
+                request_id=context.request_id,
+                event_metadata={"key": key},
+                occurred_at=now,
             )
         )
         await session.commit()
         return setting_response(definition, None, definition.default(settings))
-    stored_value = setting_storage_value(definition, body.value, settings.configuration_encryption_key)
+    stored_value = setting_storage_value(
+        definition, body.value, settings.configuration_encryption_key
+    )
     if setting is None:
         setting = GlobalSetting(
             key=key,
