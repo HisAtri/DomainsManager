@@ -65,12 +65,12 @@ uv run domainsmanager-server
 ```
 
 服务默认监听 `http://127.0.0.1:7920`，健康检查为 `/health/live` 和
-`/health/ready`。服务启动时会自动将配置的数据库升级到最新迁移版本；首次部署可临时设置
+`/health/ready`。生产部署应先运行 `uv run domainsmanager-migrate` 将数据库升级到最新 revision；仅本地兼容场景可设置 `DOMAINSMANAGER_MIGRATE_ON_STARTUP=true` 让 API 启动时迁移。首次部署可临时设置
 `DOMAINSMANAGER_BOOTSTRAP_ADMIN_USERNAME` 和
 `DOMAINSMANAGER_BOOTSTRAP_ADMIN_PASSWORD`；只有数据库没有任何用户时才会创建管理员，后续启动
 不会用这些变量修改或新增账号。
 
-推荐使用 `uv run domainsmanager-server` 启动完整后端：HTTP API、刷新任务 Worker、定时调度器和通知 Worker 会在同一进程中运行。若部署时需要分别扩缩容，仍可单独启动各组件。刷新任务由独立 Worker 执行：`uv run domainsmanager-worker`（也支持 `python -m domainsmanager_api.worker`）。Worker 启动时同样会自动执行迁移；可使用 `DOMAINSMANAGER_WORKER_ID` 指定稳定标识，并使用 `DOMAINSMANAGER_WORKER_POLL_INTERVAL_SECONDS` 调整空队列轮询间隔。
+推荐使用 `uv run domainsmanager-server` 启动完整后端：HTTP API、刷新任务 Worker、定时调度器和通知 Worker 会在同一进程中运行。若部署时需要分别扩缩容，仍可单独启动各组件。刷新任务由独立 Worker 执行：`uv run domainsmanager-worker`（也支持 `python -m domainsmanager_api.worker`）；部署前应先执行独立 migration 命令。可使用 `DOMAINSMANAGER_WORKER_ID` 指定稳定标识，并使用 `DOMAINSMANAGER_WORKER_POLL_INTERVAL_SECONDS` 调整空队列轮询间隔。
 定时调度由独立 Scheduler 执行：`uv run domainsmanager-scheduler`（也支持 `python -m domainsmanager_api.scheduler`）。它扫描到期的已启用域名并创建刷新任务；可通过 `DOMAINSMANAGER_SCHEDULER_POLL_INTERVAL_SECONDS` 和 `DOMAINSMANAGER_SCHEDULER_BATCH_SIZE` 调整轮询与批量大小。
 通知投递由独立进程执行：`uv run domainsmanager-notifier`。Webhook 规则通过 HTTP POST 投递；邮件规则投递到账户邮箱，需配置 SMTP 主机和发件人。投递失败不会影响域名检查，任务会按 Outbox 状态机重试并最终进入死信。
 
