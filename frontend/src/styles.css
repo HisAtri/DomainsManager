@@ -307,7 +307,7 @@ button, input { font: inherit; } button { border: 0; cursor: pointer; } button:d
 .task-panel .empty-state, .notification-panel .empty-state { min-height: 260px; }
 
 .table-scroll-hint { position: relative; }
-.task-table, .notification-table, .notification-delivery-table, .admin-users-table, .admin-domains-table { table-layout: fixed; }
+.task-table, .notification-table, .notification-delivery-table, .admin-users-table, .admin-domains-table, .admin-checks-table { table-layout: fixed; }
 .task-table { min-width: 980px; }
 .task-table th:nth-child(1), .task-table td:nth-child(1) { width: 110px; }
 .task-table th:nth-child(2), .task-table td:nth-child(2) { width: 140px; }
@@ -338,6 +338,16 @@ button, input { font: inherit; } button { border: 0; cursor: pointer; } button:d
 .admin-session-row .action-button { align-self: center; }
 .admin-domain-toolbar { align-items: center; }
 .admin-domain-toolbar select { width: auto; min-width: 130px; margin: 0; }
+.admin-check-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 18px 20px; border-bottom: 1px solid #eaecf0; }
+.admin-check-filters label { color: #475467; font-size: 12px; font-weight: 600; }
+.admin-check-filters input, .admin-check-filters select { width: 100%; height: 38px; margin-top: 6px; padding: 0 10px; border: 1px solid #d0d5dd; border-radius: 7px; color: #344054; background: #fff; }
+.check-outcome-groups { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 14px 20px; border-bottom: 1px solid #eaecf0; }
+.check-outcome-groups > span { display: flex; align-items: center; gap: 7px; }
+.check-outcome-groups b { color: #475467; font-size: 12px; }
+.admin-checks-table { min-width: 900px; }
+.admin-checks-table td small, .admin-checks-table td b { display: block; }
+.admin-checks-table td small { max-width: 280px; margin-top: 4px; overflow: hidden; color: #98a2b3; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.admin-checks-table td b { color: #475467; font-size: 12px; }
 .admin-domains-table { min-width: 780px; }
 .mobile-admin-list { display: none; }
 
@@ -470,7 +480,7 @@ button:disabled { cursor: not-allowed; }
 .metric-card, .panel, .settings-card, .admin-summary > div { border-radius: 8px; }
 .metric-card p, .admin-summary span, .policy-health span, .policy-card footer span { color: var(--dm-muted); }
 .metric-card strong, .admin-summary b, .panel-head h2, .policy-intro h2, .policy-card h2 { color: var(--dm-text); }
-.panel-head, .list-toolbar, .toolbar { border-color: var(--dm-border); }
+.panel-head, .list-toolbar, .toolbar, .admin-check-filters, .check-outcome-groups { border-color: var(--dm-border); }
 
 .search { border-color: var(--dm-border-strong); color: var(--dm-muted); background: var(--dm-raised); }
 .search:focus-within { border-color: var(--dm-accent); box-shadow: 0 0 0 3px var(--dm-focus); }
@@ -510,9 +520,9 @@ tbody tr:hover { background: var(--dm-soft); }
 .admin-settings-aside > button:hover { color: var(--dm-text); }
 .admin-settings-aside > button.settings-nav-active { border-bottom-color: var(--dm-accent); color: var(--dm-accent); }
 
-.field-label, .auth form label { color: var(--dm-text-soft); }
+.field-label, .auth form label, .admin-check-filters label { color: var(--dm-text-soft); }
 .field-label input, .field-label select, .field-label textarea, .auth input, select, textarea,
-.admin-setting-control input, .admin-setting-editor input, .admin-setting-editor select, .policy-control input {
+.admin-setting-control input, .admin-setting-editor input, .admin-setting-editor select, .policy-control input, .admin-check-filters input {
   border-color: var(--dm-border-strong); color: var(--dm-text); background: var(--dm-raised);
 }
 .field-label input:focus, .field-label select:focus, .field-label textarea:focus,
@@ -546,6 +556,7 @@ tbody tr:hover { background: var(--dm-soft); }
 .empty-state > svg { color: var(--dm-muted-2); }
 .empty-state b { color: var(--dm-text); }
 .empty-state p, .loading-state, .empty-state, .pagination { color: var(--dm-muted); }
+.check-outcome-groups b, .admin-checks-table td b { color: var(--dm-text-soft); }
 .notification-tabs { border-color: var(--dm-border); }
 .notification-tabs button { color: var(--dm-muted); }
 .notification-tabs button.active { color: var(--dm-accent); }
@@ -662,6 +673,7 @@ tbody tr:hover { background: var(--dm-soft); }
 .picasso-setting-row.editor-code, .picasso-setting-row.editor-links { padding-top: 4px; }
 
 @media (max-width: 767px) {
+  .admin-check-filters { grid-template-columns: 1fr; padding-inline: 16px; }
   .picasso-settings .settings-route-main { padding: 0 16px 28px; }
   .picasso-settings-head { min-height: 64px; margin: 0 -16px; padding: 0 16px; }
   .picasso-settings-head p { display: none; }
