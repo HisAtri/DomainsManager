@@ -74,6 +74,8 @@ uv run domainsmanager-server
 定时调度由独立 Scheduler 执行：`uv run domainsmanager-scheduler`（也支持 `python -m domainsmanager_api.scheduler`）。它扫描到期的已启用域名并创建刷新任务；可通过 `DOMAINSMANAGER_SCHEDULER_POLL_INTERVAL_SECONDS` 和 `DOMAINSMANAGER_SCHEDULER_BATCH_SIZE` 调整轮询与批量大小。
 通知投递由独立进程执行：`uv run domainsmanager-notifier`。Webhook 规则通过 HTTP POST 投递；邮件规则投递到账户邮箱，需配置 SMTP 主机和发件人。投递失败不会影响域名检查，任务会按 Outbox 状态机重试并最终进入死信。
 
+生产发布在 migration 与配置注入完成后，可运行 `uv run domainsmanager-verify-release` 只读验证数据库 revision 并输出当前队列快照；数据库未就绪时命令返回非零退出码。
+
 ## 文档
 
 - [架构与本次重构说明](docs/architecture.md)

@@ -27,6 +27,7 @@ domainsmanager-cleanup = "domainsmanager_api.cleanup:main"
 domainsmanager-migrate = "domainsmanager_api.migrate:main"
 domainsmanager-monitor = "domainsmanager_api.monitor:main"
 domainsmanager-audit-monitor = "domainsmanager_api.audit_monitor:main"
+domainsmanager-verify-release = "domainsmanager_api.release_verify:main"
 
 [project.optional-dependencies]
 api = [
