@@ -13,7 +13,7 @@ from domainsmanager_api.api.oauth import router as oauth_router
 from domainsmanager_api.api.site_config import router as site_config_router
 from domainsmanager_api.api.tasks import router as tasks_router
 from domainsmanager_api.errors import install_exception_handlers
-from domainsmanager_api.middleware import RequestIdMiddleware
+from domainsmanager_api.middleware import AuthRateLimitMiddleware, RequestIdMiddleware
 from domainsmanager_api.resources import Resources, create_resources
 from domainsmanager_api.settings import Settings, get_settings
 from domainsmanager_persistence.db import run_migrations
@@ -64,6 +64,18 @@ def create_app(
             allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
             allow_headers=["Authorization", "Content-Type", "Idempotency-Key", "If-Match", "X-Request-ID"],
         )
+    auth_prefix = f"{effective_settings.api_prefix}/auth"
+    app.add_middleware(
+        AuthRateLimitMiddleware,
+        paths={
+            f"{auth_prefix}/login",
+            f"{auth_prefix}/register",
+            f"{auth_prefix}/token/refresh",
+            f"{auth_prefix}/password-reset",
+        },
+        attempts=effective_settings.auth_rate_limit_attempts,
+        window_seconds=effective_settings.auth_rate_limit_window_seconds,
+    )
     app.add_middleware(
         RequestIdMiddleware,
         header_name=effective_settings.request_id_header,

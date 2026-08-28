@@ -15,6 +15,7 @@ async def make_client(
     registration_enabled: bool = True,
     bootstrap_admin_username: str | None = None,
     bootstrap_admin_password: str | None = None,
+    auth_rate_limit_attempts: int = 20,
 ):
     database = tmp_path / "auth-api.db"
     await run_migrations(sqlite_database(database))
@@ -24,11 +25,47 @@ async def make_client(
         database_path=str(database),
         jwt_secret_key="x",
         refresh_token_pepper="y",
+        auth_rate_limit_attempts=auth_rate_limit_attempts,
         registration_enabled=registration_enabled,
         bootstrap_admin_username=bootstrap_admin_username,
         bootstrap_admin_password=bootstrap_admin_password,
     )
     return TestClient(create_app(settings))
+
+
+@pytest.mark.asyncio
+@pytest.mark.api
+async def test_authentication_endpoints_are_rate_limited(tmp_path: Path) -> None:
+    client = await make_client(tmp_path, auth_rate_limit_attempts=2)
+    with client:
+        for request_id in ("rate-limit-01", "rate-limit-02"):
+            response = client.post(
+                "/api/v1/auth/login",
+                data={"username": "missing", "password": "wrong"},
+                headers={"X-Request-ID": request_id},
+            )
+            assert response.status_code == 401
+
+        limited = client.post(
+            "/api/v1/auth/login",
+            data={"username": "missing", "password": "wrong"},
+            headers={"X-Request-ID": "rate-limit-03"},
+        )
+        assert limited.status_code == 429
+        assert limited.headers["Retry-After"]
+        assert limited.headers["Cache-Control"] == "no-store"
+        assert limited.headers["X-Request-ID"] == "rate-limit-03"
+        assert limited.json() == {
+            "code": "rate_limited",
+            "message": "Too many authentication requests",
+            "request_id": "rate-limit-03",
+        }
+
+        register = client.post(
+            "/api/v1/auth/register",
+            json={"username": "separate-window", "password": "123456"},
+        )
+        assert register.status_code == 201
 
 
 @pytest.mark.asyncio

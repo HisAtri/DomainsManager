@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     jwt_audience: str = "domainsmanager-api"
     access_token_ttl_seconds: int = Field(default=900, ge=60)
     refresh_token_ttl_seconds: int = Field(default=2_592_000, ge=60)
+    auth_rate_limit_attempts: int = Field(default=20, ge=1, le=10_000)
+    auth_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86_400)
     refresh_cookie_name: str = Field(
         default="domainsmanager_refresh", min_length=1, max_length=128
     )
