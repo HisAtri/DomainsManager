@@ -6,6 +6,12 @@
 
 连接池、连接超时和命令超时通过 `DOMAINSMANAGER_DATABASE_POOL_SIZE`、`DOMAINSMANAGER_DATABASE_CONNECT_TIMEOUT` 与 `DOMAINSMANAGER_DATABASE_COMMAND_TIMEOUT` 配置；容量调整前应在专用 PostgreSQL 环境运行 `pytest -m postgres -ra`，其中包含管理、队列和安全审计索引查询计划验证。
 
+## PostgreSQL 容量与故障演练
+
+单个进程最多占用 `pool_size + max_overflow` 个连接。部署前按 API、Worker、Scheduler 和 Notifier 的实例数分别计算上限，总和必须低于 PostgreSQL `max_connections`，并为 migration、监控和人工处置保留余量。`pool_timeout` 控制连接池耗尽时的等待上限，`command_timeout` 控制单条 SQL 的执行上限。
+
+专用 PostgreSQL 验收包含连接池耗尽、等待超时、释放后的连接恢复，以及 SQL 超时后的新连接健康检查。故障演练不得使用生产库；运行 `pytest -m postgres -ra` 后还应确认 `/health/ready`、`domainsmanager-monitor` 和后台组件结构化日志恢复正常。
+
 ```powershell
 pg_dump --format=custom --file domainsmanager-before-release.dump $env:DATABASE_URL
 ```
