@@ -13,6 +13,10 @@ API 为每个 HTTP 请求写入一条紧凑 JSON 日志，logger 名称为 `doma
 
 当前基线已提供应用日志、后台队列快照和结构化告警事件，但不绑定日志采集平台，也未引入 Tracing 或统一告警阈值管理。
 
+## 后台组件关联事件
+
+Worker、Scheduler 和 Notifier 使用 `domainsmanager.components` logger。实际处理工作后输出 `component_cycle_completed`，异常时输出 `component_cycle_failed`；字段包含组件名、实例 ID、耗时，以及成功处理数或异常类型。空轮询不写日志，异常文本不进入事件。实例 ID 用于关联同一后台实例的连续处理记录；当前不提供跨进程分布式 Trace。
+
 ## 管理员运行快照
 
 `GET /api/v1/admin/operations/metrics` 仅对管理员开放，返回刷新任务、通知 Outbox、过期租约和到期未执行监控的聚合数量。响应不包含用户、域名、凭据或错误原文；它作为告警规则和管理端状态面板的共同数据源。

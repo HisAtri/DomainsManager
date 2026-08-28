@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import socket
 from asyncio import Event
 from collections.abc import Awaitable, Callable
 
+from domainsmanager_api.component_logging import run_component_cycle
 from domainsmanager_api.resources import Resources, create_resources
 from domainsmanager_api.settings import Settings, get_settings
 from domainsmanager_persistence.db import run_migrations
@@ -24,18 +26,23 @@ async def run(
     *,
     settings: Settings | None = None,
     stop: Event | None = None,
-    resource_factory: Callable[[Settings], Awaitable[Resources]] = create_scheduler_resources,
+    resource_factory: Callable[
+        [Settings], Awaitable[Resources]
+    ] = create_scheduler_resources,
 ) -> None:
     effective_settings = settings or get_settings()
     resources = await resource_factory(effective_settings)
     if isinstance(resources, Resources):
         effective_settings = await resources.reload_global_policies()
     effective_stop = stop or Event()
+    scheduler_id = default_scheduler_id()
     try:
         while not effective_stop.is_set():
             if isinstance(resources, Resources):
                 effective_settings = await resources.reload_global_policies()
-            scheduled = await resources.scheduler.run_once()
+            scheduled = await run_component_cycle(
+                "scheduler", scheduler_id, resources.scheduler.run_once()
+            )
             if not scheduled:
                 try:
                     await asyncio.wait_for(
@@ -49,6 +56,7 @@ async def run(
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     asyncio.run(run())
 
 

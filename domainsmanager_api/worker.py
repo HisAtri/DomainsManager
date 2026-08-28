@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import socket
 from asyncio import Event
 from collections.abc import Awaitable, Callable
 
+from domainsmanager_api.component_logging import run_component_cycle
 from domainsmanager_api.resources import Resources, create_resources
 from domainsmanager_api.settings import Settings, get_settings
 from domainsmanager_persistence.db import run_migrations
@@ -24,7 +26,9 @@ async def run(
     *,
     settings: Settings | None = None,
     stop: Event | None = None,
-    resource_factory: Callable[[Settings], Awaitable[Resources]] = create_worker_resources,
+    resource_factory: Callable[
+        [Settings], Awaitable[Resources]
+    ] = create_worker_resources,
 ) -> None:
     effective_settings = settings or get_settings()
     resources = await resource_factory(effective_settings)
@@ -36,7 +40,9 @@ async def run(
         while not effective_stop.is_set():
             if isinstance(resources, Resources):
                 effective_settings = await resources.reload_global_policies()
-            ran = await resources.tasks.run_once(worker_id)
+            ran = await run_component_cycle(
+                "worker", worker_id, resources.tasks.run_once(worker_id)
+            )
             if not ran:
                 try:
                     await asyncio.wait_for(
@@ -50,6 +56,7 @@ async def run(
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     asyncio.run(run())
 
 
