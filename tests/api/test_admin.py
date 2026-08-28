@@ -102,6 +102,21 @@ async def test_admin_user_and_domain_access(tmp_path: Path) -> None:
             "total": 0,
             "statistics": {"count_by_outcome": {}},
         }
+        assert client.get("/api/v1/admin/operations/metrics", headers=member).status_code == 403
+        metrics = client.get("/api/v1/admin/operations/metrics", headers=admin)
+        assert metrics.status_code == 200
+        assert metrics.json()["refresh_tasks"] == {
+            "queued": 2,
+            "running": 0,
+            "expired_leases": 0,
+        }
+        assert metrics.json()["notification_outbox"] == {
+            "pending": 0,
+            "running": 0,
+            "dead_letter": 0,
+            "expired_leases": 0,
+        }
+        assert metrics.json()["overdue_monitored_domains"] == 0
 
         banned = client.post(
             f"/api/v1/admin/users/{member_id}/ban",

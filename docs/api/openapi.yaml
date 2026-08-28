@@ -982,6 +982,19 @@ paths:
               schema: { $ref: '#/components/schemas/AdminDomainCheckPage' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
+  /admin/operations/metrics:
+    get:
+      tags: [Admin domains]
+      operationId: getOperationalMetrics
+      summary: 查询运行队列聚合指标
+      responses:
+        '200':
+          description: 刷新任务、通知 Outbox 与过期监控的聚合数量
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OperationalMetrics' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
 components:
   securitySchemes:
     bearerAuth:
@@ -1628,3 +1641,29 @@ components:
         page_size: { type: integer, minimum: 1, maximum: 100 }
         total: { type: integer, minimum: 0 }
         statistics: { $ref: '#/components/schemas/CheckStatistics' }
+    RefreshTaskMetrics:
+      type: object
+      additionalProperties: false
+      required: [queued, running, expired_leases]
+      properties:
+        queued: { type: integer, minimum: 0 }
+        running: { type: integer, minimum: 0 }
+        expired_leases: { type: integer, minimum: 0 }
+    NotificationOutboxMetrics:
+      type: object
+      additionalProperties: false
+      required: [pending, running, dead_letter, expired_leases]
+      properties:
+        pending: { type: integer, minimum: 0 }
+        running: { type: integer, minimum: 0 }
+        dead_letter: { type: integer, minimum: 0 }
+        expired_leases: { type: integer, minimum: 0 }
+    OperationalMetrics:
+      type: object
+      additionalProperties: false
+      required: [generated_at, refresh_tasks, notification_outbox, overdue_monitored_domains]
+      properties:
+        generated_at: { type: string, format: date-time }
+        refresh_tasks: { $ref: '#/components/schemas/RefreshTaskMetrics' }
+        notification_outbox: { $ref: '#/components/schemas/NotificationOutboxMetrics' }
+        overdue_monitored_domains: { type: integer, minimum: 0 }

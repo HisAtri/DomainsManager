@@ -158,8 +158,9 @@ def test_implemented_admin_operations_match_contract() -> None:
         ("/api/v1/admin/domains/{domain_id}", "get", "getDomainAsAdmin"),
         ("/api/v1/admin/domains/{domain_id}", "patch", "updateDomainAsAdmin"),
         ("/api/v1/admin/domains/{domain_id}", "delete", "deleteDomainAsAdmin"),
-        ("/api/v1/admin/domains/{domain_id}/refresh", "post", "refreshDomainAsAdmin"),
-        ("/api/v1/admin/domain-checks", "get", "listDomainChecksAsAdmin"),
+            ("/api/v1/admin/domains/{domain_id}/refresh", "post", "refreshDomainAsAdmin"),
+            ("/api/v1/admin/domain-checks", "get", "listDomainChecksAsAdmin"),
+            ("/api/v1/admin/operations/metrics", "get", "getOperationalMetrics"),
     }
     app = create_app(
         Settings(

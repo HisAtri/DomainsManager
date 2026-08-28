@@ -60,3 +60,23 @@ class AdminDomainCheckPageResponse(StrictModel):
     page_size: int = Field(ge=1, le=100)
     total: int = Field(ge=0)
     statistics: CheckStatisticsResponse
+
+
+class RefreshTaskMetricsResponse(StrictModel):
+    queued: int = Field(ge=0)
+    running: int = Field(ge=0)
+    expired_leases: int = Field(ge=0)
+
+
+class NotificationOutboxMetricsResponse(StrictModel):
+    pending: int = Field(ge=0)
+    running: int = Field(ge=0)
+    dead_letter: int = Field(ge=0)
+    expired_leases: int = Field(ge=0)
+
+
+class OperationalMetricsResponse(StrictModel):
+    generated_at: datetime
+    refresh_tasks: RefreshTaskMetricsResponse
+    notification_outbox: NotificationOutboxMetricsResponse
+    overdue_monitored_domains: int = Field(ge=0)
