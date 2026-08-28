@@ -14,7 +14,11 @@ class RegistrarInfo(BaseModel):
 
 class DomainDates(BaseModel):
     registered_at: datetime | None = None
+    # ``expires_at`` is retained for compatibility with existing consumers.  New
+    # lifecycle logic must use the source-specific fields below instead.
     expires_at: datetime | None = None
+    registry_expires_at: datetime | None = None
+    registrar_expires_at: datetime | None = None
     updated_at: datetime | None = None
 
 
@@ -51,5 +55,6 @@ class DomainInfo(BaseModel):
     dnssec: DNSSECInfo = Field(default_factory=DNSSECInfo)
     source: Literal["rdap", "whois", "unknown"] = "unknown"
     source_url: str | None = None
+    registrar_rdap_url: str | None = None
     fetched_at: datetime | None = None
     parser_version: str | None = None

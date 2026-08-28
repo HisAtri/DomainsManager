@@ -1,14 +1,13 @@
 import json
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from domainsmanager_lookup._internal.errors import ResponseParseError
 from domainsmanager_lookup._internal.models.response import RawLookupResponse
 from domainsmanager_lookup._internal.normalization.domain import DomainNormalizer
 from domainsmanager_lookup._internal.parsers.rdap import RdapParser
 
-
-NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
+NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def make_response(body: object, *, status_code: int = 200) -> RawLookupResponse:
@@ -52,9 +51,7 @@ class RdapParserTests(unittest.TestCase):
                 {
                     "handle": "REG-1",
                     "roles": ["REGISTRAR"],
-                    "publicIds": [
-                        {"type": "IANA Registrar ID", "identifier": "999"}
-                    ],
+                    "publicIds": [{"type": "IANA Registrar ID", "identifier": "999"}],
                     "vcardArray": [
                         "vcard",
                         [
@@ -99,7 +96,7 @@ class RdapParserTests(unittest.TestCase):
         self.assertEqual(result.dates.updated_at.year, 2025)
         self.assertEqual(result.nameservers, ["ns1.example.com"])
         self.assertTrue(result.dnssec.enabled)
-        self.assertEqual(result.parser_version, "2")
+        self.assertEqual(result.parser_version, "3")
         self.assertIsNotNone(result.registrar)
         self.assertEqual(result.registrar.name, "Example Registrar")
         self.assertEqual(result.registrar.iana_id, 999)
@@ -124,6 +121,39 @@ class RdapParserTests(unittest.TestCase):
         self.assertEqual(result.nameservers, [])
         self.assertIsNone(result.registrar)
         self.assertIsNone(result.dnssec.enabled)
+
+    def test_extracts_registry_and_registrar_expiration_and_related_rdap_link(self):
+        payload = {
+            "objectClassName": "domain",
+            "ldhName": "example.com",
+            "events": [
+                {"eventAction": "expiration", "eventDate": "2027-08-04T00:00:00Z"},
+                {
+                    "eventAction": "registrar expiration",
+                    "eventDate": "2026-08-04T00:00:00Z",
+                },
+            ],
+            "links": [
+                {
+                    "rel": "related",
+                    "type": "application/rdap+json; charset=utf-8",
+                    "href": "https://registrar.example/domain/example.com",
+                },
+                {
+                    "rel": "related",
+                    "type": "text/html",
+                    "href": "https://registrar.example/domain/example.com",
+                },
+            ],
+        }
+
+        result = self.parser.parse(make_response(payload), self.domain)
+
+        self.assertEqual(result.dates.registry_expires_at.year, 2027)
+        self.assertEqual(result.dates.registrar_expires_at.year, 2026)
+        self.assertEqual(
+            result.registrar_rdap_url, "https://registrar.example/domain/example.com"
+        )
 
     def test_normalizes_unicode_domain_and_nameserver(self):
         domain = DomainNormalizer().normalize("食狮.com")

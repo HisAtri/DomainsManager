@@ -37,11 +37,16 @@ class DomainSnapshot(BaseModel):
     statuses: list[str] = Field(default_factory=list)
     registered_at: datetime | None = None
     expires_at: datetime | None = None
+    registry_expires_at: datetime | None = None
+    registrar_expires_at: datetime | None = None
+    expiration_status: str = "unknown"
+    expiration_checked_at: datetime | None = None
     updated_at: datetime | None = None
     nameservers: list[str] = Field(default_factory=list)
     dnssec_enabled: bool | None = None
     source: str
     source_url: str | None = None
+    registrar_rdap_url: str | None = None
     fetched_at: datetime | None = None
 
 
@@ -63,7 +68,9 @@ class LookupOutcome(BaseModel):
     @model_validator(mode="after")
     def validate_result(self) -> "LookupOutcome":
         if (self.snapshot is None) == (self.error_code is None):
-            raise ValueError("lookup outcome must contain either a snapshot or an error")
+            raise ValueError(
+                "lookup outcome must contain either a snapshot or an error"
+            )
         return self
 
     @property

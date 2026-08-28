@@ -19,7 +19,7 @@ from domainsmanager_lookup._internal.models.response import RawLookupResponse
 class RdapParser:
     """把 RFC 9083 域名响应转换为应用层的统一域名模型。"""
 
-    VERSION = "2"
+    VERSION = "3"
 
     def parse(
         self,
@@ -44,6 +44,9 @@ class RdapParser:
             self._optional_list(payload, "nameservers")
         )
         statuses = self._parse_statuses(self._optional_list(payload, "status"))
+        registrar_rdap_url = self._parse_registrar_rdap_url(
+            self._optional_list(payload, "links")
+        )
         secure_dns = self._optional_mapping(payload, "secureDNS")
         delegation_signed = secure_dns.get("delegationSigned")
         if not isinstance(delegation_signed, bool):
@@ -61,6 +64,8 @@ class RdapParser:
             dates=DomainDates(
                 registered_at=events.get("registration"),
                 expires_at=events.get("expiration"),
+                registry_expires_at=events.get("expiration"),
+                registrar_expires_at=events.get("registrar expiration"),
                 updated_at=events.get("last changed")
                 or events.get("last update of rdap database"),
             ),
@@ -68,6 +73,7 @@ class RdapParser:
             dnssec=DNSSECInfo(enabled=delegation_signed),
             source="rdap",
             source_url=response.endpoint,
+            registrar_rdap_url=registrar_rdap_url,
             fetched_at=response.fetched_at,
             parser_version=self.VERSION,
         )
@@ -175,6 +181,28 @@ class RdapParser:
         return statuses
 
     @classmethod
+    def _parse_registrar_rdap_url(cls, items: list[Any]) -> str | None:
+        """Return a registry-supplied RDAP related link, if it is safe to follow."""
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            rel = cls._clean_text(item.get("rel"))
+            content_type = cls._clean_text(item.get("type"))
+            href = cls._clean_text(item.get("href"))
+            if (
+                rel is None
+                or rel.casefold() != "related"
+                or content_type is None
+                or content_type.casefold().split(";", 1)[0].strip()
+                != "application/rdap+json"
+                or href is None
+                or not href.casefold().startswith("https://")
+            ):
+                continue
+            return href
+        return None
+
+    @classmethod
     def _parse_registrar(cls, entities: list[Any]) -> RegistrarInfo | None:
         all_entities = list(cls._walk_entities(entities))
         registrar = next(
@@ -213,18 +241,10 @@ class RdapParser:
             )
         )
         abuse = next(
-            (
-                item
-                for item in descendants
-                if "abuse" in cls._roles(item.get("roles"))
-            ),
+            (item for item in descendants if "abuse" in cls._roles(item.get("roles"))),
             None,
         ) or next(
-            (
-                item
-                for item in all_entities
-                if "abuse" in cls._roles(item.get("roles"))
-            ),
+            (item for item in all_entities if "abuse" in cls._roles(item.get("roles"))),
             None,
         )
         abuse_fields = cls._vcard_fields(abuse.get("vcardArray")) if abuse else {}
@@ -242,9 +262,7 @@ class RdapParser:
         )
 
     @classmethod
-    def _walk_entities(
-        cls, entities: Iterable[Any]
-    ) -> Iterable[Mapping[str, Any]]:
+    def _walk_entities(cls, entities: Iterable[Any]) -> Iterable[Mapping[str, Any]]:
         pending = list(reversed(list(entities)))
         while pending:
             entity = pending.pop()

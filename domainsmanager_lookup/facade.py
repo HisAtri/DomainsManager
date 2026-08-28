@@ -110,11 +110,14 @@ class DomainLookup:
             statuses=info.statuses,
             registered_at=info.dates.registered_at,
             expires_at=info.dates.expires_at,
+            registry_expires_at=info.dates.registry_expires_at,
+            registrar_expires_at=info.dates.registrar_expires_at,
             updated_at=info.dates.updated_at,
             nameservers=info.nameservers,
             dnssec_enabled=info.dnssec.enabled,
             source=info.source,
             source_url=info.source_url,
+            registrar_rdap_url=info.registrar_rdap_url,
             fetched_at=info.fetched_at,
         )
 
