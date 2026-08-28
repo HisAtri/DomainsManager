@@ -7,7 +7,11 @@ from hashlib import sha256
 from typing import Literal, Protocol
 from uuid import UUID, uuid4
 
-from domainsmanager_application.auth import DuplicateRecordError, UnitOfWorkFactory
+from domainsmanager_application.auth import (
+    DuplicateRecordError,
+    UnitOfWork,
+    UnitOfWorkFactory,
+)
 from domainsmanager_lookup import DomainLookup, InvalidDomainError
 
 
