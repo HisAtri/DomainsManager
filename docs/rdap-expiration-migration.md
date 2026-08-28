@@ -18,3 +18,11 @@ An RDAP-formatted HTTP 404 from the registry produces `released`. A registrar
 lookup failure or 404 leaves an existing registry domain as `unknown`; it is
 never sufficient evidence that the domain was released. Expiration reminders
 use only `registrar_expires_at` for `active` and `grace_period` domains.
+
+## Backfill operation
+
+After deploying the migration, run `domainsmanager-expiration-backfill` (use
+`--limit` to bound a batch). It queues forced refresh tasks only for non-deleted
+domains whose lifecycle remains `unknown`; workers perform the actual RDAP
+network lookups. The command is idempotent for the migration generation and
+does not alter a domain's lifecycle itself.

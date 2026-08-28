@@ -147,6 +147,10 @@ class ManagedDomainRepository(Protocol):
         self, now: datetime, next_check_at: datetime, limit: int
     ) -> list[ScheduledDomain]: ...
 
+    async def list_expiration_backfill_candidates(
+        self, limit: int
+    ) -> list[ScheduledDomain]: ...
+
 
 class DomainService:
     def __init__(

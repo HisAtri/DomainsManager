@@ -187,8 +187,10 @@ class RefreshTaskService:
             configured = await uow.tasks.get_global_setting(
                 "successful_refresh_ttl_seconds"
             )
-        return int(configured) if configured is not None else int(
-            self._policy.successful_refresh_ttl.total_seconds()
+        return (
+            int(configured)
+            if configured is not None
+            else int(self._policy.successful_refresh_ttl.total_seconds())
         )
 
     async def set_successful_refresh_ttl_seconds(self, seconds: int) -> None:
@@ -216,6 +218,21 @@ class RefreshTaskService:
             force_refresh=force_refresh,
             idempotency_key=idempotency_key,
         )
+
+    async def enqueue_expiration_backfill(self, *, limit: int = 500) -> int:
+        """Queue refreshes for legacy domains without registrar RDAP lifecycle data."""
+        if limit < 1 or limit > 10_000:
+            raise ValueError("limit must be between 1 and 10000")
+        async with self._unit_of_work() as uow:
+            candidates = await uow.domains.list_expiration_backfill_candidates(limit)
+        for domain in candidates:
+            await self.enqueue(
+                domain.user_id,
+                domain.id,
+                force_refresh=True,
+                idempotency_key="rdap-expiration-backfill-v1",
+            )
+        return len(candidates)
 
     async def list_checks(
         self,

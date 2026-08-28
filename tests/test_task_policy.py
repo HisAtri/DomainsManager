@@ -149,6 +149,67 @@ async def test_task_heartbeat_and_retry_keep_the_task_recoverable(
     await engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_expiration_backfill_queues_unknown_domains(tmp_path: Path) -> None:
+    database = sqlite_database(tmp_path / "expiration-backfill.db")
+    await run_migrations(database)
+    engine = create_engine(database)
+    factory = SqlAlchemyUnitOfWorkFactory(create_session_factory(engine))
+    now = datetime(2026, 8, 24, tzinfo=UTC)
+    user_id = uuid4()
+    domain_id = uuid4()
+    try:
+        async with factory() as uow:
+            await uow.users.add(
+                UserRecord(
+                    id=user_id,
+                    username="backfill-user",
+                    username_normalized="backfill-user",
+                    password_hash="hash",
+                    email=None,
+                    role="user",
+                    preferences={},
+                    is_active=True,
+                    banned_at=None,
+                    password_changed_at=now,
+                    last_login_at=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            await uow.domains.add(
+                ManagedDomainRecord(
+                    id=domain_id,
+                    user_id=user_id,
+                    name_ascii="example.com",
+                    name_unicode="example.com",
+                    registrable_domain="example.com",
+                    public_suffix="com",
+                    tld="com",
+                    monitor_enabled=True,
+                    renewal_mode=None,
+                    notes=None,
+                    expires_at=None,
+                    last_check_at=None,
+                    last_outcome=None,
+                    version=1,
+                    created_at=now,
+                    updated_at=now,
+                    deleted_at=None,
+                )
+            )
+            await uow.commit()
+
+        service = RefreshTaskService(unit_of_work=factory, lookup=DelayedLookup([]))
+        assert await service.enqueue_expiration_backfill() == 1
+        async with factory() as uow:
+            tasks = await uow.tasks.list(user_id, 1, 20, None)
+        assert len(tasks.items) == 1
+        assert tasks.items[0].force_refresh is True
+    finally:
+        await engine.dispose()
+
+
 class DelayedLookup:
     def __init__(self, outcomes: list[LookupOutcome], delay: float = 0) -> None:
         self._outcomes = outcomes

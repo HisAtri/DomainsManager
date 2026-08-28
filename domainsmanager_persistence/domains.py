@@ -243,6 +243,29 @@ class SqlAlchemyDomainRepository:
         await self._session.flush()
         return claimed
 
+    async def list_expiration_backfill_candidates(
+        self, limit: int
+    ) -> list[ScheduledDomain]:
+        rows = (
+            await self._session.execute(
+                select(ManagedDomain)
+                .where(
+                    ManagedDomain.deleted_at.is_(None),
+                    ManagedDomain.expiration_status == "unknown",
+                )
+                .order_by(ManagedDomain.created_at, ManagedDomain.id)
+                .limit(limit)
+            )
+        ).scalars()
+        return [
+            ScheduledDomain(
+                id=domain.id,
+                user_id=domain.user_id,
+                name_ascii=domain.name_ascii,
+            )
+            for domain in rows
+        ]
+
     @staticmethod
     def _to_record(row: ManagedDomain) -> ManagedDomainRecord:
         return ManagedDomainRecord(
