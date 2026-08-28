@@ -24,6 +24,7 @@ def client(tmp_path: Path) -> Iterator[TestClient]:
         database_path=str(database),
         jwt_secret_key="x",
         refresh_token_pepper="y",
+        migrate_on_startup=True,
     )
     with TestClient(create_app(settings)) as test_client:
         yield test_client
@@ -149,6 +150,7 @@ def test_startup_migrates_an_empty_sqlite_database(tmp_path: Path) -> None:
         database_path=str(database),
         jwt_secret_key="x",
         refresh_token_pepper="y",
+        migrate_on_startup=True,
     )
 
     with TestClient(create_app(settings)) as test_client:

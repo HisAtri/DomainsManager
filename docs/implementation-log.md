@@ -1,5 +1,11 @@
 # 实施变更记录
 
+## 2026-08-28 — M6 独立 migration 入口
+
+- 新增 `domainsmanager-migrate` 独立命令，默认升级数据库到 Alembic `head`。
+- API lifespan 默认不再迁移数据库；本地兼容行为由显式 `DOMAINSMANAGER_MIGRATE_ON_STARTUP=true` 控制。
+- 新增迁移运行手册，要求在应用启动前执行迁移、备份并验证发布兼容性。
+
 ## 2026-08-28 — M6 显式业务记录清理
 
 - 新增独立 `domainsmanager-cleanup` 入口，对 Session、Refresh Token、幂等记录、终态任务/通知、审计和过期租约提供显式 cutoff 清理。

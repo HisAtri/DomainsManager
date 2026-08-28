@@ -24,6 +24,7 @@ domainsmanager-scheduler = "domainsmanager_api.scheduler:main"
 domainsmanager-notifier = "domainsmanager_api.notifier_worker:main"
 domainsmanager-seed = "domainsmanager_api.seed:main"
 domainsmanager-cleanup = "domainsmanager_api.cleanup:main"
+domainsmanager-migrate = "domainsmanager_api.migrate:main"
 
 [project.optional-dependencies]
 api = [

@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     database_pool_recycle: int = Field(default=1800, ge=-1)
     database_connect_timeout: float = Field(default=10.0, gt=0)
     database_command_timeout: float = Field(default=30.0, gt=0)
+    migrate_on_startup: bool = False
     server_host: str = "127.0.0.1"
     server_port: int = Field(default=7920, ge=1, le=65535)
     registration_enabled: bool = False
