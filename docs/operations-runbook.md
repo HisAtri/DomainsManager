@@ -4,6 +4,8 @@
 
 在维护窗口前停止新发布，并确认 API、Worker、Scheduler 和 Notifier 使用同一数据库 revision。PostgreSQL 逻辑备份示例：
 
+连接池、连接超时和命令超时通过 `DOMAINSMANAGER_DATABASE_POOL_SIZE`、`DOMAINSMANAGER_DATABASE_CONNECT_TIMEOUT` 与 `DOMAINSMANAGER_DATABASE_COMMAND_TIMEOUT` 配置；容量调整前应在专用 PostgreSQL 环境运行 `pytest -m postgres -ra`，其中包含管理、队列和安全审计索引查询计划验证。
+
 ```powershell
 pg_dump --format=custom --file domainsmanager-before-release.dump $env:DATABASE_URL
 ```

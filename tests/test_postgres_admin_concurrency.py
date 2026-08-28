@@ -120,6 +120,11 @@ async def test_admin_list_queries_use_dedicated_indexes() -> None:
                     "EXPLAIN SELECT id FROM domain_check "
                     "ORDER BY checked_at DESC, id DESC LIMIT 20"
                 ),
+                (
+                    "EXPLAIN SELECT id FROM security_audit_event "
+                    "WHERE event_type = 'session.refresh_replayed' "
+                    "ORDER BY occurred_at DESC, id DESC LIMIT 20"
+                ),
             ):
                 plans.append(
                     "\n".join((await connection.execute(text(statement))).scalars())
@@ -127,6 +132,7 @@ async def test_admin_list_queries_use_dedicated_indexes() -> None:
         assert "ix_managed_domain_admin_list" in plans[0]
         assert "ix_managed_domain_admin_owner_created" in plans[1]
         assert "ix_domain_check_admin_checked" in plans[2]
+        assert "ix_security_audit_event_occurred" in plans[3]
     finally:
         await engine.dispose()
         await clean_project_schema(config)
