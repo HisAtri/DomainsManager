@@ -353,6 +353,9 @@ button, input { font: inherit; } button { border: 0; cursor: pointer; } button:d
 .check-outcome-groups > span { display: flex; align-items: center; gap: 7px; }
 .check-outcome-groups b { color: #475467; font-size: 12px; }
 .admin-checks-table { min-width: 900px; }
+.admin-audit-table { min-width: 760px; }
+.admin-audit-table td b { color: var(--dm-text); font-size: 13px; }
+.audit-target-id { display: block; margin-top: 4px; color: var(--dm-muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
 .admin-checks-table td small, .admin-checks-table td b { display: block; }
 .admin-checks-table td small { max-width: 280px; margin-top: 4px; overflow: hidden; color: #98a2b3; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .admin-checks-table td b { color: #475467; font-size: 12px; }

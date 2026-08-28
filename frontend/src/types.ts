@@ -15,6 +15,7 @@ export type GlobalSetting = { key: string; group: string; label: string; descrip
 export type PublicSiteConfig = { revision: string; site_name: string; site_logo: string; site_favicon: string; footer_links: FooterLink[]; footer_copyright: string; icp_number: string; police_record_number: string; custom_css: string; custom_javascript: string; head_html: string; body_end_html: string; analytics_code: string };
 export type AdminCheckPage = Page<Check> & { statistics: { count_by_outcome: Record<string, number> } };
 export type OperationalMetrics = { generated_at: string; refresh_tasks: { queued: number; running: number; expired_leases: number }; notification_outbox: { pending: number; running: number; dead_letter: number; expired_leases: number }; overdue_monitored_domains: number };
+export type SecurityAuditEvent = { id: string; event_type: string; actor_user_id: string | null; target_type: string | null; target_id: string | null; occurred_at: string };
 export type NotificationRule = { id: string; domain_id: string | null; event_type: "expiration" | "status_change" | "query_failure"; days_before: number | null; channel: "email" | "webhook"; webhook_url: string | null; enabled: boolean; created_at: string; updated_at: string };
 export type NotificationRuleInput = { domain_id: string | null; event_type: NotificationRule["event_type"]; days_before: number | null; channel: NotificationRule["channel"]; webhook_url?: string | null };
 export type NotificationRuleUpdate = Partial<NotificationRuleInput & Pick<NotificationRule, "enabled">>;

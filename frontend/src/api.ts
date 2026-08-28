@@ -1,4 +1,4 @@
-import type { AdminCheckPage, AdminDomain, AdminSession, AdminUser, AuthResult, Check, Domain, GlobalSetting, NotificationDelivery, NotificationRule, NotificationRuleInput, NotificationRuleUpdate, OperationalMetrics, Page, PublicSiteConfig, Settings, Task, Tokens, User } from "./types";
+import type { AdminCheckPage, AdminDomain, AdminSession, AdminUser, AuthResult, Check, Domain, GlobalSetting, NotificationDelivery, NotificationRule, NotificationRuleInput, NotificationRuleUpdate, OperationalMetrics, Page, PublicSiteConfig, SecurityAuditEvent, Settings, Task, Tokens, User } from "./types";
 
 type ApiErrorDetail = { location?: string; message?: string; code?: string };
 type ApiErrorBody = { code?: string; message?: string; details?: ApiErrorDetail[]; request_id?: string };
@@ -128,6 +128,7 @@ class ApiClient {
   refreshAdminDomain(id: string) { return this.request<Task>(`/admin/domains/${id}/refresh`, { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() } }).then((r) => r.data); }
   adminChecks(params: Record<string, string | number | undefined> = {}) { return this.request<AdminCheckPage>(`/admin/domain-checks?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([key, value]) => [key, String(value)])).toString()}`).then((r) => r.data); }
   operationalMetrics() { return this.request<OperationalMetrics>("/admin/operations/metrics").then((r) => r.data); }
+  securityAuditEvents(params: Record<string, string | number | undefined> = {}) { return this.request<Page<SecurityAuditEvent>>(`/admin/security-audit-events?${new URLSearchParams(Object.entries(params).filter(([, value]) => value !== undefined).map(([key, value]) => [key, String(value)])).toString()}`).then((r) => r.data); }
   globalSettings() { return this.request<GlobalSetting[]>("/admin/settings").then((r) => r.data); }
   updateGlobalSetting(key: string, value: unknown, version: number) { return this.request<GlobalSetting>(`/admin/settings/${key}`, { method: "PUT", headers: { "If-Match": String(version) }, body: JSON.stringify({ value }) }).then((r) => r.data); }
   updateGlobalSettings(settings: { key: string; value: unknown; version: number }[]) { return this.request<GlobalSetting[]>("/admin/settings", { method: "PUT", body: JSON.stringify({ settings }) }).then((r) => r.data); }
