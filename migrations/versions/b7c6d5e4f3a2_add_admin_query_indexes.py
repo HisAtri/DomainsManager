@@ -34,7 +34,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_index("ix_domain_check_admin_checked", table_name="domain_check")
-    op.drop_index(
-        "ix_managed_domain_admin_owner_created", table_name="managed_domain"
-    )
+    op.drop_index("ix_managed_domain_admin_owner_created", table_name="managed_domain")
     op.drop_index("ix_managed_domain_admin_list", table_name="managed_domain")

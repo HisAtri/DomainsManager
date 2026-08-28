@@ -257,9 +257,7 @@ async def test_admin_list_filters_and_stable_sorting(tmp_path: Path) -> None:
             "zebra",
         ]
 
-        ordered = client.get(
-            "/api/v1/admin/domains?sort=name", headers=admin
-        ).json()
+        ordered = client.get("/api/v1/admin/domains?sort=name", headers=admin).json()
         assert [item["identity"]["ascii_name"] for item in ordered["items"]] == [
             "alpha.com",
             "zeta.net",
