@@ -934,6 +934,9 @@ def admin_domain_response(
         renewal_mode=domain.renewal_mode,
         notes=domain.notes,
         last_outcome=domain.last_outcome,
+        registrar_expires_at=domain.registrar_expires_at,
+        expiration_status=domain.expiration_status,
+        expiration_checked_at=domain.expiration_checked_at,
         version=domain.version,
         created_at=domain.created_at,
         updated_at=domain.updated_at,
@@ -943,13 +946,17 @@ def admin_domain_response(
     )
 
 
-def admin_check_response(check: DomainCheck, domain_name: str | None) -> AdminDomainCheckResponse:
+def admin_check_response(
+    check: DomainCheck, domain_name: str | None
+) -> AdminDomainCheckResponse:
     snapshot = check.snapshot if isinstance(check.snapshot, dict) else None
     snapshot_domain = snapshot.get("domain") if snapshot else None
     return AdminDomainCheckResponse(
         id=check.id,
         domain_id=check.managed_domain_id,
-        domain_name=domain_name or (snapshot_domain if isinstance(snapshot_domain, str) else "") or "",
+        domain_name=domain_name
+        or (snapshot_domain if isinstance(snapshot_domain, str) else "")
+        or "",
         checked_at=check.checked_at,
         duration_ms=check.duration_ms,
         outcome=check.outcome,
@@ -1143,22 +1150,21 @@ async def list_domain_checks_as_admin(
         .outerjoin(ManagedDomain, domain_join)
         .where(*filters)
     )
-    total = await session.scalar(select(func.count()).select_from(
-        select(DomainCheck.id)
-        .outerjoin(ManagedDomain, domain_join)
-        .where(*filters)
-        .subquery()
-    ))
-    rows = (
-        (
-            await session.execute(
-                base.order_by(DomainCheck.checked_at.desc(), DomainCheck.id.desc())
-                .offset((page - 1) * page_size)
-                .limit(page_size)
-            )
+    total = await session.scalar(
+        select(func.count()).select_from(
+            select(DomainCheck.id)
+            .outerjoin(ManagedDomain, domain_join)
+            .where(*filters)
+            .subquery()
         )
-        .all()
     )
+    rows = (
+        await session.execute(
+            base.order_by(DomainCheck.checked_at.desc(), DomainCheck.id.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+    ).all()
     grouped = (
         await session.execute(
             select(DomainCheck.outcome, func.count())
@@ -1168,10 +1174,7 @@ async def list_domain_checks_as_admin(
         )
     ).all()
     return AdminDomainCheckPageResponse(
-        items=[
-            admin_check_response(row[0], row.domain_name)
-            for row in rows
-        ],
+        items=[admin_check_response(row[0], row.domain_name) for row in rows],
         page=page,
         page_size=page_size,
         total=total or 0,
@@ -1230,9 +1233,9 @@ async def list_domains_as_admin(
     if monitor_enabled is not None:
         filters.append(ManagedDomain.monitor_enabled.is_(monitor_enabled))
     if expires_from is not None:
-        filters.append(ManagedDomain.expires_at >= expires_from)
+        filters.append(ManagedDomain.registrar_expires_at >= expires_from)
     if expires_to is not None:
-        filters.append(ManagedDomain.expires_at <= expires_to)
+        filters.append(ManagedDomain.registrar_expires_at <= expires_to)
     if last_outcome is not None:
         filters.append(ManagedDomain.last_outcome == last_outcome)
     if deleted == "exclude":
@@ -1247,8 +1250,11 @@ async def list_domains_as_admin(
         "-created_at": (ManagedDomain.created_at.desc(), ManagedDomain.id.desc()),
         "name": (ManagedDomain.name_ascii.asc(), ManagedDomain.id),
         "-name": (ManagedDomain.name_ascii.desc(), ManagedDomain.id.desc()),
-        "expires_at": (ManagedDomain.expires_at.asc(), ManagedDomain.id),
-        "-expires_at": (ManagedDomain.expires_at.desc(), ManagedDomain.id.desc()),
+        "expires_at": (ManagedDomain.registrar_expires_at.asc(), ManagedDomain.id),
+        "-expires_at": (
+            ManagedDomain.registrar_expires_at.desc(),
+            ManagedDomain.id.desc(),
+        ),
         "last_check_at": (ManagedDomain.last_check_at.asc(), ManagedDomain.id),
         "-last_check_at": (
             ManagedDomain.last_check_at.desc(),

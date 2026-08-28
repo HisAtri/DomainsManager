@@ -25,6 +25,11 @@ class AdminManagedDomainResponse(StrictModel):
     renewal_mode: Literal["automatic", "manual", "unknown"] | None
     notes: str | None
     last_outcome: str | None
+    registrar_expires_at: datetime | None
+    expiration_status: Literal[
+        "active", "grace_period", "expired", "released", "unknown"
+    ]
+    expiration_checked_at: datetime | None
     version: int = Field(ge=1)
     created_at: datetime
     updated_at: datetime

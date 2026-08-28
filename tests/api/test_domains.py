@@ -49,6 +49,8 @@ async def test_domain_crud_soft_delete_restore_and_etag(tmp_path: Path) -> None:
         domain_id = domain["id"]
         assert domain["identity"]["ascii_name"] == "xn--bcher-kva.de"
         assert domain["monitor_enabled"] is False
+        assert domain["expiration_status"] == "unknown"
+        assert domain["registrar_expires_at"] is None
 
         listed = client.get("/api/v1/domains", headers=headers)
         assert listed.status_code == 200

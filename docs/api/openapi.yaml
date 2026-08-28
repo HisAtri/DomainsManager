@@ -1386,6 +1386,11 @@ components:
         statuses: { type: array, items: { type: string } }
         registered_at: { type: [string, 'null'], format: date-time }
         expires_at: { type: [string, 'null'], format: date-time }
+        registry_expires_at: { type: [string, 'null'], format: date-time }
+        registrar_expires_at: { type: [string, 'null'], format: date-time }
+        expiration_status: { type: string, enum: [active, grace_period, expired, released, unknown] }
+        expiration_checked_at: { type: [string, 'null'], format: date-time }
+        registrar_rdap_url: { type: [string, 'null'], format: uri }
         updated_at: { type: [string, 'null'], format: date-time }
         nameservers: { type: array, items: { type: string } }
         dnssec_enabled: { type: [boolean, 'null'] }
@@ -1416,6 +1421,13 @@ components:
         monitor_enabled: { type: boolean }
         renewal_mode: { $ref: '#/components/schemas/RenewalMode' }
         notes: { type: [string, 'null'], maxLength: 5000 }
+        registered_at: { type: [string, 'null'], format: date-time }
+        expires_at: { type: [string, 'null'], format: date-time, deprecated: true }
+        registry_expires_at: { type: [string, 'null'], format: date-time }
+        registrar_expires_at: { type: [string, 'null'], format: date-time }
+        expiration_status: { type: string, enum: [active, grace_period, expired, released, unknown] }
+        expiration_checked_at: { type: [string, 'null'], format: date-time }
+        registrar_rdap_url: { type: [string, 'null'], format: uri }
         version: { type: integer, minimum: 1 }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
@@ -1613,6 +1625,9 @@ components:
         renewal_mode: { $ref: '#/components/schemas/RenewalMode' }
         notes: { type: [string, 'null'], maxLength: 5000 }
         last_outcome: { type: [string, 'null'], maxLength: 32 }
+        registrar_expires_at: { type: [string, 'null'], format: date-time }
+        expiration_status: { type: string, enum: [active, grace_period, expired, released, unknown] }
+        expiration_checked_at: { type: [string, 'null'], format: date-time }
         next_check_at: { type: [string, 'null'], format: date-time }
         version: { type: integer, minimum: 1 }
         created_at: { type: string, format: date-time }

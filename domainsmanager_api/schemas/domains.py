@@ -27,6 +27,13 @@ class ManagedDomainResponse(StrictModel):
     notes: str | None
     registered_at: datetime | None
     expires_at: datetime | None
+    registry_expires_at: datetime | None
+    registrar_expires_at: datetime | None
+    expiration_status: Literal[
+        "active", "grace_period", "expired", "released", "unknown"
+    ]
+    expiration_checked_at: datetime | None
+    registrar_rdap_url: str | None
     registry_updated_at: datetime | None
     dnssec_enabled: bool | None
     version: int = Field(ge=1)

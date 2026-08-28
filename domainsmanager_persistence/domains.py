@@ -71,9 +71,9 @@ class SqlAlchemyDomainRepository:
         if query.monitor_enabled is not None:
             filters.append(ManagedDomain.monitor_enabled == query.monitor_enabled)
         if query.expires_from is not None:
-            filters.append(ManagedDomain.expires_at >= query.expires_from)
+            filters.append(ManagedDomain.registrar_expires_at >= query.expires_from)
         if query.expires_to is not None:
-            filters.append(ManagedDomain.expires_at <= query.expires_to)
+            filters.append(ManagedDomain.registrar_expires_at <= query.expires_to)
         if query.last_outcome is not None:
             filters.append(ManagedDomain.last_outcome == query.last_outcome)
 
@@ -85,7 +85,7 @@ class SqlAlchemyDomainRepository:
         column = {
             "name": ManagedDomain.name_ascii,
             "created_at": ManagedDomain.created_at,
-            "expires_at": ManagedDomain.expires_at,
+            "expires_at": ManagedDomain.registrar_expires_at,
             "last_check_at": ManagedDomain.last_check_at,
         }[column_name]
         direction = desc if query.sort.startswith("-") else asc
