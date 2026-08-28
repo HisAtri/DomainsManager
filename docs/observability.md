@@ -26,3 +26,5 @@ API 为每个 HTTP 请求写入一条紧凑 JSON 日志，logger 名称为 `doma
 ## 安全审计查询
 
 管理员可通过 `GET /api/v1/admin/security-audit-events` 按事件类型、操作者和发生时间筛选审计记录。响应仅提供事件标识、事件类型、操作者/目标标识及发生时间；审计元数据、IP 哈希和请求 ID 不通过该接口返回。
+
+`domainsmanager-audit-monitor --since <带时区时间>` 聚合该时间点以来的 Refresh Token 重放事件。每次输出 `security_audit_metrics`；数量非零时另输出 `security_alert`。部署侧应在每次成功采集后推进 `--since`，命令不执行迁移。
