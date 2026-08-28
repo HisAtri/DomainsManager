@@ -1,4 +1,6 @@
 import asyncio
+import json
+import logging
 from collections.abc import Iterator
 from pathlib import Path
 from types import SimpleNamespace
@@ -37,6 +39,38 @@ def test_live_returns_request_id(client: TestClient) -> None:
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
     assert response.headers["X-Request-ID"] == "request-1234"
+
+
+def test_access_log_is_structured_and_excludes_request_secrets(
+    client: TestClient,
+    caplog,
+) -> None:
+    with caplog.at_level(logging.INFO, logger="domainsmanager.access"):
+        response = client.get(
+            "/health/live?token=query-secret",
+            headers={
+                "Authorization": "Bearer header-secret",
+                "Cookie": "session=cookie-secret",
+                "X-Request-ID": "request-access-log",
+            },
+        )
+
+    record = next(
+        item for item in caplog.records if item.name == "domainsmanager.access"
+    )
+    event = json.loads(record.message)
+    assert event == {
+        "event": "http_request",
+        "request_id": "request-access-log",
+        "method": "GET",
+        "path": "/health/live",
+        "status_code": response.status_code,
+        "duration_ms": event["duration_ms"],
+    }
+    assert event["duration_ms"] >= 0
+    assert "query-secret" not in record.message
+    assert "header-secret" not in record.message
+    assert "cookie-secret" not in record.message
 
 
 @pytest.mark.api
