@@ -23,10 +23,18 @@ router = APIRouter(prefix="/notification-rules", tags=["Notifications"])
 
 
 def response(record: NotificationRuleRecord) -> NotificationRuleResponse:
-    return NotificationRuleResponse(id=record.id, domain_id=record.domain_id, event_type=record.event_type, days_before=record.days_before, channel=record.channel, webhook_url=record.channel_config.get("webhook_url"), enabled=record.is_enabled, created_at=record.created_at, updated_at=record.updated_at)
+    return NotificationRuleResponse(id=record.id, domain_id=record.domain_id, event_type=record.event_type, days_before=record.days_before, channel=record.channel, webhook_url=record.channel_config.get("webhook_url"), webhook_name=record.webhook_name, enabled=record.is_enabled, created_at=record.created_at, updated_at=record.updated_at)
 
 
 def delivery_response(record: NotificationDeliveryRecord) -> NotificationDeliveryResponse:
+    response_status = None
+    if record.response_status_code is not None:
+        response_status = (
+            str(record.response_status_code)
+            if 200 <= record.response_status_code < 300
+            or record.response_status_code in {301, 302, 429}
+            else f"{record.response_status_code // 100}**"
+        )
     return NotificationDeliveryResponse(
         id=record.id,
         domain_id=record.domain_id,
@@ -37,20 +45,26 @@ def delivery_response(record: NotificationDeliveryRecord) -> NotificationDeliver
         available_at=record.available_at,
         sent_at=record.sent_at,
         failure_reason=record.failure_reason,
+        outcome=record.outcome,
+        response_status=response_status,
         created_at=record.created_at,
         updated_at=record.updated_at,
     )
 
 
-def validate_rule(event_type: str, days_before: int | None, channel: str, webhook_url: str | None) -> None:
-    if event_type == "expiration" and days_before is None:
+def validate_rule(event_type: str, days_before: int | None, channel: str, webhook_url: str | None, webhook_name: str | None) -> None:
+    if event_type == "domain.expiration_warning" and days_before is None:
         raise HTTPException(status_code=422, detail={"code": "validation_error", "message": "days_before is required for expiration rules"})
-    if event_type != "expiration" and days_before is not None:
+    if event_type != "domain.expiration_warning" and days_before is not None:
         raise HTTPException(status_code=422, detail={"code": "validation_error", "message": "days_before is only valid for expiration rules"})
     if channel == "webhook" and webhook_url is None:
         raise HTTPException(status_code=422, detail={"code": "validation_error", "message": "webhook_url is required for webhook rules"})
     if channel == "email" and webhook_url is not None:
         raise HTTPException(status_code=422, detail={"code": "validation_error", "message": "webhook_url is only valid for webhook rules"})
+    if channel == "webhook" and not webhook_name:
+        raise HTTPException(status_code=422, detail={"code": "validation_error", "message": "webhook_name is required for webhook rules"})
+    if channel == "email" and webhook_name is not None:
+        raise HTTPException(status_code=422, detail={"code": "validation_error", "message": "webhook_name is only valid for webhook rules"})
 
 
 @router.get("", response_model=list[NotificationRuleResponse])
@@ -60,9 +74,9 @@ async def list_rules(current: CurrentUserDependency, notifications: Notification
 
 @router.post("", response_model=NotificationRuleResponse, status_code=status.HTTP_201_CREATED)
 async def create_rule(body: CreateNotificationRuleRequest, current: CurrentUserDependency, notifications: NotificationServiceDependency) -> NotificationRuleResponse:
-    validate_rule(body.event_type, body.days_before, body.channel, str(body.webhook_url) if body.webhook_url else None)
+    validate_rule(body.event_type, body.days_before, body.channel, str(body.webhook_url) if body.webhook_url else None, body.webhook_name)
     try:
-        rule = await notifications.create(current.user.id, domain_id=body.domain_id, event_type=body.event_type, days_before=body.days_before, channel=body.channel, channel_config={"webhook_url": str(body.webhook_url)} if body.webhook_url else {})
+        rule = await notifications.create(current.user.id, domain_id=body.domain_id, event_type=body.event_type, days_before=body.days_before, channel=body.channel, webhook_name=body.webhook_name.strip() if body.webhook_name else None, channel_config={"webhook_url": str(body.webhook_url)} if body.webhook_url else {})
     except DomainError as error:
         raise HTTPException(status_code=404, detail={"code": error.code, "message": str(error)}) from error
     return response(rule)
@@ -94,8 +108,9 @@ async def update_rule(rule_id: UUID, body: UpdateNotificationRuleRequest, curren
         channel = values.get("channel", existing.channel)
         days_before = values.get("days_before", existing.days_before)
         webhook_url = values.get("webhook_url", existing.channel_config.get("webhook_url"))
-        validate_rule(event_type, days_before, channel, str(webhook_url) if webhook_url else None)
-        rule = await notifications.update(current.user.id, rule_id, domain_id=values.get("domain_id", existing.domain_id), event_type=event_type, days_before=days_before, channel=channel, channel_config={"webhook_url": str(webhook_url)} if webhook_url else {}, is_enabled=values.get("enabled", existing.is_enabled))
+        webhook_name = values.get("webhook_name", existing.webhook_name)
+        validate_rule(event_type, days_before, channel, str(webhook_url) if webhook_url else None, webhook_name)
+        rule = await notifications.update(current.user.id, rule_id, domain_id=values.get("domain_id", existing.domain_id), event_type=event_type, days_before=days_before, channel=channel, webhook_name=webhook_name.strip() if webhook_name else None, channel_config={"webhook_url": str(webhook_url)} if webhook_url else {}, is_enabled=values.get("enabled", existing.is_enabled))
     except NotificationRuleNotFoundError as error:
         raise HTTPException(status_code=404, detail={"code": error.code, "message": str(error)}) from error
     except DomainError as error:

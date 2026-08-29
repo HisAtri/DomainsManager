@@ -239,7 +239,7 @@ GLOBAL_SETTINGS = (
     ),
     number(
         "notification_delivery_timeout_seconds",
-        "通知",
+        "通知设置",
         "通知投递超时",
         "单次通知投递允许占用的最长时间。",
         0.1,
@@ -248,7 +248,7 @@ GLOBAL_SETTINGS = (
     ),
     number(
         "notification_worker_poll_interval_seconds",
-        "通知",
+        "通知设置",
         "通知 Worker 轮询间隔",
         "没有可投递通知时的等待时间。",
         0.1,
@@ -257,7 +257,7 @@ GLOBAL_SETTINGS = (
     ),
     integer(
         "notification_max_attempts",
-        "通知",
+        "通知设置",
         "通知最大重试次数",
         "通知投递失败后的最大尝试次数。",
         1,
@@ -265,7 +265,7 @@ GLOBAL_SETTINGS = (
     ),
     integer(
         "notification_retry_base_seconds",
-        "通知",
+        "通知设置",
         "通知重试基础延迟",
         "通知首次重试前的等待时间。",
         1,
@@ -274,32 +274,38 @@ GLOBAL_SETTINGS = (
     ),
     integer(
         "notification_retry_max_seconds",
-        "通知",
+        "通知设置",
         "通知重试最大延迟",
         "通知指数退避允许达到的最长等待时间。",
         1,
         86_400,
         unit="秒",
     ),
+    string(
+        "webhook_proxy_url",
+        "通知设置",
+        "Webhook 代理地址",
+        "仅用于 Webhook 投递；支持 http:// 和 socks5://，留空表示直连。",
+    ),
     boolean(
         "smtp_enabled",
-        "邮件投递",
+        "通知设置",
         "启用 SMTP 邮件服务",
         "关闭后不会发送邮件通知，Webhook 通知不受影响。",
     ),
-    string("smtp_host", "邮件投递", "邮件服务器地址", ""),
-    integer("smtp_port", "邮件投递", "SMTP服务器端口", "", 1, 65535),
+    string("smtp_host", "通知设置", "邮件服务器地址", ""),
+    integer("smtp_port", "通知设置", "SMTP服务器端口", "", 1, 65535),
     choice(
-        "smtp_encryption", "邮件投递", "加密方式", "", ("none", "starttls", "ssl_tls")
+        "smtp_encryption", "通知设置", "加密方式", "", ("none", "starttls", "ssl_tls")
     ),
-    string("smtp_from", "邮件投递", "发信邮箱", "包含@后缀的完整邮箱"),
+    string("smtp_from", "通知设置", "发信邮箱", "包含@后缀的完整邮箱"),
     string(
         "smtp_username",
-        "邮件投递",
+        "通知设置",
         "SMTP用户名",
         "通常与发信邮箱相同。部分邮局使用自定义用户名，在此设置",
     ),
-    string("smtp_password", "邮件投递", "SMTP密码", ""),
+    string("smtp_password", "通知设置", "SMTP密码", ""),
     site_setting(
         "site_name",
         "站点信息",

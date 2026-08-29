@@ -277,7 +277,7 @@ class SqlAlchemyTaskRepository:
         task.updated_at = at
         await self._session.flush()
         if check.changed_fields:
-            await self._queue_notifications(task, check, "status_change", at)
+            await self._queue_notifications(task, check, "domain.status_changed", at)
         await self._queue_expiration_notifications(task, check, at)
         return self._check_record(check)
 
@@ -371,7 +371,7 @@ class SqlAlchemyTaskRepository:
         task.lease_until = None
         task.updated_at = at
         await self._session.flush()
-        await self._queue_notifications(task, check, "query_failure", at)
+        await self._queue_notifications(task, check, "domain.query_failed", at)
         return self._check_record(check)
 
     async def _queue_notifications(
@@ -408,7 +408,11 @@ class SqlAlchemyTaskRepository:
                 {
                     "domain_id": str(task.managed_domain_id),
                     "check_id": str(check.id),
-                    "event_type": event_type,
+                    **(
+                        {"changed_fields": list(check.changed_fields)}
+                        if event_type == "domain.status_changed"
+                        else {"error_code": check.error_code or check.outcome}
+                    ),
                 },
                 at,
             )
@@ -428,7 +432,7 @@ class SqlAlchemyTaskRepository:
                     select(NotificationRule).where(
                         NotificationRule.user_id == task.user_id,
                         NotificationRule.is_enabled.is_(True),
-                        NotificationRule.event_type == "expiration",
+                        NotificationRule.event_type == "domain.expiration_warning",
                         or_(
                             NotificationRule.managed_domain_id.is_(None),
                             NotificationRule.managed_domain_id
@@ -451,13 +455,13 @@ class SqlAlchemyTaskRepository:
                     rule,
                     task,
                     check,
-                    "expiration",
+                    "domain.expiration_warning",
                     f"{rule.id}:{expires_at.date()}:{rule.days_before}",
                     {
                         "domain_id": str(task.managed_domain_id),
                         "check_id": str(check.id),
-                        "event_type": "expiration",
                         "expires_at": expires_at.isoformat(),
+                        "days_before": rule.days_before,
                     },
                     at,
                 )
@@ -478,17 +482,30 @@ class SqlAlchemyTaskRepository:
         payload: dict,
         at: datetime,
     ) -> None:
+        outbox_id = uuid4()
+        envelope = {
+            "id": str(outbox_id),
+            "type": event_type,
+            "api_version": "2026-08-30",
+            "created_at": at.isoformat().replace("+00:00", "Z"),
+            "data": payload,
+        }
+        if rule.channel == "webhook":
+            envelope["webhook"] = {
+                "id": str(rule.id),
+                "name": rule.webhook_name,
+            }
         try:
             async with self._session.begin_nested():
                 self._session.add(
                     NotificationOutbox(
-                        id=uuid4(),
+                        id=outbox_id,
                         notification_rule_id=rule.id,
                         managed_domain_id=task.managed_domain_id,
                         domain_check_id=check.id,
                         deduplication_key=deduplication_key,
                         event_type=event_type,
-                        payload=payload,
+                        payload=envelope,
                         status="pending",
                         attempt_count=0,
                         available_at=at,

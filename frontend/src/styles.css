@@ -146,6 +146,9 @@ button, input { font: inherit; } button { border: 0; cursor: pointer; } button:d
 .danger-primary:hover { background: #b42318; }
 .danger-primary:disabled { background: #fda29b; }
 .webhook-value, .failure-reason { max-width: 220px; overflow: hidden; color: #667085; text-overflow: ellipsis; white-space: nowrap; }
+.admin-setting-section { display: contents; }
+.admin-setting-section h3 { margin: 18px 0 2px; padding-top: 18px; border-top: 1px solid #eaecf0; color: #344054; font-size: 14px; }
+.admin-setting-section:first-child h3 { margin-top: 0; padding-top: 0; border-top: 0; }
 .failure-reason { color: #b42318; }
 
 /* Shared page layout corrections */

@@ -17,7 +17,7 @@ const SITE_GROUPS: readonly SettingsGroup[] = [
   { id: "inject", title: "代码注入", description: "自定义样式、脚本与 HTML 注入", sections: [{ title: "样式与脚本", keys: ["custom_css", "custom_javascript"] }, { title: "HTML 注入", keys: ["head_html", "body_end_html"] }, { title: "网站统计", keys: ["analytics_code"] }] },
 ];
 
-const EMAIL_DELIVERY_GROUP = "邮件投递";
+const NOTIFICATION_GROUP = "通知设置";
 const SMTP_ENCRYPTION_OPTIONS = [
   { value: "none", label: "无加密" },
   { value: "starttls", label: "STARTTLS" },
@@ -43,7 +43,7 @@ function SettingEditor({ setting, value, onChange }: { setting: GlobalSetting; v
   if (setting.key === "smtp_encryption") return <select aria-label={setting.label} value={String(value ?? "none")} onChange={(event) => onChange(event.target.value)}>{SMTP_ENCRYPTION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>;
   if (setting.editor === "links") return <FooterLinksEditor value={(value as FooterLink[]) || []} onChange={onChange} />;
   if (setting.editor === "textarea" || setting.editor === "code") return <div className="stacked-editor"><textarea aria-label={setting.label} className={setting.editor === "code" ? "code-editor" : undefined} value={String(value ?? "")} placeholder={setting.placeholder ?? undefined} onChange={(event) => onChange(event.target.value)} /></div>;
-  return <div className="stacked-editor"><input aria-label={setting.label} type={setting.kind === "integer" || setting.kind === "number" ? "number" : "text"} step={setting.kind === "number" ? "0.1" : "1"} min={setting.minimum ?? undefined} max={setting.maximum ?? undefined} value={String(value ?? "")} placeholder={setting.placeholder ?? undefined} onChange={(event) => onChange(event.target.value)} />{setting.editor === "asset" && String(value ?? "") && <img className="asset-preview" src={assetSource(String(value))} alt={`${setting.label} 预览`} />}</div>;
+  return <div className="stacked-editor"><input aria-label={setting.label} type={setting.kind === "integer" || setting.kind === "number" ? "number" : "text"} step={setting.kind === "number" ? "0.1" : "1"} min={setting.minimum ?? undefined} max={setting.maximum ?? undefined} value={String(value ?? "")} placeholder={setting.key === "webhook_proxy_url" ? "http://proxy.example:8080" : setting.placeholder ?? undefined} onChange={(event) => onChange(event.target.value)} />{setting.editor === "asset" && String(value ?? "") && <img className="asset-preview" src={assetSource(String(value))} alt={`${setting.label} 预览`} />}</div>;
 }
 
 export function AdminSettingsV2({ onMessage, onDirtyChange }: { onMessage: (message: string) => void; onDirtyChange: (dirty: boolean) => void }) {
@@ -57,27 +57,30 @@ export function AdminSettingsV2({ onMessage, onDirtyChange }: { onMessage: (mess
   }).catch((error: unknown) => onMessage(error instanceof Error ? error.message : "设置加载失败")), [onMessage]);
   useEffect(() => { load(); }, [load]);
   const runtimeGroup: SettingsGroup | null = useMemo(() => {
-    const runtimeSettings = settings.filter((item) => item.group !== "站点信息" && item.group !== "页面配置" && item.group !== EMAIL_DELIVERY_GROUP);
+    const runtimeSettings = settings.filter((item) => item.group !== "站点信息" && item.group !== "页面配置" && item.group !== NOTIFICATION_GROUP);
     if (!runtimeSettings.length) return null;
     const names = Array.from(new Set(runtimeSettings.map((item) => item.group)));
     return {
       id: "runtime",
       title: "系统运行",
-      description: "域名监控、任务调度和通知配置",
+      description: "域名监控、任务执行和调度配置",
       sections: names.map((name) => ({ title: name, keys: runtimeSettings.filter((item) => item.group === name).map((item) => item.key) })),
     };
   }, [settings]);
-  const emailDeliveryGroup: SettingsGroup | null = useMemo(() => {
-    const emailSettings = settings.filter((item) => item.group === EMAIL_DELIVERY_GROUP);
-    if (!emailSettings.length) return null;
+  const notificationGroup: SettingsGroup | null = useMemo(() => {
+    const notificationSettings = settings.filter((item) => item.group === NOTIFICATION_GROUP);
+    if (!notificationSettings.length) return null;
     return {
-      id: "email-delivery",
-      title: EMAIL_DELIVERY_GROUP,
-      description: "配置系统通知邮件的 SMTP 投递服务",
-      sections: [{ keys: emailSettings.map((item) => item.key) }],
+      id: "notifications",
+      title: NOTIFICATION_GROUP,
+      description: "配置 Webhook 投递策略、专用代理和 SMTP 邮件服务",
+      sections: [
+        { title: "Webhook 投递", keys: notificationSettings.filter((item) => !item.key.startsWith("smtp_")).map((item) => item.key) },
+        { title: "邮件设置", keys: notificationSettings.filter((item) => item.key.startsWith("smtp_")).map((item) => item.key) },
+      ],
     };
   }, [settings]);
-  const groups: readonly SettingsGroup[] = [...SITE_GROUPS, ...(runtimeGroup ? [runtimeGroup] : []), ...(emailDeliveryGroup ? [emailDeliveryGroup] : [])];
+  const groups: readonly SettingsGroup[] = [...SITE_GROUPS, ...(runtimeGroup ? [runtimeGroup] : []), ...(notificationGroup ? [notificationGroup] : [])];
   const activeGroup = groups.find((group) => group.id === activeId) ?? groups[0];
   const sections = (activeGroup?.sections ?? []).map((section) => ({ title: section.title, settings: section.keys.map((key) => settings.find((item) => item.key === key)).filter((item): item is GlobalSetting => Boolean(item)) })).filter((section) => section.settings.length);
   const dirtySettings = settings.filter((item) => !same(draft[item.key], displayValue(item)));

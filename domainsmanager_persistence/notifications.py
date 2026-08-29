@@ -38,7 +38,7 @@ class SqlAlchemyNotificationRuleRepository:
         return self._record(row) if row is not None else None
 
     async def add(self, record: NotificationRuleRecord) -> None:
-        self._session.add(NotificationRule(id=record.id, user_id=record.user_id, managed_domain_id=record.domain_id, event_type=record.event_type, days_before=record.days_before, channel=record.channel, channel_config=dict(record.channel_config), is_enabled=record.is_enabled, created_at=record.created_at, updated_at=record.updated_at, deleted_at=record.deleted_at))
+        self._session.add(NotificationRule(id=record.id, user_id=record.user_id, managed_domain_id=record.domain_id, event_type=record.event_type, days_before=record.days_before, channel=record.channel, webhook_name=record.webhook_name, channel_config=dict(record.channel_config), is_enabled=record.is_enabled, created_at=record.created_at, updated_at=record.updated_at, deleted_at=record.deleted_at))
         await self._session.flush()
 
     async def update(self, record: NotificationRuleRecord) -> None:
@@ -46,7 +46,7 @@ class SqlAlchemyNotificationRuleRepository:
         if row is None:
             return
         row.managed_domain_id, row.event_type, row.days_before = record.domain_id, record.event_type, record.days_before
-        row.channel, row.channel_config, row.is_enabled = record.channel, dict(record.channel_config), record.is_enabled
+        row.channel, row.webhook_name, row.channel_config, row.is_enabled = record.channel, record.webhook_name, dict(record.channel_config), record.is_enabled
         row.updated_at, row.deleted_at = record.updated_at, record.deleted_at
         await self._session.flush()
 
@@ -76,6 +76,8 @@ class SqlAlchemyNotificationRuleRepository:
                 available_at=(as_utc(outbox.available_at) if outbox.available_at else None),
                 sent_at=as_utc(outbox.sent_at) if outbox.sent_at else None,
                 failure_reason=outbox.last_error,
+                outcome=outbox.outcome,
+                response_status_code=outbox.response_status_code,
                 created_at=as_utc(outbox.created_at),
                 updated_at=as_utc(outbox.updated_at),
             )
@@ -93,18 +95,27 @@ class SqlAlchemyNotificationRuleRepository:
         await self._session.flush()
         return OutboxMessage(outbox.id, token, rule.channel, dict(rule.channel_config), dict(outbox.payload), outbox.attempt_count, email)
 
-    async def complete_outbox(self, message_id: UUID, token: UUID, at: datetime) -> bool:
+    async def complete_outbox(
+        self, message_id: UUID, token: UUID, at: datetime, *,
+        outcome: str, response_status_code: int | None,
+    ) -> bool:
         row = await self._locked_outbox(message_id, token)
         if row is None: return False
-        row.status, row.sent_at, row.lease_token, row.lease_owner, row.lease_until, row.updated_at = "sent", at, None, None, None, at
+        row.status, row.sent_at, row.outcome, row.response_status_code = "sent", at, outcome, response_status_code
+        row.last_error, row.lease_token, row.lease_owner, row.lease_until, row.updated_at = None, None, None, None, at
         await self._session.flush(); return True
 
-    async def fail_outbox(self, message_id: UUID, token: UUID, at: datetime, error: str, max_attempts: int, retry_delay: timedelta) -> bool:
+    async def fail_outbox(
+        self, message_id: UUID, token: UUID, at: datetime, error: str,
+        max_attempts: int, retry_delay: timedelta, *, outcome: str,
+        response_status_code: int | None, retryable: bool,
+    ) -> bool:
         row = await self._locked_outbox(message_id, token)
         if row is None: return False
-        row.status = "dead_letter" if row.attempt_count >= max_attempts else "pending"
+        row.status = "dead_letter" if not retryable or row.attempt_count >= max_attempts else "pending"
         row.available_at = at if row.status == "dead_letter" else at + retry_delay
-        row.last_error, row.lease_token, row.lease_owner, row.lease_until, row.updated_at = error[:512], None, None, None, at
+        row.last_error, row.outcome, row.response_status_code = error[:512], outcome, response_status_code
+        row.lease_token, row.lease_owner, row.lease_until, row.updated_at = None, None, None, at
         await self._session.flush(); return True
 
     async def suppress_outbox(
@@ -115,6 +126,8 @@ class SqlAlchemyNotificationRuleRepository:
             return False
         row.status = "skipped"
         row.last_error = reason[:512]
+        row.outcome = "suppressed"
+        row.response_status_code = None
         row.lease_token = None
         row.lease_owner = None
         row.lease_until = None
@@ -127,4 +140,4 @@ class SqlAlchemyNotificationRuleRepository:
 
     @staticmethod
     def _record(row: NotificationRule) -> NotificationRuleRecord:
-        return NotificationRuleRecord(row.id, row.user_id, row.managed_domain_id, row.event_type, row.days_before, row.channel, dict(row.channel_config), row.is_enabled, as_utc(row.created_at), as_utc(row.updated_at), as_utc(row.deleted_at) if row.deleted_at else None)
+        return NotificationRuleRecord(row.id, row.user_id, row.managed_domain_id, row.event_type, row.days_before, row.channel, row.webhook_name, dict(row.channel_config), row.is_enabled, as_utc(row.created_at), as_utc(row.updated_at), as_utc(row.deleted_at) if row.deleted_at else None)

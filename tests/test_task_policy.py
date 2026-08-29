@@ -293,16 +293,18 @@ async def test_worker_renews_lease_and_records_snapshot_changes(tmp_path: Path) 
                 )
             )
             await uow.commit()
+        webhook_rule_id = uuid4()
         async with engine.begin() as connection:
             await connection.execute(
                 NotificationRule.__table__.insert().values(
-                    id=uuid4(),
+                    id=webhook_rule_id,
                     user_id=user_id,
                     managed_domain_id=domain_id,
-                    event_type="status_change",
+                    event_type="domain.status_changed",
                     days_before=None,
-                    channel="email",
-                    channel_config={},
+                    channel="webhook",
+                    webhook_name="Operations endpoint",
+                    channel_config={"webhook_url": "https://hooks.example.test/events"},
                     is_enabled=True,
                     created_at=now,
                     updated_at=now,
@@ -372,12 +374,27 @@ async def test_worker_renews_lease_and_records_snapshot_changes(tmp_path: Path) 
             next_check_at = await connection.scalar(
                 select(ManagedDomain.next_check_at).where(ManagedDomain.id == domain_id)
             )
-            outbox_count = await connection.scalar(
-                select(NotificationOutbox).where(
-                    NotificationOutbox.event_type == "status_change"
+            outbox = (
+                await connection.execute(
+                    select(NotificationOutbox.id, NotificationOutbox.payload).where(
+                        NotificationOutbox.event_type == "domain.status_changed"
+                    )
                 )
-            )
-        assert outbox_count is not None
+            ).one_or_none()
+        assert outbox is not None
+        outbox_id, payload = outbox
+        assert payload["id"] == str(outbox_id)
+        assert payload["type"] == "domain.status_changed"
+        assert payload["api_version"] == "2026-08-30"
+        assert payload["webhook"] == {
+            "id": str(webhook_rule_id),
+            "name": "Operations endpoint",
+        }
+        assert payload["data"]["changed_fields"] == [
+            "expires_at",
+            "registry_expires_at",
+            "registrar_expires_at",
+        ]
         assert next_check_at is not None
         if next_check_at.tzinfo is None:
             next_check_at = next_check_at.replace(tzinfo=UTC)

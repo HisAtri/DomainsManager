@@ -264,7 +264,7 @@ OpenAPI 同时包含已实现路由和后续阶段的预留契约。实际可用
 - 在检查结果事务中生成 Notification Outbox；
 - 实现邮件和 Webhook 发送适配器；
 - 实现 Outbox claim、lease、retry、dead-letter 和状态更新；
-- 通知凭据使用加密存储或外部 Secret，不保存在普通 JSON 配置中；
+- Webhook Endpoint 禁止携带凭据；未来签名凭据使用加密存储或外部 Secret。管理员配置的 Webhook 代理 URL 按产品决策以明文存储并回显；
 - 为通知规则和发送历史补充 API 契约，再实现对应路由；
 - 记录发送耗时、失败原因和重试次数，并提供必要指标。
 
@@ -322,7 +322,7 @@ OpenAPI 同时包含已实现路由和后续阶段的预留契约。实际可用
 批量与轮询间隔、注册开关。应分组校验，例如最大重试延迟不得小于基础延迟。
 
 以下内容必须继续来自环境变量或部署 Secret，禁止迁入 `global_setting`：数据库连接与连接池、监听地址
-与端口、迁移开关、JWT Secret、Refresh Pepper、其他通知凭据、TLS、CORS、首次管理员引导凭据。SMTP 密码允许作为受控例外写入加密数据库记录，解密主密钥仍由环境变量提供。
+与端口、迁移开关、JWT Secret、Refresh Pepper、未来 Webhook 签名凭据、TLS、CORS、首次管理员引导凭据。SMTP 密码和 Webhook 代理 URL 允许作为受控例外明文写入数据库并由管理员回显。
 这些值属于基础设施边界或高敏感 Secret；数据库不可用时应用仍需能以它们完成启动/故障诊断。
 
 ### 9.4 完成条件

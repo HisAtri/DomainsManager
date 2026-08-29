@@ -309,15 +309,16 @@ PSL 包含类似 `*.ck` 与 `!www.ck` 的规则，所以不能只保存一个无
 | `id` | BigInteger/Integer | 否 | 主键 |
 | `user_id` | ForeignKey | 否 | 所属用户 |
 | `domain_id` | ForeignKey | 是 | 为空表示全局规则 |
-| `event_type` | String(32) | 否 | `expiration`、`status_change`、`query_failure` 等 |
+| `event_type` | String(32) | 否 | `domain.expiration_warning`、`domain.status_changed`、`domain.query_failed` |
 | `days_before` | Integer | 是 | 到期前天数，仅到期提醒使用 |
 | `channel` | String(32) | 否 | `email`、`webhook` 等 |
+| `webhook_name` | String(128) | 是 | Webhook 规则必填的用户显示名；邮件规则为空 |
 | `channel_config` | JSON | 否 | 渠道非敏感配置；凭据应加密或外置 |
 | `enabled` | Boolean | 否 | 是否启用 |
 | `created_at` | DateTime | 否 | 创建时间 |
 | `updated_at` | DateTime | 否 | 更新时间 |
 
-### 5.8 `notification_log`
+### 5.8 `notification_outbox`
 
 | 字段 | 建议类型 | 空值 | 说明 |
 | --- | --- | --- | --- |
@@ -326,10 +327,14 @@ PSL 包含类似 `*.ck` 与 `!www.ck` 的规则，所以不能只保存一个无
 | `domain_id` | ForeignKey | 否 | 对应域名 |
 | `domain_check_id` | ForeignKey | 是 | 触发提醒的检查记录 |
 | `deduplication_key` | String(255) | 否 | 唯一去重键 |
-| `scheduled_at` | DateTime | 否 | 计划发送时间 |
+| `event_type` | String(32) | 否 | 版本化事件类型 |
+| `payload` | JSON | 否 | 完整且不可变的 Event Envelope |
+| `available_at` | DateTime | 否 | 可领取投递时间 |
 | `sent_at` | DateTime | 是 | 实际发送时间 |
-| `status` | String(32) | 否 | `pending`、`sent`、`failed` 等 |
-| `error_message` | Text | 是 | 脱敏后的发送错误 |
+| `status` | String(32) | 否 | `pending`、`running`、`sent`、`dead_letter`、`skipped` |
+| `outcome` | String(32) | 是 | 受控的投递结果分类 |
+| `response_status_code` | Integer | 是 | 内部保存的 HTTP 状态码；用户 API 按规则脱敏 |
+| `last_error` | Text | 是 | 固定、脱敏后的发送错误，不保存底层异常原文 |
 | `created_at` | DateTime | 否 | 创建时间 |
 
 `deduplication_key` 应建唯一约束。例如可以由域名、事件类型、到期日和提前天数组合生成，

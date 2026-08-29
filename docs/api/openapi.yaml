@@ -1118,48 +1118,53 @@ components:
       required: [event_type, channel]
       properties:
         domain_id: { type: [string, 'null'], format: uuid }
-        event_type: { type: string, enum: [expiration, status_change, query_failure] }
+        event_type: { type: string, enum: [domain.expiration_warning, domain.status_changed, domain.query_failed] }
         days_before: { type: [integer, 'null'], minimum: 0, maximum: 365 }
         channel: { type: string, enum: [email, webhook] }
         webhook_url: { type: [string, 'null'], format: uri }
+        webhook_name: { type: [string, 'null'], minLength: 1, maxLength: 128 }
     UpdateNotificationRuleRequest:
       type: object
       additionalProperties: false
       properties:
         domain_id: { type: [string, 'null'], format: uuid }
-        event_type: { type: string, enum: [expiration, status_change, query_failure] }
+        event_type: { type: string, enum: [domain.expiration_warning, domain.status_changed, domain.query_failed] }
         days_before: { type: [integer, 'null'], minimum: 0, maximum: 365 }
         channel: { type: string, enum: [email, webhook] }
         webhook_url: { type: [string, 'null'], format: uri }
+        webhook_name: { type: [string, 'null'], minLength: 1, maxLength: 128 }
         enabled: { type: boolean }
     NotificationRule:
       type: object
       additionalProperties: false
-      required: [id, domain_id, event_type, days_before, channel, webhook_url, enabled, created_at, updated_at]
+      required: [id, domain_id, event_type, days_before, channel, webhook_url, webhook_name, enabled, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         domain_id: { type: [string, 'null'], format: uuid }
-        event_type: { type: string, enum: [expiration, status_change, query_failure] }
+        event_type: { type: string, enum: [domain.expiration_warning, domain.status_changed, domain.query_failed] }
         days_before: { type: [integer, 'null'] }
         channel: { type: string, enum: [email, webhook] }
         webhook_url: { type: [string, 'null'], format: uri }
+        webhook_name: { type: [string, 'null'], minLength: 1, maxLength: 128 }
         enabled: { type: boolean }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     NotificationDelivery:
       type: object
       additionalProperties: false
-      required: [id, domain_id, event_type, channel, status, attempt_count, available_at, sent_at, failure_reason, created_at, updated_at]
+      required: [id, domain_id, event_type, channel, status, attempt_count, available_at, sent_at, failure_reason, outcome, response_status, created_at, updated_at]
       properties:
         id: { type: string, format: uuid }
         domain_id: { type: string, format: uuid }
-        event_type: { type: string, enum: [expiration, status_change, query_failure] }
+        event_type: { type: string, enum: [domain.expiration_warning, domain.status_changed, domain.query_failed] }
         channel: { type: string, enum: [email, webhook] }
-        status: { type: string, enum: [pending, running, sent, dead_letter] }
+        status: { type: string, enum: [pending, running, sent, dead_letter, skipped] }
         attempt_count: { type: integer, minimum: 0 }
         available_at: { type: [string, 'null'], format: date-time }
         sent_at: { type: [string, 'null'], format: date-time }
         failure_reason: { type: [string, 'null'] }
+        outcome: { type: [string, 'null'], enum: [success, redirect_rejected, rate_limited, http_error, network_error, tls_error, proxy_error, configuration_error, suppressed, null] }
+        response_status: { type: [string, 'null'], examples: ['204', '301', '429', '4**', '5**'] }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
     HealthStatus:

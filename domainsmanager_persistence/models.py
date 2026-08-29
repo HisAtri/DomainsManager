@@ -447,11 +447,15 @@ class NotificationRule(TimestampMixin, Base):
     __tablename__ = "notification_rule"
     __table_args__ = (
         CheckConstraint(
-            "event_type IN ('expiration', 'status_change', 'query_failure')",
+            "event_type IN ('domain.expiration_warning', 'domain.status_changed', 'domain.query_failed')",
             name="notification_rule_valid_event_type",
         ),
         CheckConstraint(
             "channel IN ('email', 'webhook')", name="notification_rule_valid_channel"
+        ),
+        CheckConstraint(
+            "(channel = 'webhook' AND webhook_name IS NOT NULL AND length(trim(webhook_name)) BETWEEN 1 AND 128) OR (channel = 'email' AND webhook_name IS NULL)",
+            name="notification_rule_valid_webhook_name",
         ),
         Index("ix_notification_rule_user_domain", "user_id", "managed_domain_id"),
     )
@@ -464,6 +468,7 @@ class NotificationRule(TimestampMixin, Base):
     event_type: Mapped[str] = mapped_column(String(32), nullable=False)
     days_before: Mapped[int | None] = mapped_column(Integer)
     channel: Mapped[str] = mapped_column(String(32), nullable=False)
+    webhook_name: Mapped[str | None] = mapped_column(String(128))
     channel_config: Mapped[dict[str, Any]] = mapped_column(
         JSON_TYPE, default=dict, nullable=False
     )
@@ -480,6 +485,14 @@ class NotificationOutbox(TimestampMixin, Base):
         ),
         CheckConstraint(
             "attempt_count >= 0", name="notification_outbox_attempt_count_nonnegative"
+        ),
+        CheckConstraint(
+            "outcome IS NULL OR outcome IN ('success', 'redirect_rejected', 'rate_limited', 'http_error', 'network_error', 'tls_error', 'proxy_error', 'configuration_error', 'suppressed')",
+            name="notification_outbox_valid_outcome",
+        ),
+        CheckConstraint(
+            "response_status_code IS NULL OR response_status_code BETWEEN 100 AND 599",
+            name="notification_outbox_valid_response_status",
         ),
         Index("ix_notification_outbox_status_available", "status", "available_at"),
     )
@@ -505,6 +518,8 @@ class NotificationOutbox(TimestampMixin, Base):
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     lease_token: Mapped[UUID | None] = mapped_column(Uuid)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    outcome: Mapped[str | None] = mapped_column(String(32))
+    response_status_code: Mapped[int | None] = mapped_column(Integer)
     lease_owner: Mapped[str | None] = mapped_column(String(128))
     last_error: Mapped[str | None] = mapped_column(String(512))
 

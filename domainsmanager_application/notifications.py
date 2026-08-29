@@ -23,6 +23,29 @@ class NotificationDeliverySuppressed(RuntimeError):
 
 
 @dataclass(frozen=True, slots=True)
+class NotificationDeliveryResult:
+    outcome: str
+    response_status_code: int | None = None
+
+
+class NotificationDeliveryFailure(RuntimeError):
+    def __init__(
+        self,
+        outcome: str,
+        message: str,
+        *,
+        response_status_code: int | None = None,
+        retryable: bool,
+        retry_after: timedelta | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.outcome = outcome
+        self.response_status_code = response_status_code
+        self.retryable = retryable
+        self.retry_after = retry_after
+
+
+@dataclass(frozen=True, slots=True)
 class NotificationRuleRecord:
     id: UUID
     user_id: UUID
@@ -30,6 +53,7 @@ class NotificationRuleRecord:
     event_type: str
     days_before: int | None
     channel: str
+    webhook_name: str | None
     channel_config: dict
     is_enabled: bool
     created_at: datetime
@@ -66,6 +90,8 @@ class NotificationDeliveryRecord:
     available_at: datetime | None
     sent_at: datetime | None
     failure_reason: str | None
+    outcome: str | None
+    response_status_code: int | None
     created_at: datetime
     updated_at: datetime
 
@@ -81,7 +107,7 @@ class NotificationOutboxRepository(Protocol):
 
 
 class NotificationOutboxService:
-    def __init__(self, *, unit_of_work: UnitOfWorkFactory, deliver: Callable[[OutboxMessage], Awaitable[None]], clock: Callable[[], datetime] | None = None, lease_duration: timedelta = timedelta(minutes=2), max_attempts: int = 5, retry_base_delay: timedelta = timedelta(minutes=1), retry_max_delay: timedelta = timedelta(hours=1)) -> None:
+    def __init__(self, *, unit_of_work: UnitOfWorkFactory, deliver: Callable[[OutboxMessage], Awaitable[NotificationDeliveryResult]], clock: Callable[[], datetime] | None = None, lease_duration: timedelta = timedelta(minutes=2), max_attempts: int = 5, retry_base_delay: timedelta = timedelta(minutes=1), retry_max_delay: timedelta = timedelta(hours=1)) -> None:
         self._unit_of_work, self._deliver, self._clock = unit_of_work, deliver, clock or (lambda: datetime.now(UTC))
         self._lease_duration, self._max_attempts = lease_duration, max_attempts
         self._retry_base_delay, self._retry_max_delay = retry_base_delay, retry_max_delay
@@ -95,20 +121,44 @@ class NotificationOutboxService:
         if message is None:
             return False
         try:
-            await self._deliver(message)
+            result = await self._deliver(message)
         except NotificationDeliverySuppressed as error:
             async with self._unit_of_work() as uow:
                 await uow.notifications.suppress_outbox(
                     message.id, message.lease_token, self._clock(), str(error)
                 )
                 await uow.commit()
-        except Exception as error:  # noqa: BLE001 - adapters may raise transport errors
+        except NotificationDeliveryFailure as error:
             async with self._unit_of_work() as uow:
-                await uow.notifications.fail_outbox(message.id, message.lease_token, self._clock(), f"{type(error).__name__}: delivery failed", self._max_attempts, self._retry_delay(message.attempt_count))
+                retry_delay = error.retry_after or self._retry_delay(message.attempt_count)
+                await uow.notifications.fail_outbox(
+                    message.id,
+                    message.lease_token,
+                    self._clock(),
+                    str(error),
+                    self._max_attempts,
+                    min(retry_delay, self._retry_max_delay),
+                    outcome=error.outcome,
+                    response_status_code=error.response_status_code,
+                    retryable=error.retryable,
+                )
+                await uow.commit()
+        except Exception:  # noqa: BLE001 - enforce a fully sanitized fallback
+            async with self._unit_of_work() as uow:
+                await uow.notifications.fail_outbox(
+                    message.id, message.lease_token, self._clock(),
+                    "Notification delivery failed", self._max_attempts,
+                    self._retry_delay(message.attempt_count), outcome="network_error",
+                    response_status_code=None, retryable=True,
+                )
                 await uow.commit()
         else:
             async with self._unit_of_work() as uow:
-                await uow.notifications.complete_outbox(message.id, message.lease_token, self._clock())
+                await uow.notifications.complete_outbox(
+                    message.id, message.lease_token, self._clock(),
+                    outcome=result.outcome,
+                    response_status_code=result.response_status_code,
+                )
                 await uow.commit()
         return True
 
@@ -129,9 +179,9 @@ class NotificationRuleService:
                 raise DomainNotFoundError("domain was not found")
             return await uow.notifications.list(user_id, domain_id)
 
-    async def create(self, user_id: UUID, *, domain_id: UUID | None, event_type: str, days_before: int | None, channel: str, channel_config: dict) -> NotificationRuleRecord:
+    async def create(self, user_id: UUID, *, domain_id: UUID | None, event_type: str, days_before: int | None, channel: str, webhook_name: str | None, channel_config: dict) -> NotificationRuleRecord:
         now = datetime.now(UTC)
-        record = NotificationRuleRecord(uuid4(), user_id, domain_id, event_type, days_before, channel, channel_config, True, now, now)
+        record = NotificationRuleRecord(uuid4(), user_id, domain_id, event_type, days_before, channel, webhook_name, channel_config, True, now, now)
         async with self._unit_of_work() as uow:
             if domain_id is not None and await uow.domains.get(user_id, domain_id) is None:
                 raise DomainNotFoundError("domain was not found")
@@ -155,6 +205,7 @@ class NotificationRuleService:
         event_type: str,
         days_before: int | None,
         channel: str,
+        webhook_name: str | None,
         channel_config: dict,
         is_enabled: bool,
     ) -> NotificationRuleRecord:
@@ -165,14 +216,14 @@ class NotificationRuleService:
                 raise NotificationRuleNotFoundError("notification rule was not found")
             if domain_id is not None and await uow.domains.get(user_id, domain_id) is None:
                 raise DomainNotFoundError("domain was not found")
-            updated = NotificationRuleRecord(rule_id, user_id, domain_id, event_type, days_before, channel, channel_config, is_enabled, existing.created_at, now)
+            updated = NotificationRuleRecord(rule_id, user_id, domain_id, event_type, days_before, channel, webhook_name, channel_config, is_enabled, existing.created_at, now)
             await uow.notifications.update(updated)
             await uow.commit()
         return updated
 
     async def delete(self, user_id: UUID, rule_id: UUID) -> None:
         existing = await self.get(user_id, rule_id)
-        deleted = NotificationRuleRecord(existing.id, existing.user_id, existing.domain_id, existing.event_type, existing.days_before, existing.channel, existing.channel_config, False, existing.created_at, datetime.now(UTC), datetime.now(UTC))
+        deleted = NotificationRuleRecord(existing.id, existing.user_id, existing.domain_id, existing.event_type, existing.days_before, existing.channel, existing.webhook_name, existing.channel_config, False, existing.created_at, datetime.now(UTC), datetime.now(UTC))
         async with self._unit_of_work() as uow:
             await uow.notifications.update(deleted)
             await uow.commit()

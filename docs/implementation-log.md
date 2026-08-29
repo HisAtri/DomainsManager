@@ -1,5 +1,12 @@
 # 实施变更记录
 
+## 2026-08-30 — Webhook 安全投递与 Event Envelope
+
+- Webhook 事件改为版本化 Envelope，事件使用稳定 Outbox UUID，并携带用户配置的 Webhook 名称快照。
+- Endpoint 限制为 HTTPS/443、严格证书验证、固定 POST 且禁止重定向；响应采用流式接口，只读取状态与必要的 `Retry-After` 后关闭。
+- 管理员“通知设置”统一管理 Webhook 与邮件 section，并可配置仅作用于 Webhook 的 HTTP/SOCKS5 代理。
+- 投递历史按 `2xx`、`301/302`、`429`、状态码类别及脱敏网络/TLS/代理错误展示，不保存响应体、响应头或底层异常原文。
+
 ## 2026-08-28 — M6 验收状态对账
 
 - 仓库内日志、指标、告警、限流、清理、独立 migration、发布预检和 PostgreSQL 故障测试已形成闭环。

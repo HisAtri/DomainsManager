@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy import select
 
 from domainsmanager_application.notifications import (
+    NotificationDeliveryResult,
     NotificationDeliverySuppressed,
     NotificationOutboxService,
 )
@@ -36,11 +37,11 @@ async def test_outbox_delivery_marks_sent_and_retries_with_backoff(tmp_path: Pat
         async with engine.begin() as connection:
             await connection.execute(AppUser.__table__.insert().values(id=user_id, username="outbox", username_normalized="outbox", password_hash="hash", email="user@example.test", role="user", preferences={}, is_active=True, password_changed_at=now, created_at=now, updated_at=now))
             await connection.execute(ManagedDomain.__table__.insert().values(id=domain_id, user_id=user_id, name_ascii="example.com", name_unicode="example.com", registrable_domain="example.com", public_suffix="com", tld="com", statuses=[], nameservers=[], monitor_enabled=True, version=1, created_at=now, updated_at=now))
-            await connection.execute(NotificationRule.__table__.insert().values(id=rule_id, user_id=user_id, event_type="status_change", channel="webhook", channel_config={"webhook_url": "https://example.test"}, is_enabled=True, created_at=now, updated_at=now))
+            await connection.execute(NotificationRule.__table__.insert().values(id=rule_id, user_id=user_id, event_type="domain.status_changed", channel="webhook", webhook_name="Test webhook", channel_config={"webhook_url": "https://example.test"}, is_enabled=True, created_at=now, updated_at=now))
             await connection.execute(DomainCheck.__table__.insert().values(id=check_id, managed_domain_id=domain_id, checked_at=now, outcome="success", changed_fields=[], is_stale=False, created_at=now))
             for key in ("sent", "failed", "skipped"):
-                await connection.execute(NotificationOutbox.__table__.insert().values(id=uuid4(), notification_rule_id=rule_id, managed_domain_id=domain_id, domain_check_id=check_id, deduplication_key=key, event_type="status_change", payload={"event_type": key}, status="pending", attempt_count=0, available_at=now, created_at=now, updated_at=now))
-        async def succeed(_message: object) -> None: pass
+                await connection.execute(NotificationOutbox.__table__.insert().values(id=uuid4(), notification_rule_id=rule_id, managed_domain_id=domain_id, domain_check_id=check_id, deduplication_key=key, event_type="domain.status_changed", payload={"type": "domain.status_changed"}, status="pending", attempt_count=0, available_at=now, created_at=now, updated_at=now))
+        async def succeed(_message: object) -> NotificationDeliveryResult: return NotificationDeliveryResult("success", 204)
         async def fail(_message: object) -> None: raise RuntimeError("delivery failed")
         async def suppress(_message: object) -> None: raise NotificationDeliverySuppressed("SMTP service is disabled")
         assert await NotificationOutboxService(unit_of_work=factory, deliver=succeed, clock=lambda: now).run_once("worker")

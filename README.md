@@ -72,7 +72,7 @@ uv run domainsmanager-server
 
 推荐使用 `uv run domainsmanager-server` 启动完整后端：HTTP API、刷新任务 Worker、定时调度器和通知 Worker 会在同一进程中运行。若部署时需要分别扩缩容，仍可单独启动各组件。刷新任务由独立 Worker 执行：`uv run domainsmanager-worker`（也支持 `python -m domainsmanager_api.worker`）；部署前应先执行独立 migration 命令。可使用 `DOMAINSMANAGER_WORKER_ID` 指定稳定标识，并使用 `DOMAINSMANAGER_WORKER_POLL_INTERVAL_SECONDS` 调整空队列轮询间隔。
 定时调度由独立 Scheduler 执行：`uv run domainsmanager-scheduler`（也支持 `python -m domainsmanager_api.scheduler`）。它扫描到期的已启用域名并创建刷新任务；可通过 `DOMAINSMANAGER_SCHEDULER_POLL_INTERVAL_SECONDS` 和 `DOMAINSMANAGER_SCHEDULER_BATCH_SIZE` 调整轮询与批量大小。
-通知投递由独立进程执行：`uv run domainsmanager-notifier`。Webhook 规则通过 HTTP POST 投递；邮件规则投递到账户邮箱，需配置 SMTP 主机和发件人。投递失败不会影响域名检查，任务会按 Outbox 状态机重试并最终进入死信。
+通知投递由独立进程执行：`uv run domainsmanager-notifier`。Webhook 规则通过安全约束下的 HTTPS POST 投递；邮件规则投递到账户邮箱，需配置 SMTP 主机和发件人。投递失败不会影响域名检查，任务会按 Outbox 状态机重试并最终进入死信。
 
 生产发布在 migration 与配置注入完成后，可运行 `uv run domainsmanager-verify-release` 只读验证数据库 revision 并输出当前队列快照；数据库未就绪时命令返回非零退出码。
 
@@ -83,6 +83,7 @@ uv run domainsmanager-server
 - [数据库缓存接入指南](docs/cache-backends.md)
 - [数据库设计](docs/database-design.md)
 - [后端 API 规范](docs/api/README.md)
+- [Webhook 投递规范](docs/webhook-delivery.md)
 - [后续开发工作计划](docs/development-plan.md)
 
 ## 测试

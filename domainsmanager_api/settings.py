@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -71,6 +72,7 @@ class Settings(BaseSettings):
     notification_max_attempts: int = Field(default=5, ge=1)
     notification_retry_base_seconds: int = Field(default=60, ge=0)
     notification_retry_max_seconds: int = Field(default=3600, ge=0)
+    webhook_proxy_url: str | None = None
     smtp_enabled: bool = True
     smtp_host: str | None = None
     smtp_port: int = Field(default=587, ge=1, le=65535)
@@ -132,6 +134,12 @@ class Settings(BaseSettings):
             raise ValueError(
                 "notification retry max seconds must not be less than the base delay"
             )
+        if self.webhook_proxy_url:
+            proxy = urlsplit(self.webhook_proxy_url)
+            if proxy.scheme not in {"http", "socks5"} or not proxy.hostname:
+                raise ValueError("webhook_proxy_url must be an HTTP or SOCKS5 URL")
+            if proxy.fragment:
+                raise ValueError("webhook_proxy_url must not contain a fragment")
         return self
 
 

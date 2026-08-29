@@ -177,6 +177,37 @@ async def test_admin_stores_smtp_password_as_plaintext_and_returns_it(tmp_path: 
 
 @pytest.mark.asyncio
 @pytest.mark.api
+async def test_admin_webhook_proxy_is_plaintext_visible_and_validated(tmp_path: Path) -> None:
+    client = await make_client(tmp_path)
+    with client:
+        login = client.post(
+            "/api/v1/auth/login",
+            data={"username": "task-admin", "password": "123456"},
+        )
+        headers = {"Authorization": f"Bearer {login.json()['tokens']['access_token']}"}
+        proxy = "socks5://proxy-user:proxy-pass@proxy.example.test:1080"
+        updated = client.put(
+            "/api/v1/admin/settings/webhook_proxy_url",
+            json={"value": proxy},
+            headers={**headers, "If-Match": "0"},
+        )
+        assert updated.status_code == 200
+        assert updated.json()["value"] == proxy
+        assert proxy in client.get("/api/v1/admin/settings", headers=headers).text
+        resources = client.app.state.resources
+        effective = await delivery_settings(resources.settings, resources.sessions)
+        assert effective.webhook_proxy_url == proxy
+
+        invalid = client.put(
+            "/api/v1/admin/settings/webhook_proxy_url",
+            json={"value": "https://proxy.example.test:443"},
+            headers={**headers, "If-Match": "1"},
+        )
+        assert invalid.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.api
 async def test_admin_settings_allow_business_values_but_reject_invalid_combinations(tmp_path: Path) -> None:
     client = await make_client(tmp_path)
     with client:
