@@ -38,11 +38,18 @@ class AdminManagedDomainResponse(StrictModel):
     deleted_by_user_id: UUID | None
 
 
+class AdminDomainSummaryResponse(StrictModel):
+    total: int = Field(ge=0)
+    monitored: int = Field(ge=0)
+    deleted: int = Field(ge=0)
+
+
 class AdminDomainPageResponse(StrictModel):
     items: list[AdminManagedDomainResponse]
     page: int = Field(ge=1)
     page_size: int = Field(ge=1, le=100)
     total: int = Field(ge=0)
+    summary: AdminDomainSummaryResponse
 
 
 class AdminUpdateDomainRequest(StrictModel):

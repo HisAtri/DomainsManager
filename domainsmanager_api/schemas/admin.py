@@ -25,11 +25,18 @@ class AdminUserResponse(StrictModel):
     ban_reason: str | None
 
 
+class AdminUserSummaryResponse(StrictModel):
+    total: int = Field(ge=0)
+    admins: int = Field(ge=0)
+    banned: int = Field(ge=0)
+
+
 class AdminUserPageResponse(StrictModel):
     items: list[AdminUserResponse]
     page: int = Field(ge=1)
     page_size: int = Field(ge=1, le=100)
     total: int = Field(ge=0)
+    summary: AdminUserSummaryResponse
 
 
 class AdminUpdateUserRequest(StrictModel):

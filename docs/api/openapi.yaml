@@ -1339,15 +1339,24 @@ components:
         domain_count: { type: integer, minimum: 0 }
         banned_at: { type: [string, 'null'], format: date-time }
         ban_reason: { type: [string, 'null'] }
+    AdminUserSummary:
+      type: object
+      additionalProperties: false
+      required: [total, admins, banned]
+      properties:
+        total: { type: integer, minimum: 0 }
+        admins: { type: integer, minimum: 0 }
+        banned: { type: integer, minimum: 0 }
     AdminUserPage:
       type: object
       additionalProperties: false
-      required: [items, page, page_size, total]
+      required: [items, page, page_size, total, summary]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/AdminUser' } }
         page: { type: integer, minimum: 1 }
         page_size: { type: integer, minimum: 1, maximum: 100 }
         total: { type: integer, minimum: 0 }
+        summary: { $ref: '#/components/schemas/AdminUserSummary' }
     AdminUpdateUserRequest:
       type: object
       additionalProperties: false
@@ -1676,15 +1685,24 @@ components:
         monitor_enabled: { type: boolean }
         renewal_mode: { $ref: '#/components/schemas/RenewalMode' }
         notes: { type: [string, 'null'], maxLength: 5000 }
+    AdminDomainSummary:
+      type: object
+      additionalProperties: false
+      required: [total, monitored, deleted]
+      properties:
+        total: { type: integer, minimum: 0 }
+        monitored: { type: integer, minimum: 0 }
+        deleted: { type: integer, minimum: 0 }
     AdminDomainPage:
       type: object
       additionalProperties: false
-      required: [items, page, page_size, total]
+      required: [items, page, page_size, total, summary]
       properties:
         items: { type: array, items: { $ref: '#/components/schemas/AdminManagedDomain' } }
         page: { type: integer, minimum: 1 }
         page_size: { type: integer, minimum: 1, maximum: 100 }
         total: { type: integer, minimum: 0 }
+        summary: { $ref: '#/components/schemas/AdminDomainSummary' }
     CheckStatistics:
       type: object
       additionalProperties: false

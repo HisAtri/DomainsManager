@@ -140,9 +140,11 @@ async def test_admin_user_and_domain_access(tmp_path: Path) -> None:
         users = client.get("/api/v1/admin/users", headers=admin)
         assert users.status_code == 200
         assert users.json()["total"] == 2
+        assert users.json()["summary"] == {"total": 2, "admins": 1, "banned": 0}
         domains = client.get("/api/v1/admin/domains", headers=admin)
         assert domains.status_code == 200
         assert domains.json()["items"][0]["id"] == domain["id"]
+        assert domains.json()["summary"] == {"total": 1, "monitored": 1, "deleted": 0}
         assert domains.json()["items"][0]["last_outcome"] is None
         engine = create_engine(sqlite_database(tmp_path / "admin-api.db"))
         async with engine.begin() as connection:
@@ -197,6 +199,7 @@ async def test_admin_user_and_domain_access(tmp_path: Path) -> None:
         )
         assert banned.status_code == 200
         assert banned.json()["status"] == "banned"
+        assert client.get("/api/v1/admin/users", headers=admin).json()["summary"]["banned"] == 1
         repeated_ban = client.post(
             f"/api/v1/admin/users/{member_id}/ban",
             json={"reason": "test ban"},
@@ -354,6 +357,7 @@ async def test_admin_list_filters_and_stable_sorting(tmp_path: Path) -> None:
             "alpha.com",
             "zeta.net",
         ]
+        assert ordered["summary"] == {"total": 2, "monitored": 1, "deleted": 0}
         filtered = client.get(
             "/api/v1/admin/domains"
             "?public_suffix=com&monitor_enabled=true&last_outcome=success"

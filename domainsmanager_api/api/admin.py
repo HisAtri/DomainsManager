@@ -29,12 +29,14 @@ from domainsmanager_api.schemas.admin import (
     AdminUpdateUserRequest,
     AdminUserPageResponse,
     AdminUserResponse,
+    AdminUserSummaryResponse,
     BanUserRequest,
 )
 from domainsmanager_api.schemas.admin_domains import (
     AdminDomainCheckPageResponse,
     AdminDomainCheckResponse,
     AdminDomainPageResponse,
+    AdminDomainSummaryResponse,
     AdminManagedDomainResponse,
     AdminUpdateDomainRequest,
     CheckStatisticsResponse,
@@ -628,11 +630,25 @@ async def list_users(
             .limit(page_size)
         )
     ).all()
+    summary_total = await session.scalar(select(func.count()).select_from(AppUser))
+    summary_admins = await session.scalar(
+        select(func.count()).select_from(AppUser).where(AppUser.role == "admin")
+    )
+    summary_banned = await session.scalar(
+        select(func.count())
+        .select_from(AppUser)
+        .where(AppUser.banned_at.is_not(None) | AppUser.is_active.is_(False))
+    )
     return AdminUserPageResponse(
         items=[user_response(user, count) for user, count in rows],
         page=page,
         page_size=page_size,
         total=total or 0,
+        summary=AdminUserSummaryResponse(
+            total=summary_total or 0,
+            admins=summary_admins or 0,
+            banned=summary_banned or 0,
+        ),
     )
 
 
@@ -1271,11 +1287,34 @@ async def list_domains_as_admin(
             .limit(page_size)
         )
     ).all()
+    summary_total = await session.scalar(
+        select(func.count())
+        .select_from(ManagedDomain)
+        .where(ManagedDomain.deleted_at.is_(None))
+    )
+    summary_monitored = await session.scalar(
+        select(func.count())
+        .select_from(ManagedDomain)
+        .where(
+            ManagedDomain.deleted_at.is_(None),
+            ManagedDomain.monitor_enabled.is_(True),
+        )
+    )
+    summary_deleted = await session.scalar(
+        select(func.count())
+        .select_from(ManagedDomain)
+        .where(ManagedDomain.deleted_at.is_not(None))
+    )
     return AdminDomainPageResponse(
         items=[admin_domain_response(domain, owner) for domain, owner in rows],
         page=page,
         page_size=page_size,
         total=total or 0,
+        summary=AdminDomainSummaryResponse(
+            total=summary_total or 0,
+            monitored=summary_monitored or 0,
+            deleted=summary_deleted or 0,
+        ),
     )
 
 

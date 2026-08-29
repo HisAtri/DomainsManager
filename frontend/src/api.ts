@@ -1,4 +1,4 @@
-import type { AdminCheckPage, AdminDomain, AdminSession, AdminUser, AuthResult, Check, Domain, DomainStats, GlobalSetting, NotificationDelivery, NotificationRule, NotificationRuleInput, NotificationRuleUpdate, OperationalMetrics, Page, PublicSiteConfig, SecurityAuditEvent, Settings, Task, Tokens, User } from "./types";
+import type { AdminCheckPage, AdminDomain, AdminDomainPage, AdminSession, AdminUser, AdminUserPage, AuthResult, Check, Domain, DomainStats, GlobalSetting, NotificationDelivery, NotificationRule, NotificationRuleInput, NotificationRuleUpdate, OperationalMetrics, Page, PublicSiteConfig, SecurityAuditEvent, Settings, Task, Tokens, User } from "./types";
 
 type ApiErrorDetail = { location?: string; message?: string; code?: string };
 type ApiErrorBody = { code?: string; message?: string; details?: ApiErrorDetail[]; request_id?: string };
@@ -115,14 +115,14 @@ class ApiClient {
   updateNotificationRule(id: string, values: NotificationRuleUpdate) { return this.request<NotificationRule>(`/notification-rules/${id}`, { method: "PATCH", body: JSON.stringify(values) }).then((r) => r.data); }
   deleteNotificationRule(id: string) { return this.request<void>(`/notification-rules/${id}`, { method: "DELETE" }); }
   notificationDeliveries(limit = 50) { return this.request<NotificationDelivery[]>(`/notification-rules/deliveries?limit=${limit}`).then((r) => r.data); }
-  adminUsers(params: Record<string, string | number | undefined> = {}) { return this.request<Page<AdminUser>>(`/admin/users?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
+  adminUsers(params: Record<string, string | number | undefined> = {}) { return this.request<AdminUserPage>(`/admin/users?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
   adminUser(id: string) { return this.request<AdminUser>(`/admin/users/${id}`).then((r) => r.data); }
   updateAdminUser(id: string, email: string | null) { return this.request<AdminUser>(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify({ email }) }).then((r) => r.data); }
   banUser(id: string, reason: string) { return this.request<AdminUser>(`/admin/users/${id}/ban`, { method: "POST", body: JSON.stringify({ reason }) }).then((r) => r.data); }
   unbanUser(id: string) { return this.request<AdminUser>(`/admin/users/${id}/unban`, { method: "POST" }).then((r) => r.data); }
   adminSessions(id: string) { return this.request<Page<AdminSession>>(`/admin/users/${id}/sessions`).then((r) => r.data); }
   revokeAdminSession(userId: string, sessionId: string) { return this.request<AdminSession>(`/admin/users/${userId}/sessions/${sessionId}/revoke`, { method: "POST" }).then((r) => r.data); }
-  adminDomains(params: Record<string, string | number | undefined> = {}) { return this.request<Page<AdminDomain>>(`/admin/domains?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
+  adminDomains(params: Record<string, string | number | undefined> = {}) { return this.request<AdminDomainPage>(`/admin/domains?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
   adminDomain(id: string) { return this.request<AdminDomain>(`/admin/domains/${id}`).then((r) => r.data); }
   updateAdminDomain(id: string, version: number, values: Partial<Pick<AdminDomain, "monitor_enabled" | "renewal_mode" | "notes">>) { return this.request<AdminDomain>(`/admin/domains/${id}`, { method: "PATCH", headers: { "If-Match": `"${version}"` }, body: JSON.stringify(values) }).then((r) => r.data); }
   deleteAdminDomain(id: string) { return this.request<void>(`/admin/domains/${id}`, { method: "DELETE", headers: { "X-Confirm-Action": "soft-delete" } }); }
