@@ -467,7 +467,7 @@ button:disabled { cursor: not-allowed; }
 .nav-label { color: var(--dm-muted-2); }
 .nav-item, .help { color: var(--dm-muted); }
 .nav-item:hover, .help:hover { color: var(--dm-text); background: var(--dm-soft); }
-.nav-active, .nav-active:hover { color: var(--dm-accent); background: var(--dm-accent-soft); box-shadow: none; }
+.nav-item.nav-active, .nav-item.nav-active:hover { color: var(--dm-accent); background: var(--dm-accent-soft); box-shadow: none; }
 .help, .signed-user { border-color: var(--dm-border); }
 .signed-user > b, .profile span, .user-cell > span, .owner-cell > span { color: var(--dm-accent); background: var(--dm-accent-soft); }
 .signed-user span, .user-cell strong { color: var(--dm-text); }
