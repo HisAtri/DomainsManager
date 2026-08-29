@@ -118,10 +118,8 @@ class DomainLookupService:
                 if response is not None:
                     try:
                         info = self._parse_response(protocol, response, domain)
-                        info, registrar_response = (
-                            await self._enrich_rdap(domain, info)
-                            if protocol == "rdap"
-                            else (info, None)
+                        info, registrar_response = await self._finalize_lookup(
+                            protocol, domain, info
                         )
                         return LookupResult(
                             domain=domain,
@@ -169,10 +167,8 @@ class DomainLookupService:
                     await self._responses.save(response)
                 except Exception:
                     pass
-                info, registrar_response = (
-                    await self._enrich_rdap(domain, info)
-                    if protocol == "rdap"
-                    else (info, None)
+                info, registrar_response = await self._finalize_lookup(
+                    protocol, domain, info
                 )
                 return LookupResult(
                     domain=domain,
@@ -233,6 +229,16 @@ class DomainLookupService:
             endpoint = await self._endpoint_provider.discover(domain)
             await self._endpoints.save(endpoint)
             return endpoint, False
+
+    async def _finalize_lookup(
+        self,
+        protocol: LookupProtocol,
+        domain: NormalizedDomain,
+        info: DomainInfo,
+    ) -> tuple[DomainInfo, RawLookupResponse | None]:
+        if protocol == "rdap":
+            return await self._enrich_rdap(domain, info)
+        return self._with_expiration_status(info), None
 
     async def _enrich_rdap(
         self,

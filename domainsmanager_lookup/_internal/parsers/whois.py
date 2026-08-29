@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 from domainsmanager_lookup._internal.errors import ResponseParseError, WhoisResponseError
 from domainsmanager_lookup._internal.models.domain import (
@@ -90,12 +90,22 @@ class WhoisParser:
                         r"(?:Creation Date|Created On|Registered On):\s*(.+)",
                     )
                 ),
-                expires_at=self._date(
-                    self._first(
-                        response.body,
-                        r"(?:Registry Expiry Date|Expiration Date|Expiry Date):\s*(.+)",
+                expires_at=(
+                    expires_at := self._date(
+                        self._first(
+                            response.body,
+                            r"(?:Registry Expiry Date|Expiration Date|Expiry Date|Expiration Time):\s*(.+)",
+                        )
                     )
                 ),
+                registry_expires_at=expires_at,
+                registrar_expires_at=self._date(
+                    self._first(
+                        response.body,
+                        r"(?:Registrar Registration Expiration Date|Registrar Expiry Date):\s*(.+)",
+                    )
+                )
+                or expires_at,
                 updated_at=self._date(
                     self._first(response.body, r"Updated Date:\s*(.+)")
                 ),
@@ -135,6 +145,9 @@ class WhoisParser:
             return None
         candidate = value.strip().rstrip(".")
         try:
-            return datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
         except ValueError:
             return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed

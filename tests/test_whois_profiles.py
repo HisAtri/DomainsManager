@@ -90,6 +90,10 @@ DNSSEC: signed
         self.assertEqual(result.info.registrar.name, "Example Registrar")
         self.assertEqual(result.info.nameservers, ["ns1.example.cn", "ns2.example.cn"])
         self.assertTrue(result.info.dnssec.enabled)
+        self.assertEqual(result.info.dates.expires_at.year, 2030)
+        self.assertEqual(result.info.dates.registry_expires_at.year, 2030)
+        self.assertEqual(result.info.dates.registrar_expires_at.year, 2030)
+        self.assertEqual(result.info.dates.registered_at.tzinfo, timezone.utc)
 
     def test_classifies_not_found_without_fake_domain_info(self):
         result = self.parser.parse_result(
@@ -113,3 +117,24 @@ DNSSEC: signed
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class GenericWhoisExpiryTests(unittest.TestCase):
+    def test_maps_registry_and_registrar_expiry(self):
+        parser = KeyValueWhoisParser(key="generic", version="1")
+        domain = DomainNormalizer().normalize("example.com")
+        response = RawLookupResponse(
+            domain="example.com",
+            protocol="whois",
+            endpoint="whois.example",
+            body="""Domain Name: example.com
+Registry Expiry Date: 2027-08-04T00:00:00Z
+Registrar Registration Expiration Date: 2026-08-04T00:00:00Z
+""",
+            fetched_at=NOW,
+            expires_at=NOW,
+        )
+        result = parser.parse(response, domain)
+        self.assertEqual(result.info.dates.registry_expires_at.year, 2027)
+        self.assertEqual(result.info.dates.registrar_expires_at.year, 2026)
+        self.assertEqual(result.info.dates.expires_at.year, 2027)

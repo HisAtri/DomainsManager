@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 
 from domainsmanager_lookup._internal.models.domain import (
     DNSSECInfo,
@@ -33,6 +33,11 @@ class WhoisFieldMap:
         "Registry Expiry Date",
         "Expiration Date",
         "Expiry Date",
+        "Expiration Time",
+    )
+    registrar_expires_at: tuple[str, ...] = (
+        "Registrar Registration Expiration Date",
+        "Registrar Expiry Date",
     )
     updated_at: tuple[str, ...] = ("Updated Date", "Last Updated")
     nameserver: tuple[str, ...] = ("Name Server", "Nserver")
@@ -91,6 +96,7 @@ class KeyValueWhoisParser(WhoisResponseParser):
                 field.status,
                 field.registered_at,
                 field.expires_at,
+                field.registrar_expires_at,
                 field.updated_at,
                 field.nameserver,
                 field.dnssec,
@@ -135,9 +141,11 @@ class KeyValueWhoisParser(WhoisResponseParser):
 
         registered_raw = self._first(values, field.registered_at)
         expires_raw = self._first(values, field.expires_at)
+        registrar_expires_raw = self._first(values, field.registrar_expires_at)
         updated_raw = self._first(values, field.updated_at)
         registered_at = self.parse_date(registered_raw)
         expires_at = self.parse_date(expires_raw)
+        registrar_expires_at = self.parse_date(registrar_expires_raw) or expires_at
         updated_at = self.parse_date(updated_raw)
         for label, raw, parsed in (
             ("注册时间", registered_raw, registered_at),
@@ -162,6 +170,8 @@ class KeyValueWhoisParser(WhoisResponseParser):
                 dates=DomainDates(
                     registered_at=registered_at,
                     expires_at=expires_at,
+                    registry_expires_at=expires_at,
+                    registrar_expires_at=registrar_expires_at,
                     updated_at=updated_at,
                 ),
                 nameservers=sorted(
@@ -195,16 +205,21 @@ class KeyValueWhoisParser(WhoisResponseParser):
         if value is None:
             return None
         candidate = value.strip().rstrip(".")
+        parsed = None
         try:
-            return datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
         except ValueError:
-            pass
-        for pattern in ("%Y-%m-%d", "%d-%b-%Y", "%Y.%m.%d"):
-            try:
-                return datetime.strptime(candidate, pattern)
-            except ValueError:
-                continue
-        return None
+            for pattern in ("%Y-%m-%d", "%d-%b-%Y", "%Y.%m.%d", "%Y-%m-%d %H:%M:%S"):
+                try:
+                    parsed = datetime.strptime(candidate, pattern)
+                    break
+                except ValueError:
+                    continue
+        if parsed is None:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed
 
     @staticmethod
     def parse_dnssec(value: str | None) -> bool | None:

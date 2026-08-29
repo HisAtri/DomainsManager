@@ -345,6 +345,9 @@ class DomainLookupServiceTests(unittest.IsolatedAsyncioTestCase):
         result = await service.lookup("example.com")
 
         self.assertEqual(result.info.source, "whois")
+        self.assertEqual(result.info.dates.registry_expires_at.year, 2030)
+        self.assertEqual(result.info.dates.registrar_expires_at.year, 2030)
+        self.assertEqual(result.info.expiration_status, "active")
         self.assertEqual(rdap.calls, 1)
         self.assertEqual(whois.calls, 1)
         self.assertEqual(provider.calls, 1)
