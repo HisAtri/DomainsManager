@@ -395,7 +395,10 @@ class SqlAlchemyTaskRepository:
             .scalars()
             .all()
         )
+        smtp_enabled = await self._smtp_enabled()
         for rule in rules:
+            if rule.channel == "email" and not smtp_enabled:
+                continue
             await self._add_outbox(
                 rule,
                 task,
@@ -437,7 +440,10 @@ class SqlAlchemyTaskRepository:
             .scalars()
             .all()
         )
+        smtp_enabled = await self._smtp_enabled()
         for rule in rules:
+            if rule.channel == "email" and not smtp_enabled:
+                continue
             if rule.days_before is not None and expires_at <= at + timedelta(
                 days=rule.days_before
             ):
@@ -455,6 +461,12 @@ class SqlAlchemyTaskRepository:
                     },
                     at,
                 )
+
+    async def _smtp_enabled(self) -> bool:
+        value = await self._session.scalar(
+            select(GlobalSetting.value).where(GlobalSetting.key == "smtp_enabled")
+        )
+        return value is None or value == "true"
 
     async def _add_outbox(
         self,

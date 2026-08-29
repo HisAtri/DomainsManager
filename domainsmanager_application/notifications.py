@@ -18,6 +18,10 @@ class NotificationRuleNotFoundError(NotificationRuleError):
     code = "not_found"
 
 
+class NotificationDeliverySuppressed(RuntimeError):
+    """A notification was intentionally not sent by the delivery policy."""
+
+
 @dataclass(frozen=True, slots=True)
 class NotificationRuleRecord:
     id: UUID
@@ -66,10 +70,14 @@ class NotificationDeliveryRecord:
     updated_at: datetime
 
 
-class NotificationHistoryRepository(Protocol):
+class NotificationOutboxRepository(Protocol):
     async def list_deliveries(
         self, user_id: UUID, limit: int
     ) -> list[NotificationDeliveryRecord]: ...
+
+    async def suppress_outbox(
+        self, message_id: UUID, token: UUID, at: datetime, reason: str
+    ) -> bool: ...
 
 
 class NotificationOutboxService:
@@ -88,6 +96,12 @@ class NotificationOutboxService:
             return False
         try:
             await self._deliver(message)
+        except NotificationDeliverySuppressed as error:
+            async with self._unit_of_work() as uow:
+                await uow.notifications.suppress_outbox(
+                    message.id, message.lease_token, self._clock(), str(error)
+                )
+                await uow.commit()
         except Exception as error:  # noqa: BLE001 - adapters may raise transport errors
             async with self._unit_of_work() as uow:
                 await uow.notifications.fail_outbox(message.id, message.lease_token, self._clock(), f"{type(error).__name__}: delivery failed", self._max_attempts, self._retry_delay(message.attempt_count))

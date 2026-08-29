@@ -511,6 +511,7 @@ tbody tr:hover { background: var(--dm-soft); }
 
 .status-healthy, .plain-badge.status-healthy { color: var(--dm-success); background: var(--dm-success-bg); }
 .status-attention, .status-pending { color: var(--dm-warning); background: var(--dm-warning-bg); }
+.notification-warning { display: flex; align-items: center; gap: 9px; margin: 0 0 18px; padding: 12px 14px; border: 1px solid var(--dm-warning); border-radius: 8px; color: var(--dm-warning); background: var(--dm-warning-bg); font-size: 13px; font-weight: 600; }
 .status-failed { color: var(--dm-danger); background: var(--dm-danger-bg); }
 .plain-badge, .setting-badge { color: var(--dm-text-soft); background: var(--dm-soft); }
 .verified, .state-ready { color: var(--dm-success) !important; }

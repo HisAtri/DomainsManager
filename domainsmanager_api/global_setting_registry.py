@@ -281,6 +281,12 @@ GLOBAL_SETTINGS = (
         86_400,
         unit="秒",
     ),
+    boolean(
+        "smtp_enabled",
+        "邮件投递",
+        "启用 SMTP 邮件服务",
+        "关闭后不会发送邮件通知，Webhook 通知不受影响。",
+    ),
     string("smtp_host", "邮件投递", "邮件服务器地址", ""),
     integer("smtp_port", "邮件投递", "SMTP服务器端口", "", 1, 65535),
     choice(

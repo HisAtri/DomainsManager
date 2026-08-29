@@ -35,6 +35,7 @@ def test_public_site_config_uses_defaults_and_etag(tmp_path: Path) -> None:
         assert response.status_code == 200
         assert response.json()["site_name"] == "DomainsManager"
         assert response.json()["registration_enabled"] is False
+        assert response.json()["smtp_enabled"] is True
         assert response.json()["site_logo"] == "/default.svg"
         assert response.json()["footer_links"] == []
         assert response.headers["etag"]
@@ -88,12 +89,18 @@ def test_admin_updates_site_settings_and_public_config(tmp_path: Path) -> None:
                         "key": "registration_enabled",
                         "value": True,
                         "version": versions["registration_enabled"],
-                    }
+                    },
+                    {
+                        "key": "smtp_enabled",
+                        "value": False,
+                        "version": versions["smtp_enabled"],
+                    },
                 ]
             },
         )
         assert enabled.status_code == 200
         assert client.get("/api/v1/site/config").json()["registration_enabled"] is True
+        assert client.get("/api/v1/site/config").json()["smtp_enabled"] is False
 
 
 @pytest.mark.api

@@ -475,7 +475,7 @@ class NotificationOutbox(TimestampMixin, Base):
     __tablename__ = "notification_outbox"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('pending', 'running', 'sent', 'dead_letter')",
+            "status IN ('pending', 'running', 'sent', 'dead_letter', 'skipped')",
             name="notification_outbox_valid_status",
         ),
         CheckConstraint(

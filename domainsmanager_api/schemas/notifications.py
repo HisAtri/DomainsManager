@@ -39,7 +39,7 @@ class NotificationDeliveryResponse(BaseModel):
     domain_id: UUID
     event_type: str
     channel: str
-    status: Literal["pending", "running", "sent", "dead_letter"]
+    status: Literal["pending", "running", "sent", "dead_letter", "skipped"]
     attempt_count: int
     available_at: datetime | None
     sent_at: datetime | None

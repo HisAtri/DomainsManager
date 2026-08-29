@@ -11,7 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from domainsmanager_api.global_setting_registry import GLOBAL_SETTING_BY_KEY
 from domainsmanager_api.settings import Settings
-from domainsmanager_application.notifications import OutboxMessage
+from domainsmanager_application.notifications import (
+    NotificationDeliverySuppressed,
+    OutboxMessage,
+)
 from domainsmanager_persistence.models import GlobalSetting
 
 NOTIFICATION_CONFIGURATION_KEYS = frozenset(
@@ -71,6 +74,8 @@ async def deliver(
         return
     if message.channel != "email" or not message.recipient_email:
         raise ValueError("email notification has no recipient")
+    if not settings.smtp_enabled:
+        raise NotificationDeliverySuppressed("SMTP service is disabled")
     await asyncio.to_thread(_send_email, message, settings)
 
 

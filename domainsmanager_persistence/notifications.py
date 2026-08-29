@@ -107,6 +107,21 @@ class SqlAlchemyNotificationRuleRepository:
         row.last_error, row.lease_token, row.lease_owner, row.lease_until, row.updated_at = error[:512], None, None, None, at
         await self._session.flush(); return True
 
+    async def suppress_outbox(
+        self, message_id: UUID, token: UUID, at: datetime, reason: str
+    ) -> bool:
+        row = await self._locked_outbox(message_id, token)
+        if row is None:
+            return False
+        row.status = "skipped"
+        row.last_error = reason[:512]
+        row.lease_token = None
+        row.lease_owner = None
+        row.lease_until = None
+        row.updated_at = at
+        await self._session.flush()
+        return True
+
     async def _locked_outbox(self, message_id: UUID, token: UUID) -> NotificationOutbox | None:
         return (await self._session.execute(select(NotificationOutbox).where(NotificationOutbox.id == message_id, NotificationOutbox.status == "running", NotificationOutbox.lease_token == token).with_for_update())).scalar_one_or_none()
 
