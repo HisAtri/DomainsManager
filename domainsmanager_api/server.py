@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from asyncio import Event
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 
 import uvicorn
 
@@ -14,6 +15,8 @@ from domainsmanager_api.resources import Resources, create_resources
 from domainsmanager_api.scheduler import run as run_scheduler
 from domainsmanager_api.settings import Settings, get_settings
 from domainsmanager_api.worker import run as run_worker
+from domainsmanager_persistence.database_config import DatabaseType
+from domainsmanager_persistence.db import run_migrations
 
 BackgroundRunner = Callable[..., Awaitable[None]]
 
@@ -57,6 +60,7 @@ async def run(
 ) -> None:
     """Serve HTTP and process refresh, scheduling, and notification work."""
     effective_settings = settings or get_settings()
+    await initialize_empty_sqlite_database(effective_settings)
     stop = Event()
     config = uvicorn.Config(
         create_app(effective_settings),
@@ -73,8 +77,12 @@ async def run(
             await asyncio.sleep(0.01)
         background = [
             asyncio.create_task(worker_runner(settings=effective_settings, stop=stop)),
-            asyncio.create_task(scheduler_runner(settings=effective_settings, stop=stop)),
-            asyncio.create_task(notifier_runner(settings=effective_settings, stop=stop)),
+            asyncio.create_task(
+                scheduler_runner(settings=effective_settings, stop=stop)
+            ),
+            asyncio.create_task(
+                notifier_runner(settings=effective_settings, stop=stop)
+            ),
         ]
         await server_task
     finally:
@@ -83,6 +91,21 @@ async def run(
             server_task.cancel()
         await asyncio.gather(server_task, return_exceptions=True)
         await asyncio.gather(*background, return_exceptions=True)
+
+
+async def initialize_empty_sqlite_database(settings: Settings) -> None:
+    """Create the schema for a new local SQLite database before app startup.
+
+    Dedicated production deployments still run migrations explicitly. This only
+    covers the all-in-one command's first launch when its configured SQLite
+    database file does not exist yet.
+    """
+    if settings.database_type is not DatabaseType.SQLITE:
+        return
+    path = settings.database_path
+    if path is None or Path(path).exists():
+        return
+    await run_migrations(settings.database_config())
 
 
 def main() -> None:

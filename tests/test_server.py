@@ -1,17 +1,23 @@
 import asyncio
+from pathlib import Path
 
 import pytest
+from sqlalchemy import text
 
 from domainsmanager_api.server import run
 from domainsmanager_api.settings import Settings
+from domainsmanager_persistence.db import create_engine
 
 
 @pytest.mark.asyncio
-async def test_complete_server_starts_and_stops_all_background_components() -> None:
+async def test_complete_server_starts_and_stops_all_background_components(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "server-test.db"
     settings = Settings(
         _env_file=None,
         database_type="sqlite",
-        database_path="server-test.db",
+        database_path=str(database_path),
         jwt_secret_key="x",
         refresh_token_pepper="y",
     )
@@ -39,3 +45,12 @@ async def test_complete_server_starts_and_stops_all_background_components() -> N
 
     assert started == [settings.app_name] * 3
     assert stopped == [settings.app_name] * 3
+    engine = create_engine(settings.database_config())
+    try:
+        async with engine.connect() as connection:
+            assert (
+                await connection.scalar(text("SELECT COUNT(*) FROM global_setting"))
+                == 0
+            )
+    finally:
+        await engine.dispose()
