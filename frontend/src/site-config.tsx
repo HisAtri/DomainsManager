@@ -113,8 +113,79 @@ export function SiteConfigProvider({ children }: { children: ReactNode }) {
 
 export const useSiteConfig = () => useContext(SiteConfigContext);
 
+const YEAR_SCRIPT = /<script[^>]*>\s*document\.write\(\s*(?:new Date\(\)|\(new Date\(\)\))\.getFullYear\(\)\s*\)\s*;?\s*<\/script>/gi;
+
+function renderFooterHtml(html: string) {
+  return html.replace(YEAR_SCRIPT, String(new Date().getFullYear()));
+}
+
+function digitsOnly(value: string) {
+  return value.replace(/\D/g, "");
+}
+
+function formatIcpNumber(value: string) {
+  const text = value.trim();
+  if (!text) return "";
+  if (/ICP|备案|备|号/i.test(text)) return text;
+  return `ICP备${text}号`;
+}
+
+function formatPoliceRecord(value: string) {
+  const text = value.trim().replace(/\s+/g, " ");
+  if (!text) return "";
+  if (/公网安备|公安备案|号/.test(text)) return text;
+  return `公网安备 ${text}号`;
+}
+
+function policeRecordHref(value: string) {
+  const code = digitsOnly(value);
+  return code
+    ? `https://beian.mps.gov.cn/#/query/webSearch?searchResult=${encodeURIComponent(code)}`
+    : "https://beian.mps.gov.cn/#/query/webSearch";
+}
+
+function FooterSep() {
+  return <span className="site-footer-sep" aria-hidden="true">|</span>;
+}
+
 export function SiteFooter() {
   const config = useSiteConfig();
   if (!config.footer_links.length && !config.footer_copyright && !config.icp_number && !config.police_record_number && !config.body_end_html) return null;
-  return <footer className="site-footer"><div className="site-footer-links">{config.footer_links.map((link) => <a key={`${link.label}-${link.url}`} href={link.url} target="_blank" rel="noreferrer">{link.label}</a>)}</div>{config.footer_copyright && <span>{config.footer_copyright}</span>}<div className="site-footer-records">{config.icp_number && <a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">{config.icp_number}</a>}{config.police_record_number && <a href="https://www.beian.gov.cn/" target="_blank" rel="noreferrer">{config.police_record_number}</a>}</div>{config.body_end_html && <div className="site-footer-custom" dangerouslySetInnerHTML={{ __html: config.body_end_html }} />}</footer>;
+  const copyright = config.footer_copyright ? renderFooterHtml(config.footer_copyright) : "";
+  const customHtml = config.body_end_html ? renderFooterHtml(config.body_end_html) : "";
+  const links = config.footer_links.filter((link) => link.label.trim() || link.url.trim());
+  const icpLabel = formatIcpNumber(config.icp_number);
+  const policeLabel = formatPoliceRecord(config.police_record_number);
+  const hasRecords = Boolean(icpLabel || policeLabel);
+  return (
+    <footer className="site-footer">
+      <div className="site-footer-inner">
+        {links.length > 0 && (
+          <nav className="site-footer-links" aria-label="页脚链接">
+            {links.map((link, index) => (
+              <span className="site-footer-item" key={`${link.label}-${link.url}`}>
+                {index > 0 && <span className="site-footer-dot" aria-hidden="true">·</span>}
+                <a href={link.url} target="_blank" rel="noreferrer">{link.label}</a>
+              </span>
+            ))}
+          </nav>
+        )}
+        {copyright && <div className="site-footer-copyright" dangerouslySetInnerHTML={{ __html: copyright }} />}
+        {hasRecords && (
+          <div className="site-footer-records">
+            {icpLabel && (
+              <a className="site-footer-record" href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer">{icpLabel}</a>
+            )}
+            {icpLabel && policeLabel ? <FooterSep /> : null}
+            {policeLabel && (
+              <a className="site-footer-record" href={policeRecordHref(config.police_record_number)} target="_blank" rel="noreferrer">
+                {policeLabel}
+              </a>
+            )}
+          </div>
+        )}
+        {customHtml && <div className="site-footer-custom" dangerouslySetInnerHTML={{ __html: customHtml }} />}
+      </div>
+    </footer>
+  );
 }

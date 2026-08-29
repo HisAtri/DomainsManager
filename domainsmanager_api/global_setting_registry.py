@@ -348,13 +348,18 @@ GLOBAL_SETTINGS = (
         placeholder="© 2026 DomainsManager",
     ),
     site_setting(
-        "icp_number", "页面配置", "ICP 备案号", "显示在页脚并链接至工信部备案查询。"
+        "icp_number",
+        "页面配置",
+        "ICP 备案号",
+        "显示在页脚并链接至工信部备案查询。仅填写数字时会格式化为 ICP备xxxx号。",
+        placeholder="京ICP备12345678号",
     ),
     site_setting(
         "police_record_number",
         "页面配置",
         "公安备案号",
-        "显示在页脚并链接至公安备案查询。",
+        "显示在页脚并链接至公安备案查询。仅填写数字时会格式化为 公网安备 xxxx号。",
+        placeholder="京公网安备11010802000000号",
     ),
     site_setting(
         "custom_css",
