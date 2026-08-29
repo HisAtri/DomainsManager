@@ -81,6 +81,7 @@ class DomainListParameters(StrictModel):
         "last_check_at",
         "-last_check_at",
     ] = "-created_at"
+    lifecycle: Literal["expiring", "expired"] | None = None
 
     @model_validator(mode="after")
     def validate_expiry_range(self) -> DomainListParameters:
@@ -90,4 +91,16 @@ class DomainListParameters(StrictModel):
             and self.expires_from > self.expires_to
         ):
             raise ValueError("expires_from must not be after expires_to")
+        if self.lifecycle is not None and (
+            self.expires_from is not None or self.expires_to is not None
+        ):
+            raise ValueError("lifecycle cannot be combined with expires_from or expires_to")
         return self
+
+
+class DomainStatsResponse(StrictModel):
+    managed: int = Field(ge=0)
+    monitored: int = Field(ge=0)
+    expiring: int = Field(ge=0)
+    expired: int = Field(ge=0)
+    warning_days: int = Field(ge=0, le=365)

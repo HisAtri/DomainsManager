@@ -1,3 +1,5 @@
+import sqlite3
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -212,3 +214,107 @@ async def test_domain_owner_isolation_and_validation(tmp_path: Path) -> None:
         )
         assert subdomain.status_code == 422
         assert subdomain.json()["code"] == "subdomain_not_supported"
+
+
+def set_registrar_expiry(database: Path, name: str, expires_at: datetime) -> None:
+    connection = sqlite3.connect(database)
+    try:
+        connection.execute(
+            "UPDATE managed_domain SET registrar_expires_at = ? WHERE name_ascii = ?",
+            (expires_at.isoformat(), name),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.api
+async def test_domain_stats_and_lifecycle_filters_keep_expired_separate(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "domains-api.db"
+    await run_migrations(sqlite_database(database))
+    settings = Settings(
+        _env_file=None,
+        database_type="sqlite",
+        database_path=str(database),
+        jwt_secret_key="x",
+        refresh_token_pepper="y",
+        registration_enabled=True,
+    )
+    client = TestClient(create_app(settings))
+    now = datetime.now(UTC)
+    with client:
+        headers = register(client, "stats-user")
+        monitored = client.post(
+            "/api/v1/domains",
+            json={"name": "live.com", "monitor_enabled": True},
+            headers=headers,
+        )
+        unmonitored = client.post(
+            "/api/v1/domains",
+            json={"name": "quiet.com", "monitor_enabled": False},
+            headers=headers,
+        )
+        expiring = client.post(
+            "/api/v1/domains",
+            json={"name": "soon.com", "monitor_enabled": True},
+            headers=headers,
+        )
+        expired = client.post(
+            "/api/v1/domains",
+            json={"name": "old.com", "monitor_enabled": True},
+            headers=headers,
+        )
+        assert {item.status_code for item in (monitored, unmonitored, expiring, expired)} == {201}
+
+        set_registrar_expiry(database, "soon.com", now + timedelta(days=7))
+        set_registrar_expiry(database, "old.com", now - timedelta(days=25))
+        set_registrar_expiry(database, "live.com", now + timedelta(days=400))
+
+        settings_response = client.patch(
+            "/api/v1/auth/me/settings",
+            json={"expiration_warning_days": [30, 7]},
+            headers=headers,
+        )
+        assert settings_response.status_code == 200
+
+        stats = client.get("/api/v1/domains/stats", headers=headers)
+        assert stats.status_code == 200
+        assert stats.json() == {
+            "managed": 4,
+            "monitored": 3,
+            "expiring": 1,
+            "expired": 1,
+            "warning_days": 30,
+        }
+
+        expiring_list = client.get(
+            "/api/v1/domains",
+            params={"lifecycle": "expiring"},
+            headers=headers,
+        )
+        expired_list = client.get(
+            "/api/v1/domains",
+            params={"lifecycle": "expired"},
+            headers=headers,
+        )
+        monitored_list = client.get(
+            "/api/v1/domains",
+            params={"monitor_enabled": True},
+            headers=headers,
+        )
+        assert [item["identity"]["ascii_name"] for item in expiring_list.json()["items"]] == [
+            "soon.com"
+        ]
+        assert [item["identity"]["ascii_name"] for item in expired_list.json()["items"]] == [
+            "old.com"
+        ]
+        assert monitored_list.json()["total"] == 3
+        rejected = client.get(
+            "/api/v1/domains",
+            params={"lifecycle": "expired", "expires_from": now.isoformat()},
+            headers=headers,
+        )
+        assert rejected.status_code == 422

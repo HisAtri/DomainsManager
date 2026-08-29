@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import asc, desc, func, or_, select, update
@@ -11,6 +11,7 @@ from domainsmanager_application.auth import DuplicateRecordError
 from domainsmanager_application.domains import (
     DomainListQuery,
     DomainPage,
+    DomainStats,
     ManagedDomainRecord,
     ScheduledDomain,
 )
@@ -70,9 +71,13 @@ class SqlAlchemyDomainRepository:
             )
         if query.monitor_enabled is not None:
             filters.append(ManagedDomain.monitor_enabled == query.monitor_enabled)
-        if query.expires_from is not None:
+        if query.lifecycle == "expired":
+            filters.append(ManagedDomain.registrar_expires_at.is_not(None))
+            if query.expires_to is not None:
+                filters.append(ManagedDomain.registrar_expires_at < query.expires_to)
+        elif query.expires_from is not None:
             filters.append(ManagedDomain.registrar_expires_at >= query.expires_from)
-        if query.expires_to is not None:
+        if query.lifecycle != "expired" and query.expires_to is not None:
             filters.append(ManagedDomain.registrar_expires_at <= query.expires_to)
         if query.last_outcome is not None:
             filters.append(ManagedDomain.last_outcome == query.last_outcome)
@@ -104,6 +109,48 @@ class SqlAlchemyDomainRepository:
             total=count.scalar_one(),
             page=query.page,
             page_size=query.page_size,
+        )
+
+    async def summarize(
+        self, user_id: UUID, *, now: datetime, warning_days: int
+    ) -> DomainStats:
+        active = [
+            ManagedDomain.user_id == user_id,
+            ManagedDomain.deleted_at.is_(None),
+        ]
+        warning_until = now + timedelta(days=warning_days)
+        managed = await self._session.scalar(
+            select(func.count()).select_from(ManagedDomain).where(*active)
+        )
+        monitored = await self._session.scalar(
+            select(func.count())
+            .select_from(ManagedDomain)
+            .where(*active, ManagedDomain.monitor_enabled.is_(True))
+        )
+        expired = await self._session.scalar(
+            select(func.count())
+            .select_from(ManagedDomain)
+            .where(
+                *active,
+                ManagedDomain.registrar_expires_at.is_not(None),
+                ManagedDomain.registrar_expires_at < now,
+            )
+        )
+        expiring = await self._session.scalar(
+            select(func.count())
+            .select_from(ManagedDomain)
+            .where(
+                *active,
+                ManagedDomain.registrar_expires_at >= now,
+                ManagedDomain.registrar_expires_at <= warning_until,
+            )
+        )
+        return DomainStats(
+            managed=int(managed or 0),
+            monitored=int(monitored or 0),
+            expiring=int(expiring or 0),
+            expired=int(expired or 0),
+            warning_days=warning_days,
         )
 
     async def add(self, record: ManagedDomainRecord) -> None:

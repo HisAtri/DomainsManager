@@ -580,6 +580,9 @@ paths:
         - { name: expires_from, in: query, schema: { type: string, format: date-time } }
         - { name: expires_to, in: query, schema: { type: string, format: date-time } }
         - { name: last_outcome, in: query, schema: { $ref: '#/components/schemas/CheckOutcome' } }
+        - name: lifecycle
+          in: query
+          schema: { type: string, enum: [expiring, expired] }
         - name: sort
           in: query
           schema:
@@ -625,6 +628,19 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
+  /domains/stats:
+    get:
+      tags: [Domains]
+      operationId: getDomainStats
+      summary: Current user domain statistics
+      responses:
+        '200':
+          description: Complete domain statistics for the current user
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DomainStats' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /domains/{domain_id}:
     parameters:
       - $ref: '#/components/parameters/DomainId'
@@ -1460,6 +1476,16 @@ components:
         page: { type: integer, minimum: 1 }
         page_size: { type: integer, minimum: 1, maximum: 100 }
         total: { type: integer, minimum: 0 }
+    DomainStats:
+      type: object
+      additionalProperties: false
+      required: [managed, monitored, expiring, expired, warning_days]
+      properties:
+        managed: { type: integer, minimum: 0 }
+        monitored: { type: integer, minimum: 0 }
+        expiring: { type: integer, minimum: 0 }
+        expired: { type: integer, minimum: 0 }
+        warning_days: { type: integer, minimum: 0, maximum: 365 }
     DomainPage:
       type: object
       additionalProperties: false

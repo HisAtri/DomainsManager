@@ -110,6 +110,7 @@ def test_implemented_domain_operations_match_contract() -> None:
     expected = {
         ("/api/v1/domains", "get", "listDomains"),
         ("/api/v1/domains", "post", "createDomain"),
+        ("/api/v1/domains/stats", "get", "getDomainStats"),
         ("/api/v1/domains/{domain_id}", "get", "getDomain"),
         ("/api/v1/domains/{domain_id}", "patch", "updateDomain"),
         ("/api/v1/domains/{domain_id}", "delete", "deleteDomain"),

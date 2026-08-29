@@ -15,6 +15,7 @@ from domainsmanager_api.schemas.domains import (
     DomainIdentityResponse,
     DomainListParameters,
     DomainPageResponse,
+    DomainStatsResponse,
     ManagedDomainResponse,
     UpdateDomainRequest,
 )
@@ -119,6 +120,21 @@ async def list_domains(
         page=page.page,
         page_size=page.page_size,
         total=page.total,
+    )
+
+
+@router.get("/stats", response_model=DomainStatsResponse, operation_id="getDomainStats")
+async def get_domain_stats(
+    current: CurrentUserDependency,
+    domains: DomainServiceDependency,
+) -> DomainStatsResponse:
+    stats = await domains.stats(current.user.id)
+    return DomainStatsResponse(
+        managed=stats.managed,
+        monitored=stats.monitored,
+        expiring=stats.expiring,
+        expired=stats.expired,
+        warning_days=stats.warning_days,
     )
 
 

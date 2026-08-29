@@ -90,6 +90,7 @@ class DomainListQuery:
     expires_to: datetime | None = None
     last_outcome: str | None = None
     sort: DomainSort = "-created_at"
+    lifecycle: Literal["expiring", "expired"] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +99,26 @@ class DomainPage:
     total: int
     page: int
     page_size: int
+
+
+DEFAULT_EXPIRATION_WARNING_DAYS = 30
+
+
+def warning_days_from_preferences(preferences: dict[str, object] | None) -> int:
+    raw = None if preferences is None else preferences.get("expiration_warning_days")
+    if not isinstance(raw, list):
+        return DEFAULT_EXPIRATION_WARNING_DAYS
+    days = [item for item in raw if isinstance(item, int)]
+    return max(days) if days else DEFAULT_EXPIRATION_WARNING_DAYS
+
+
+@dataclass(frozen=True, slots=True)
+class DomainStats:
+    managed: int
+    monitored: int
+    expiring: int
+    expired: int
+    warning_days: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -119,6 +140,10 @@ class ManagedDomainRepository(Protocol):
     ) -> ManagedDomainRecord | None: ...
 
     async def list(self, user_id: UUID, query: DomainListQuery) -> DomainPage: ...
+
+    async def summarize(
+        self, user_id: UUID, *, now: datetime, warning_days: int
+    ) -> DomainStats: ...
 
     async def add(self, record: ManagedDomainRecord) -> None: ...
 
@@ -232,7 +257,58 @@ class DomainService:
 
     async def list(self, user_id: UUID, query: DomainListQuery) -> DomainPage:
         async with self._unit_of_work() as uow:
-            return await uow.domains.list(user_id, query)
+            return await uow.domains.list(
+                user_id, await self._resolved_list_query(uow, user_id, query)
+            )
+
+    async def stats(self, user_id: UUID) -> DomainStats:
+        now = self._clock()
+        async with self._unit_of_work() as uow:
+            warning_days = await self._warning_days(uow, user_id)
+            return await uow.domains.summarize(
+                user_id, now=now, warning_days=warning_days
+            )
+
+    async def _warning_days(self, uow: UnitOfWork, user_id: UUID) -> int:
+        user = await uow.users.get_by_id(user_id)
+        return warning_days_from_preferences(
+            None if user is None else user.preferences
+        )
+
+    async def _resolved_list_query(
+        self, uow: UnitOfWork, user_id: UUID, query: DomainListQuery
+    ) -> DomainListQuery:
+        if query.lifecycle is None:
+            return query
+        if query.expires_from is not None or query.expires_to is not None:
+            raise InvalidManagedDomainError(
+                "lifecycle cannot be combined with expires_from or expires_to"
+            )
+        now = self._clock()
+        warning_days = await self._warning_days(uow, user_id)
+        if query.lifecycle == "expired":
+            return DomainListQuery(
+                page=query.page,
+                page_size=query.page_size,
+                query=query.query,
+                monitor_enabled=query.monitor_enabled,
+                expires_from=None,
+                expires_to=now,
+                last_outcome=query.last_outcome,
+                sort=query.sort,
+                lifecycle="expired",
+            )
+        return DomainListQuery(
+            page=query.page,
+            page_size=query.page_size,
+            query=query.query,
+            monitor_enabled=query.monitor_enabled,
+            expires_from=now,
+            expires_to=now + timedelta(days=warning_days),
+            last_outcome=query.last_outcome,
+            sort=query.sort,
+            lifecycle="expiring",
+        )
 
     async def update(
         self,

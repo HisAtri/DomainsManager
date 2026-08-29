@@ -1,4 +1,4 @@
-import type { AdminCheckPage, AdminDomain, AdminSession, AdminUser, AuthResult, Check, Domain, GlobalSetting, NotificationDelivery, NotificationRule, NotificationRuleInput, NotificationRuleUpdate, OperationalMetrics, Page, PublicSiteConfig, SecurityAuditEvent, Settings, Task, Tokens, User } from "./types";
+import type { AdminCheckPage, AdminDomain, AdminSession, AdminUser, AuthResult, Check, Domain, DomainStats, GlobalSetting, NotificationDelivery, NotificationRule, NotificationRuleInput, NotificationRuleUpdate, OperationalMetrics, Page, PublicSiteConfig, SecurityAuditEvent, Settings, Task, Tokens, User } from "./types";
 
 type ApiErrorDetail = { location?: string; message?: string; code?: string };
 type ApiErrorBody = { code?: string; message?: string; details?: ApiErrorDetail[]; request_id?: string };
@@ -100,6 +100,7 @@ class ApiClient {
   settings() { return this.request<Settings>("/auth/me/settings").then((r) => r.data); }
   updateSettings(values: Partial<Settings>) { return this.request<Settings>("/auth/me/settings", { method: "PATCH", body: JSON.stringify(values) }).then((r) => r.data); }
   domains(params: Record<string, string | number | boolean | undefined> = {}) { return this.request<Page<Domain>>(`/domains?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
+  domainStats() { return this.request<DomainStats>("/domains/stats").then((r) => r.data); }
   domain(id: string) { return this.request<Domain>(`/domains/${id}`); }
   createDomain(name: string, monitor_enabled: boolean) { return this.request<{ domain: Domain }>("/domains", { method: "POST", body: JSON.stringify({ name, monitor_enabled }) }).then((r) => r.data.domain); }
   updateDomain(id: string, version: number, values: Partial<Pick<Domain, "monitor_enabled" | "renewal_mode" | "notes">>) { return this.request<Domain>(`/domains/${id}`, { method: "PATCH", headers: { "If-Match": `"${version}"` }, body: JSON.stringify(values) }); }

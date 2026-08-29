@@ -782,3 +782,6 @@ tbody tr:hover { background: var(--dm-soft); }
   .toolbar { flex-wrap: wrap; }
   .filter-select { width: 100%; min-width: 0; }
 }
+
+button.metric-card { width: 100%; text-align: left; cursor: pointer; }
+button.metric-card:hover { border-color: var(--dm-accent-border); box-shadow: 0 8px 20px #10182810; }
