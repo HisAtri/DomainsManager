@@ -270,7 +270,12 @@ class DomainLookupService:
 
         dates = registry_info.dates.model_copy(
             update={
-                "registrar_expires_at": registrar_info.dates.registrar_expires_at,
+                "registrar_expires_at": (
+                    registrar_info.dates.registrar_expires_at
+                    or registrar_info.dates.expires_at
+                    or registry_info.dates.registrar_expires_at
+                    or registry_info.dates.expires_at
+                ),
             }
         )
         return self._with_expiration_status(

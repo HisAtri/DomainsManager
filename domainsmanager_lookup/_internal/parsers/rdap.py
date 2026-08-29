@@ -65,7 +65,8 @@ class RdapParser:
                 registered_at=events.get("registration"),
                 expires_at=events.get("expiration"),
                 registry_expires_at=events.get("expiration"),
-                registrar_expires_at=events.get("registrar expiration"),
+                registrar_expires_at=events.get("registrar expiration")
+                or events.get("expiration"),
                 updated_at=events.get("last changed")
                 or events.get("last update of rdap database"),
             ),

@@ -155,6 +155,21 @@ class RdapParserTests(unittest.TestCase):
             result.registrar_rdap_url, "https://registrar.example/domain/example.com"
         )
 
+    def test_falls_back_to_expiration_when_registrar_expiration_missing(self):
+        payload = {
+            "objectClassName": "domain",
+            "ldhName": "example.com",
+            "events": [
+                {"eventAction": "expiration", "eventDate": "2027-08-04T00:00:00Z"},
+            ],
+        }
+
+        result = self.parser.parse(make_response(payload), self.domain)
+
+        self.assertEqual(result.dates.registry_expires_at.year, 2027)
+        self.assertEqual(result.dates.registrar_expires_at.year, 2027)
+        self.assertEqual(result.dates.expires_at.year, 2027)
+
     def test_normalizes_unicode_domain_and_nameserver(self):
         domain = DomainNormalizer().normalize("食狮.com")
         payload = {

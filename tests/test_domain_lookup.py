@@ -206,6 +206,109 @@ class DomainLookupServiceTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
+    async def test_registrar_rdap_expiration_fills_registrar_expires_at(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.host == "registry.example":
+                return httpx.Response(
+                    200,
+                    json={
+                        "objectClassName": "domain",
+                        "ldhName": "example.com",
+                        "events": [
+                            {
+                                "eventAction": "expiration",
+                                "eventDate": "2027-08-04T00:00:00Z",
+                            }
+                        ],
+                        "links": [
+                            {
+                                "rel": "related",
+                                "type": "application/rdap+json",
+                                "href": "https://registrar.example/domain/example.com",
+                            }
+                        ],
+                    },
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "objectClassName": "domain",
+                    "ldhName": "example.com",
+                    "events": [
+                        {
+                            "eventAction": "expiration",
+                            "eventDate": "2026-08-04T00:00:00Z",
+                        }
+                    ],
+                },
+            )
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler)
+        ) as http_client:
+            service = DomainLookupService(
+                response_cache=MemoryDomainResponseCache(),
+                endpoint_provider=FakeEndpointProvider("https://registry.example"),
+                clients={"rdap": RdapClient(http_client=http_client)},
+                parsers={"rdap": RdapParser()},
+                protocol_order=("rdap",),
+                clock=lambda: NOW,
+            )
+            result = await service.lookup("example.com")
+
+        self.assertEqual(result.info.dates.registry_expires_at.year, 2027)
+        self.assertEqual(result.info.dates.registrar_expires_at.year, 2026)
+
+    async def test_falls_back_to_registry_expiration_when_registrar_rdap_has_no_dates(
+        self,
+    ):
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.host == "registry.example":
+                return httpx.Response(
+                    200,
+                    json={
+                        "objectClassName": "domain",
+                        "ldhName": "example.com",
+                        "events": [
+                            {
+                                "eventAction": "expiration",
+                                "eventDate": "2027-08-04T00:00:00Z",
+                            }
+                        ],
+                        "links": [
+                            {
+                                "rel": "related",
+                                "type": "application/rdap+json",
+                                "href": "https://registrar.example/domain/example.com",
+                            }
+                        ],
+                    },
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "objectClassName": "domain",
+                    "ldhName": "example.com",
+                    "events": [],
+                },
+            )
+
+        async with httpx.AsyncClient(
+            transport=httpx.MockTransport(handler)
+        ) as http_client:
+            service = DomainLookupService(
+                response_cache=MemoryDomainResponseCache(),
+                endpoint_provider=FakeEndpointProvider("https://registry.example"),
+                clients={"rdap": RdapClient(http_client=http_client)},
+                parsers={"rdap": RdapParser()},
+                protocol_order=("rdap",),
+                clock=lambda: NOW,
+            )
+            result = await service.lookup("example.com")
+
+        self.assertEqual(result.info.dates.registry_expires_at.year, 2027)
+        self.assertEqual(result.info.dates.registrar_expires_at.year, 2027)
+
     async def test_reuses_raw_response_cache(self):
         provider = FakeEndpointProvider()
         rdap = FakeClient("rdap", RDAP_BODY)
