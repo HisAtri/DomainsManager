@@ -17,6 +17,18 @@ const SITE_GROUPS: readonly SettingsGroup[] = [
   { id: "inject", title: "代码注入", description: "自定义样式、脚本与 HTML 注入", sections: [{ title: "样式与脚本", keys: ["custom_css", "custom_javascript"] }, { title: "HTML 注入", keys: ["head_html", "body_end_html"] }, { title: "网站统计", keys: ["analytics_code"] }] },
 ];
 
+const EMAIL_DELIVERY_GROUP = "邮件投递";
+const SMTP_ENCRYPTION_OPTIONS = [
+  { value: "none", label: "无加密" },
+  { value: "starttls", label: "STARTTLS" },
+  { value: "ssl_tls", label: "SSL/TLS" },
+] as const;
+const SMTP_DEFAULT_PORTS: Record<(typeof SMTP_ENCRYPTION_OPTIONS)[number]["value"], string> = {
+  none: "25",
+  starttls: "587",
+  ssl_tls: "465",
+};
+
 const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
 const displayValue = (setting: GlobalSetting) => setting.kind === "boolean" ? Boolean(setting.value) : setting.kind === "json" ? setting.value ?? [] : String(setting.value ?? "");
 const apiValue = (setting: GlobalSetting, value: unknown) => setting.kind === "boolean" ? Boolean(value) : setting.kind === "integer" || setting.kind === "number" ? Number(value) : value;
@@ -28,6 +40,7 @@ function FooterLinksEditor({ value, onChange }: { value: FooterLink[]; onChange:
 
 function SettingEditor({ setting, value, onChange }: { setting: GlobalSetting; value: unknown; onChange: (value: unknown) => void }) {
   if (setting.kind === "boolean") return <Switch.Root className="switch" checked={Boolean(value)} onCheckedChange={onChange}><Switch.Thumb className="switch-thumb" /></Switch.Root>;
+  if (setting.key === "smtp_encryption") return <select aria-label={setting.label} value={String(value ?? "none")} onChange={(event) => onChange(event.target.value)}>{SMTP_ENCRYPTION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>;
   if (setting.editor === "links") return <FooterLinksEditor value={(value as FooterLink[]) || []} onChange={onChange} />;
   if (setting.editor === "textarea" || setting.editor === "code") return <div className="stacked-editor"><textarea aria-label={setting.label} className={setting.editor === "code" ? "code-editor" : undefined} value={String(value ?? "")} placeholder={setting.placeholder ?? undefined} onChange={(event) => onChange(event.target.value)} /></div>;
   return <div className="stacked-editor"><input aria-label={setting.label} type={setting.kind === "integer" || setting.kind === "number" ? "number" : "text"} step={setting.kind === "number" ? "0.1" : "1"} min={setting.minimum ?? undefined} max={setting.maximum ?? undefined} value={String(value ?? "")} placeholder={setting.placeholder ?? undefined} onChange={(event) => onChange(event.target.value)} />{setting.editor === "asset" && String(value ?? "") && <img className="asset-preview" src={assetSource(String(value))} alt={`${setting.label} 预览`} />}</div>;
@@ -44,24 +57,39 @@ export function AdminSettingsV2({ onMessage, onDirtyChange }: { onMessage: (mess
   }).catch((error: unknown) => onMessage(error instanceof Error ? error.message : "设置加载失败")), [onMessage]);
   useEffect(() => { load(); }, [load]);
   const runtimeGroup: SettingsGroup | null = useMemo(() => {
-    const runtimeSettings = settings.filter((item) => item.group !== "站点信息" && item.group !== "页面配置");
+    const runtimeSettings = settings.filter((item) => item.group !== "站点信息" && item.group !== "页面配置" && item.group !== EMAIL_DELIVERY_GROUP);
     if (!runtimeSettings.length) return null;
     const names = Array.from(new Set(runtimeSettings.map((item) => item.group)));
     return {
       id: "runtime",
       title: "系统运行",
-      description: "域名监控、任务调度、通知和邮件投递配置",
+      description: "域名监控、任务调度和通知配置",
       sections: names.map((name) => ({ title: name, keys: runtimeSettings.filter((item) => item.group === name).map((item) => item.key) })),
     };
   }, [settings]);
-  const groups: readonly SettingsGroup[] = runtimeGroup ? [...SITE_GROUPS, runtimeGroup] : SITE_GROUPS;
+  const emailDeliveryGroup: SettingsGroup | null = useMemo(() => {
+    const emailSettings = settings.filter((item) => item.group === EMAIL_DELIVERY_GROUP);
+    if (!emailSettings.length) return null;
+    return {
+      id: "email-delivery",
+      title: EMAIL_DELIVERY_GROUP,
+      description: "配置系统通知邮件的 SMTP 投递服务",
+      sections: [{ keys: emailSettings.map((item) => item.key) }],
+    };
+  }, [settings]);
+  const groups: readonly SettingsGroup[] = [...SITE_GROUPS, ...(runtimeGroup ? [runtimeGroup] : []), ...(emailDeliveryGroup ? [emailDeliveryGroup] : [])];
   const activeGroup = groups.find((group) => group.id === activeId) ?? groups[0];
   const sections = (activeGroup?.sections ?? []).map((section) => ({ title: section.title, settings: section.keys.map((key) => settings.find((item) => item.key === key)).filter((item): item is GlobalSetting => Boolean(item)) })).filter((section) => section.settings.length);
   const dirtySettings = settings.filter((item) => !same(draft[item.key], displayValue(item)));
   const dirty = dirtySettings.length > 0;
   useEffect(() => { onDirtyChange(dirty); return () => onDirtyChange(false); }, [dirty, onDirtyChange]);
   useEffect(() => { const warn = (event: BeforeUnloadEvent) => { if (!dirty) return; event.preventDefault(); event.returnValue = ""; }; addEventListener("beforeunload", warn); return () => removeEventListener("beforeunload", warn); }, [dirty]);
-  const change = (key: string, value: unknown) => setDraft((current) => ({ ...current, [key]: value }));
+  const change = (key: string, value: unknown) => setDraft((current) => {
+    if (key === "smtp_encryption" && typeof value === "string" && value in SMTP_DEFAULT_PORTS) {
+      return { ...current, [key]: value, smtp_port: SMTP_DEFAULT_PORTS[value as keyof typeof SMTP_DEFAULT_PORTS] };
+    }
+    return { ...current, [key]: value };
+  });
   const save = async () => {
     if (!dirty) return;
     setSaving(true);
