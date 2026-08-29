@@ -614,14 +614,14 @@ tbody tr:hover { background: var(--dm-soft); }
   .mobile-admin-card { border-color: var(--dm-border); background: var(--dm-surface); }
   .mobile-admin-card > small, .mobile-admin-meta { color: var(--dm-muted); }
   .admin-summary > div, .settings-status-strip > div, .policy-metrics div, .settings-card-head { border-color: var(--dm-border); }
-  .content:has(.settings-route-shell) { padding: 0; }
+  .content:has(.settings-route-shell) { padding: 0; overflow-y: auto; }
   .settings-route-shell { display: block; min-height: auto; }
   .settings-index { position: static; width: 100%; height: auto; padding: 12px 16px 0; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--dm-border); }
   .settings-index-title { display: none; }
   .settings-index nav { display: flex; gap: 3px; width: max-content; }
   .settings-index nav button { display: flex; width: auto; min-height: 40px; padding-inline: 12px; border-radius: 0; border-bottom: 2px solid transparent; }
   .settings-index nav button.active { border-bottom-color: var(--dm-accent); background: transparent; }
-  .settings-route-main { padding: 0 16px 28px; }
+  .settings-route-main { padding: 0 16px 28px; overflow: visible; }
 }
 
 @media (max-width: 399px) {
@@ -659,7 +659,29 @@ tbody tr:hover { background: var(--dm-soft); }
   padding-bottom: 36px;
 }
 .content:has(.settings-route-shell) { --content-gutter: 0px; }
-.content:has(.settings-route-shell) .content-body { padding-inline: 0; }
+.content:has(.settings-route-shell) {
+  overflow: hidden;
+}
+.content:has(.settings-route-shell) .content-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding-inline: 0;
+  padding-bottom: 0;
+}
+.content:has(.settings-route-shell) .settings-route-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+.content:has(.settings-route-shell) .settings-index {
+  align-self: stretch;
+  height: auto;
+}
+.content:has(.settings-route-shell) .settings-route-main {
+  min-height: 0;
+  overflow-y: auto;
+}
 .site-footer {
   flex: 0 0 auto;
   width: 100%;
@@ -710,6 +732,9 @@ tbody tr:hover { background: var(--dm-soft); }
   .content { --content-gutter: 16px; padding-bottom: 0; }
   .content-body { padding-bottom: 24px; }
   .site-footer { padding: 24px 16px 20px; }
+  .content:has(.settings-route-shell) { overflow-y: auto; }
+  .content:has(.settings-route-shell) .content-body { padding-bottom: 0; overflow: visible; }
+  .content:has(.settings-route-shell) .settings-route-main { overflow: visible; }
 }
 @media (max-width: 399px) {
   .content { --content-gutter: 12px; }
