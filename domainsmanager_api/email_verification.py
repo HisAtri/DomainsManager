@@ -84,13 +84,27 @@ async def confirm(session: AsyncSession, token: str) -> AppUser:
     row = (await session.execute(
         select(EmailVerificationChallenge).where(
             EmailVerificationChallenge.token_hash == hashlib.sha256(token.encode()).hexdigest(),
-            EmailVerificationChallenge.consumed_at.is_(None),
             EmailVerificationChallenge.expires_at >= now,
         ).with_for_update()
     )).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=422, detail={"code": "invalid_email_verification_token", "message": "verification link is invalid or expired"})
+    if row.consumed_at is not None:
+        replacement_id = await session.scalar(
+            select(EmailVerificationChallenge.id).where(
+                EmailVerificationChallenge.user_id == row.user_id,
+                EmailVerificationChallenge.email == row.email,
+                EmailVerificationChallenge.created_at == row.consumed_at,
+                EmailVerificationChallenge.id != row.id,
+            )
+        )
+        if replacement_id is None:
+            raise HTTPException(status_code=422, detail={"code": "invalid_email_verification_token", "message": "verification link is invalid or expired"})
     user = await session.get(AppUser, row.user_id, with_for_update=True)
+    # Older releases marked every previous challenge as consumed whenever a
+    # replacement message was requested.  The matching replacement timestamp
+    # above distinguishes that legacy invalidation from a successful use.  It
+    # is safe to recover only while the exact same address remains pending.
     if user is None or user.pending_email != row.email:
         raise HTTPException(status_code=422, detail={"code": "invalid_email_verification_token", "message": "verification link is no longer valid"})
     user.email, user.pending_email, user.email_verified_at, user.updated_at = row.email, None, now, now

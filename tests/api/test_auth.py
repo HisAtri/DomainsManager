@@ -1,4 +1,9 @@
+import re
+import sqlite3
+from datetime import UTC, datetime
+from html import unescape
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,9 +21,19 @@ async def make_client(
     bootstrap_admin_username: str | None = None,
     bootstrap_admin_password: str | None = None,
     auth_rate_limit_attempts: int = 20,
+    email_verification_enabled: bool = False,
+    site_url: str | None = None,
 ):
     database = tmp_path / "auth-api.db"
     await run_migrations(sqlite_database(database))
+    if site_url is not None:
+        with sqlite3.connect(database) as connection:
+            connection.execute(
+                "INSERT INTO global_setting "
+                "(key, value, version, updated_by_user_id, updated_at) "
+                "VALUES (?, ?, 1, NULL, ?)",
+                ("site_url", site_url, datetime.now(UTC).isoformat()),
+            )
     settings = Settings(
         _env_file=None,
         database_type="sqlite",
@@ -27,10 +42,74 @@ async def make_client(
         refresh_token_pepper="y",
         auth_rate_limit_attempts=auth_rate_limit_attempts,
         registration_enabled=registration_enabled,
+        email_verification_enabled=email_verification_enabled,
         bootstrap_admin_username=bootstrap_admin_username,
         bootstrap_admin_password=bootstrap_admin_password,
     )
     return TestClient(create_app(settings))
+
+
+@pytest.mark.asyncio
+@pytest.mark.api
+async def test_registration_email_link_confirms_through_http_api(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    delivered: list[tuple[str, str]] = []
+
+    def capture_rendered_email(
+        recipient: str,
+        subject: str,
+        text: str,
+        html: str,
+        settings: object,
+    ) -> None:
+        del subject, text, settings
+        delivered.append((recipient, html))
+
+    monkeypatch.setattr(
+        "domainsmanager_api.notifier._send_rendered_email",
+        capture_rendered_email,
+    )
+    client = await make_client(
+        tmp_path,
+        email_verification_enabled=True,
+        site_url="https://console.example.test",
+    )
+    with client:
+        registered = client.post(
+            "/api/v1/auth/register",
+            json={
+                "username": "verify-through-api",
+                "password": "123456",
+                "email": "verify@example.com",
+            },
+        )
+        assert registered.status_code == 201
+        assert registered.json()["user"]["pending_email"] == "verify@example.com"
+        assert len(delivered) == 1
+
+        recipient, email_html = delivered[0]
+        assert recipient == "verify@example.com"
+        match = re.search(r'href="([^"]+/email/verify#token=[^"]+)"', email_html)
+        assert match is not None
+        verification_url = unescape(match.group(1))
+        token = parse_qs(urlsplit(verification_url).fragment)["token"][0]
+        confirmed = client.post(
+            "/api/v1/auth/email-verifications/confirm",
+            json={"token": token},
+        )
+        assert confirmed.status_code == 200
+        assert confirmed.json() == {
+            "status": "verified",
+            "email": "verify@example.com",
+            "pending_email": None,
+        }
+
+        replay = client.post(
+            "/api/v1/auth/email-verifications/confirm",
+            json={"token": token},
+        )
+        assert replay.status_code == 422
 
 
 @pytest.mark.asyncio

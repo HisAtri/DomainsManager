@@ -237,11 +237,12 @@ function SettingsPage({ user, onUser, onMessage }: { user: User; onUser: (user: 
   const [settings, setSettings] = useState<Settings | null>(null);
   const [email, setEmail] = useState(user.email || "");
   const [passwords, setPasswords] = useState({ current: "", next: "", confirm: "" });
+  const [profileBusy, setProfileBusy] = useState(false);
   const [resendBusy, setResendBusy] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
   useEffect(() => { if (!resendCooldown) return; const timer = setInterval(() => setResendCooldown((remaining) => Math.max(0, remaining - 1)), 1000); return () => clearInterval(timer); }, [resendCooldown]);
   useEffect(() => { api.settings().then(setSettings).catch((e) => onMessage(errorText(e))); }, [onMessage]);
-  const saveProfile = async () => { try { onUser(await api.updateMe(email)); onMessage("个人资料已保存"); } catch (error) { onMessage(errorText(error)); } };
+  const saveProfile = async () => { if (profileBusy) return; setProfileBusy(true); try { onUser(await api.updateMe(email)); onMessage("个人资料已保存"); } catch (error) { onMessage(errorText(error)); } finally { setProfileBusy(false); } };
   const savePassword = async () => { if (passwords.next !== passwords.confirm) { onMessage("两次输入的新密码不一致"); return; } try { await api.changePassword(passwords.current, passwords.next); setPasswords({ current: "", next: "", confirm: "" }); onMessage("密码已更新，其他会话已被撤销"); } catch (error) { onMessage(errorText(error)); } };
   const saveDefaults = async () => { if (!settings) return; try { setSettings(await api.updateSettings({ default_monitor_enabled: settings.default_monitor_enabled, timezone: settings.timezone, expiration_warning_days: settings.expiration_warning_days })); onMessage("域名默认值已保存"); } catch (error) { onMessage(errorText(error)); } };
   return <div className="personal-settings-page">
@@ -250,7 +251,7 @@ function SettingsPage({ user, onUser, onMessage }: { user: User; onUser: (user: 
       <section className="personal-settings-section"><h2>个人资料</h2><div className="personal-settings-list">
         <div className="personal-setting-row"><div className="personal-setting-copy"><b>用户名</b><small>用户名当前不可修改</small></div><div className="personal-setting-control"><input value={user.username} readOnly /></div></div>
         <div className="personal-setting-row"><div className="personal-setting-copy"><b>邮箱地址</b><small>{user.pending_email ? `等待验证：${user.pending_email}；完成验证前邮件通知会暂停。` : user.email_verified_at ? "已验证，可用于接收通知。" : "未验证，邮件通知不会发送。"}</small></div><div className="personal-setting-control"><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" />{user.pending_email && <button className="secondary" disabled={resendBusy || resendCooldown > 0} onClick={async () => { setResendBusy(true); try { await api.resendEmailVerification(); setResendCooldown(60); onMessage("验证邮件已重新发送，请查收邮箱"); } catch (error) { onMessage(errorText(error)); } finally { setResendBusy(false); } }}>{resendBusy ? "发送中…" : resendCooldown ? `${resendCooldown} 秒后可重发` : "重新发送验证邮件"}</button>}</div></div>
-        <div className="personal-setting-actions"><button className="primary" onClick={saveProfile}>保存修改</button></div>
+        <div className="personal-setting-actions"><button className="primary" disabled={profileBusy} onClick={saveProfile}>{profileBusy ? "保存中…" : "保存修改"}</button></div>
       </div></section>
       <section className="personal-settings-section"><h2>修改密码</h2><div className="personal-settings-list">
         <div className="personal-setting-row"><div className="personal-setting-copy"><b>当前密码</b></div><div className="personal-setting-control"><input type="password" autoComplete="current-password" value={passwords.current} onChange={(event) => setPasswords({ ...passwords, current: event.target.value })} placeholder="请输入当前密码" /></div></div>
