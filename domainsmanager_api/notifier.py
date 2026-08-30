@@ -12,6 +12,7 @@ from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from domainsmanager_api.email_renderer import render_notification_email
 from domainsmanager_api.global_setting_registry import GLOBAL_SETTING_BY_KEY
 from domainsmanager_api.settings import Settings
 from domainsmanager_application.notifications import (
@@ -138,7 +139,8 @@ async def deliver(
         raise ValueError("email notification has no recipient")
     if not settings.smtp_enabled:
         raise NotificationDeliverySuppressed("SMTP service is disabled")
-    await asyncio.to_thread(_send_email, message, settings)
+    site_name = await _site_name(sessions, settings)
+    await asyncio.to_thread(_send_email, message, settings, site_name)
     return NotificationDeliveryResult("success")
 
 
@@ -166,13 +168,26 @@ def _parse_retry_after(value: str | None) -> timedelta | None:
             return None
 
 
-def _send_email(message: OutboxMessage, settings: Settings) -> None:
+async def _site_name(
+    sessions: async_sessionmaker[AsyncSession], settings: Settings
+) -> str:
+    definition = GLOBAL_SETTING_BY_KEY["site_name"]
+    async with sessions() as session:
+        configured = await session.scalar(
+            select(GlobalSetting.value).where(GlobalSetting.key == definition.key)
+        )
+    return configured.strip() if configured and configured.strip() else str(definition.default(settings))
+
+
+def _send_email(message: OutboxMessage, settings: Settings, site_name: str) -> None:
     if not settings.smtp_host or not settings.smtp_from:
         raise ValueError("SMTP is not configured")
     email = EmailMessage()
     email["From"], email["To"] = settings.smtp_from, message.recipient_email
-    email["Subject"] = f"DomainsManager: {message.payload['type']}"
-    email.set_content(str(message.payload))
+    rendered = render_notification_email(message.payload, site_name=site_name)
+    email["Subject"] = rendered.subject
+    email.set_content(rendered.text)
+    email.add_alternative(rendered.html, subtype="html")
     username = settings.smtp_username or settings.smtp_from
     client_factory = smtplib.SMTP_SSL if settings.smtp_encryption == "ssl_tls" else smtplib.SMTP
     with client_factory(settings.smtp_host, settings.smtp_port, timeout=settings.notification_delivery_timeout_seconds) as client:
