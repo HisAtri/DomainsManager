@@ -20,7 +20,6 @@ async def make_client(
     registration_enabled: bool = True,
     bootstrap_admin_username: str | None = None,
     bootstrap_admin_password: str | None = None,
-    auth_rate_limit_attempts: int = 20,
     email_verification_enabled: bool = False,
     site_url: str | None = None,
 ):
@@ -40,7 +39,6 @@ async def make_client(
         database_path=str(database),
         jwt_secret_key="x",
         refresh_token_pepper="y",
-        auth_rate_limit_attempts=auth_rate_limit_attempts,
         registration_enabled=registration_enabled,
         email_verification_enabled=email_verification_enabled,
         bootstrap_admin_username=bootstrap_admin_username,
@@ -114,10 +112,12 @@ async def test_registration_email_link_confirms_through_http_api(
 
 @pytest.mark.asyncio
 @pytest.mark.api
-async def test_authentication_endpoints_are_rate_limited(tmp_path: Path) -> None:
-    client = await make_client(tmp_path, auth_rate_limit_attempts=2)
+async def test_authentication_endpoints_are_not_application_rate_limited(
+    tmp_path: Path,
+) -> None:
+    client = await make_client(tmp_path)
     with client:
-        for request_id in ("rate-limit-01", "rate-limit-02"):
+        for request_id in ("rate-limit-01", "rate-limit-02", "rate-limit-03"):
             response = client.post(
                 "/api/v1/auth/login",
                 data={"username": "missing", "password": "wrong"},
@@ -125,24 +125,9 @@ async def test_authentication_endpoints_are_rate_limited(tmp_path: Path) -> None
             )
             assert response.status_code == 401
 
-        limited = client.post(
-            "/api/v1/auth/login",
-            data={"username": "missing", "password": "wrong"},
-            headers={"X-Request-ID": "rate-limit-03"},
-        )
-        assert limited.status_code == 429
-        assert limited.headers["Retry-After"]
-        assert limited.headers["Cache-Control"] == "no-store"
-        assert limited.headers["X-Request-ID"] == "rate-limit-03"
-        assert limited.json() == {
-            "code": "rate_limited",
-            "message": "Too many authentication requests",
-            "request_id": "rate-limit-03",
-        }
-
         register = client.post(
             "/api/v1/auth/register",
-            json={"username": "separate-window", "password": "123456"},
+            json={"username": "authentication-unlimited", "password": "123456"},
         )
         assert register.status_code == 201
 

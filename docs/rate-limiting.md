@@ -1,10 +1,26 @@
-# 认证接口限流
+# 分级速率限制
 
-API 对登录、注册、Token 刷新和预留的密码重置 POST 路径启用固定窗口限流。默认每个直接连接端地址、每个端点在 60 秒内允许 20 次请求，可通过以下环境变量调整：
+应用层仅对已认证用户限流，不根据 IP 或转发地址头计数。登录、注册、Token 刷新和其他匿名入口不受应用层速率限制，应由可信反向代理或 CDN 的 Anti-Bot/IP 策略保护。
 
-- `DOMAINSMANAGER_AUTH_RATE_LIMIT_ATTEMPTS`；
-- `DOMAINSMANAGER_AUTH_RATE_LIMIT_WINDOW_SECONDS`。
+默认采用固定窗口，管理员可在“系统设置 → 速率限制”中即时调整：
 
-超过限制时返回 `429 rate_limited`、`Retry-After`、`Cache-Control: no-store` 和当前 `request_id`。不同认证端点分别计数，成功与失败请求都会占用额度，避免通过响应差异绕过计数。
+- 普通接口：每个用户 120 秒 300 次；
+- 高成本接口：每个用户 120 秒 30 次。
 
-当前计数器是单进程内存状态，只读取 ASGI 直接连接端地址，不信任可伪造的 `X-Forwarded-For`。多进程或多实例生产部署必须在可信入口增加共享限流；应用内限流作为单实例和入口配置失误时的基础保护。
+新增域名、用户手动刷新域名和管理员手动刷新域名属于高成本接口；其他使用认证用户身份的 API 属于普通接口。后台 Worker、Scheduler 和 Notifier 不走 HTTP 用户限流。
+
+超限请求返回 `429 rate_limited`，并包含 `Retry-After`、`Cache-Control: no-store` 和 request ID。
+
+## 后端
+
+`DOMAINSMANAGER_RATE_LIMIT_BACKEND=memory` 是默认值，不需要额外服务，适合单进程单实例部署。
+
+多实例部署请安装 `domainsmanager[rate-limit-redis]`，并配置：
+
+```env
+DOMAINSMANAGER_RATE_LIMIT_BACKEND=redis
+DOMAINSMANAGER_RATE_LIMIT_REDIS_URL=redis://redis:6379/0
+DOMAINSMANAGER_RATE_LIMIT_REDIS_KEY_PREFIX=domainsmanager:rate-limit
+```
+
+Redis 模式会在服务启动时执行 `PING`。Redis 地址缺失、客户端依赖未安装或 Redis 不可用时，服务会报错退出，且不会回退到内存实现。

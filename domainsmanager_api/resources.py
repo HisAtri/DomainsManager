@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from domainsmanager_api.global_setting_registry import GLOBAL_SETTING_BY_KEY
 from domainsmanager_api.notifier import deliver
+from domainsmanager_api.rate_limit import RateLimiter, create_rate_limiter
 from domainsmanager_api.settings import Settings
 from domainsmanager_application.domains import DomainService
 from domainsmanager_application.notifications import (
@@ -45,6 +46,7 @@ class Resources:
     scheduler: DomainSchedulerService
     notifications: NotificationRuleService
     notifier: NotificationOutboxService
+    rate_limiter: RateLimiter
 
     async def reload_global_policies(self) -> Settings:
         """Refresh runtime policies from persisted settings without restarting the process."""
@@ -96,6 +98,7 @@ class Resources:
         self.notifier._max_attempts = effective.notification_max_attempts
         self.notifier._retry_base_delay = timedelta(seconds=effective.notification_retry_base_seconds)
         self.notifier._retry_max_delay = timedelta(seconds=effective.notification_retry_max_seconds)
+        self.rate_limiter.update(effective)
         return effective
 
     async def database_ready(self) -> bool:
@@ -114,6 +117,7 @@ class Resources:
         return set(revisions) == heads
 
     async def close(self) -> None:
+        await self.rate_limiter.close()
         await self.engine.dispose()
 
 
@@ -193,4 +197,5 @@ def create_resources(settings: Settings) -> Resources:
             retry_base_delay=timedelta(seconds=settings.notification_retry_base_seconds),
             retry_max_delay=timedelta(seconds=settings.notification_retry_max_seconds),
         ),
+        rate_limiter=create_rate_limiter(settings),
     )

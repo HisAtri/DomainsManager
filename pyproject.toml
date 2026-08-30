@@ -44,6 +44,9 @@ api = [
     "tzdata>=2025.2",
     "uvicorn[standard]>=0.35.0",
 ]
+rate-limit-redis = [
+    "redis>=5.2.0",
+]
 persistence = [
     "alembic>=1.19.0",
     "asyncpg>=0.31.0",
@@ -78,6 +81,7 @@ markers = [
     "regression: tests for previously observed behavior",
     "api: FastAPI HTTP interface tests",
     "postgres: tests requiring a dedicated PostgreSQL instance",
+    "redis: tests requiring a dedicated Redis instance",
 ]
 
 [tool.coverage.run]
@@ -109,6 +113,7 @@ dev = [
     "pyjwt>=2.10.1",
     "python-multipart>=0.0.20",
     "pyyaml>=6.0.2",
+    "redis>=5.2.0",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",

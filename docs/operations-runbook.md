@@ -6,6 +6,8 @@
 
 连接池、连接超时和命令超时通过 `DOMAINSMANAGER_DATABASE_POOL_SIZE`、`DOMAINSMANAGER_DATABASE_CONNECT_TIMEOUT` 与 `DOMAINSMANAGER_DATABASE_COMMAND_TIMEOUT` 配置；容量调整前应在专用 PostgreSQL 环境运行 `pytest -m postgres -ra`，其中包含管理、队列和安全审计索引查询计划验证。
 
+应用层速率限制默认使用单进程内存后端。多实例部署须安装 `domainsmanager[rate-limit-redis]`，并设置 `DOMAINSMANAGER_RATE_LIMIT_BACKEND=redis` 和 `DOMAINSMANAGER_RATE_LIMIT_REDIS_URL`；启动阶段会校验 Redis 连接，失败即退出，不会回退到内存后端。匿名认证入口的 Anti-Bot/IP 限制由反向代理或 CDN 负责。
+
 ## PostgreSQL 容量与故障演练
 
 单个进程最多占用 `pool_size + max_overflow` 个连接。部署前按 API、Worker、Scheduler 和 Notifier 的实例数分别计算上限，总和必须低于 PostgreSQL `max_connections`，并为 migration、监控和人工处置保留余量。`pool_timeout` 控制连接池耗尽时的等待上限，`command_timeout` 控制单条 SQL 的执行上限。

@@ -143,6 +143,7 @@ async def get_domain_stats(
     response_model=CreateDomainResult,
     status_code=status.HTTP_201_CREATED,
     operation_id="createDomain",
+    name="createDomain",
     responses={200: {"description": "Soft-deleted domain restored"}},
 )
 async def create_domain(

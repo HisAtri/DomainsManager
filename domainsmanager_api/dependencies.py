@@ -74,6 +74,7 @@ AuthContextDependency = Annotated[AuthContext, Depends(get_auth_context)]
 
 
 async def get_current_user(
+    request: Request,
     credentials: Annotated[
         HTTPAuthorizationCredentials | None,
         Depends(bearer_scheme),
@@ -87,7 +88,7 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     try:
-        return await auth.authenticate_access_token(credentials.credentials)
+        current = await auth.authenticate_access_token(credentials.credentials)
     except InvalidTokenError as error:
         raise HTTPException(
             status_code=401,
@@ -99,6 +100,26 @@ async def get_current_user(
             status_code=403,
             detail={"code": error.code, "message": str(error)},
         ) from error
+    route = request.scope.get("route")
+    policy = (
+        "expensive"
+        if getattr(route, "name", None)
+        in {"createDomain", "refreshDomain", "refreshDomainAsAdmin"}
+        else "normal"
+    )
+    allowed, retry_after = await request.app.state.resources.rate_limiter.consume(
+        str(current.user.id), policy
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "rate_limited",
+                "message": "Too many requests",
+            },
+            headers={"Retry-After": str(retry_after), "Cache-Control": "no-store"},
+        )
+    return current
 
 
 CurrentUserDependency = Annotated[AuthenticatedUser, Depends(get_current_user)]

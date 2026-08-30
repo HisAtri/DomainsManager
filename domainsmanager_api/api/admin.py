@@ -1515,6 +1515,7 @@ def task_response(task) -> RefreshTaskResponse:
     response_model=RefreshTaskResponse,
     status_code=202,
     operation_id="refreshDomainAsAdmin",
+    name="refreshDomainAsAdmin",
 )
 async def refresh_domain_as_admin(
     domain_id: UUID,
