@@ -3,6 +3,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 from sqlalchemy import select
 
 from domainsmanager_api.email_verification import (
@@ -12,7 +13,11 @@ from domainsmanager_api.email_verification import (
     validate_allowlist,
     validate_site_url,
 )
-from domainsmanager_persistence.db import create_engine, create_session_factory, run_migrations
+from domainsmanager_persistence.db import (
+    create_engine,
+    create_session_factory,
+    run_migrations,
+)
 from domainsmanager_persistence.models import AppUser
 from tests.database import sqlite_database
 
@@ -71,7 +76,7 @@ async def test_resending_keeps_previous_verification_links_valid(tmp_path: Path)
 
 def test_allowlist_and_site_url_validation() -> None:
     validate_allowlist("person@gmail.com", "@gmail.com\n@example.org")
-    with pytest.raises(Exception):
+    with pytest.raises(HTTPException):
         validate_allowlist("person@invalid.test", "@gmail.com")
     assert validate_site_url("https://console.example.test/") == "https://console.example.test"
     with pytest.raises(ValueError):
