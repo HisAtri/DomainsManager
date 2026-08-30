@@ -72,6 +72,8 @@ class Settings(BaseSettings):
     notification_max_attempts: int = Field(default=5, ge=1)
     notification_retry_base_seconds: int = Field(default=60, ge=0)
     notification_retry_max_seconds: int = Field(default=3600, ge=0)
+    email_verification_enabled: bool = False
+    email_domain_allowlist: str = ""
     webhook_proxy_url: str | None = None
     smtp_enabled: bool = True
     smtp_host: str | None = None
