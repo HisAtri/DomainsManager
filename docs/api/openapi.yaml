@@ -258,7 +258,27 @@ paths:
           description: 修改后的用户
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/User' }
+          schema: { $ref: '#/components/schemas/User' }
+  /auth/email-verifications/confirm:
+    post:
+      tags: [Authentication]
+      operationId: confirmEmailVerification
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [token], properties: { token: { type: string } } }
+      responses:
+        '200': { description: Email verified }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /auth/me/email-verifications/resend:
+    post:
+      tags: [Current user]
+      operationId: resendEmailVerification
+      responses:
+        '200': { description: Verification email submitted }
+        '409': { description: No pending email verification }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
