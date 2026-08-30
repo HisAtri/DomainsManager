@@ -337,7 +337,7 @@ GLOBAL_SETTINGS = (
         "smtp_enabled",
         "通知设置",
         "启用 SMTP 邮件服务",
-        "关闭后不会发送邮件通知，Webhook 通知不受影响。",
+        "关闭后不会发送邮件通知",
     ),
     string("smtp_host", "通知设置", "邮件服务器地址", ""),
     integer("smtp_port", "通知设置", "SMTP服务器端口", "", 1, 65535),
