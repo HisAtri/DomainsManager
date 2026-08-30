@@ -10,7 +10,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 import httpx
-from altcha import create_challenge, verify_solution
+from altcha import Payload, create_challenge, verify_solution
 from captcha.image import ImageCaptcha
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -97,8 +97,16 @@ async def verify(request: Request, session: AsyncSession, operation: Operation, 
                 if data["o"] != operation or data["e"] < datetime.now(UTC).timestamp() or not secrets.compare_digest(data["a"], (captcha_answer or "").upper()): reject()
             except (InvalidToken, ValueError, KeyError, TypeError): reject()
         else:
-            result = verify_solution(pow_payload or "", request.app.state.settings.jwt_secret_key.get_secret_value())
-            if not result.verified: reject()
+            secret = request.app.state.settings.jwt_secret_key.get_secret_value()
+            result = verify_solution(pow_payload or "", secret)
+            if not result.verified:
+                reject()
+            try:
+                payload = Payload.from_base64(pow_payload or "")
+                if (payload.challenge.parameters.data or {}).get("operation") != operation:
+                    reject()
+            except (ValueError, KeyError, TypeError):
+                reject()
         return
     if not settings["turnstile_secret_key"] or not turnstile_token: reject()
     response = await httpx.AsyncClient(timeout=5).post("https://challenges.cloudflare.com/turnstile/v0/siteverify", data={"secret": settings["turnstile_secret_key"], "response": turnstile_token, "remoteip": request.client.host if request.client else ""})

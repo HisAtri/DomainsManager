@@ -860,6 +860,11 @@ tbody tr:hover { background: var(--dm-soft); }
 .auth-hint { margin: 16px 0 0; color: var(--dm-muted); font-size: 13px; text-align: center; }
 .auth-card { border-radius: 12px; }
 
+.captcha-row { display: flex; gap: 8px; margin-top: 7px; align-items: center; }
+.captcha-row input { margin-top: 0; flex: 1; min-width: 0; }
+.captcha-image { width: 118px; height: 40px; flex: 0 0 auto; border: 1px solid #d0d5dd; border-radius: 7px; background: #fff; object-fit: cover; cursor: pointer; }
+:root[data-theme="dark"] .captcha-image { border-color: var(--dm-border); background: var(--dm-raised); }
+
 .shortcut-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
 .shortcut-card { display: flex; align-items: center; gap: 14px; min-height: 88px; padding: 16px 18px; border: 1px solid var(--dm-border); border-radius: 10px; color: var(--dm-text); text-align: left; background: var(--dm-surface); transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
 .shortcut-card:hover { border-color: var(--dm-accent-border); box-shadow: 0 8px 20px #10182810; }
@@ -908,6 +913,14 @@ tbody tr:hover { background: var(--dm-soft); }
 .switch { display: inline-flex; width: 40px; height: 22px; align-items: center; border-radius: 999px; padding: 2px; }
 .switch-thumb { display: block; width: 18px; height: 18px; border-radius: 50%; background: #fff; transition: transform .15s ease; }
 .switch[data-state="checked"] .switch-thumb { transform: translateX(18px); }
+
+.pow-status { display: flex; align-items: center; gap: 8px; margin-top: 16px; padding: 10px 12px; border: 1px solid #eaecf0; border-radius: 7px; background: #fcfcfd; color: #475467; font-size: 13px; }
+.pow-status-verified { color: #067647; background: #ecfdf3; border-color: #abefc6; }
+.pow-status-failed { color: #b42318; background: #fef3f2; border-color: #fecdca; }
+.pow-status button { padding: 0; color: inherit; background: transparent; font-weight: 600; }
+:root[data-theme="dark"] .pow-status { border-color: var(--dm-border); color: var(--dm-text-soft); background: var(--dm-raised); }
+:root[data-theme="dark"] .pow-status-verified { color: var(--dm-ok-text); background: var(--dm-ok-bg); border-color: var(--dm-ok-border); }
+:root[data-theme="dark"] .pow-status-failed { color: var(--dm-error-text); background: var(--dm-error-bg); border-color: var(--dm-error-border); }
 
 @media (max-width: 1023px) {
   .shortcut-grid { grid-template-columns: 1fr; }

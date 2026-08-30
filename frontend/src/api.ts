@@ -20,6 +20,7 @@ const errorMessages: Record<string, string> = {
   subdomain_not_supported: "仅支持可注册域名，不支持子域名。",
   username_taken: "该用户名已被使用。",
   version_conflict: "记录已被更新，请刷新后重试。",
+  anti_bot_verification_failed: "安全校验失败，请重试。",
 };
 
 const validationMessages: Record<string, string> = {
@@ -92,6 +93,7 @@ class ApiClient {
     return navigator.locks.request("domainsmanager.refresh-token", { mode: "exclusive" }, action);
   }
   captcha(operation: "login" | "register") { return this.request<{ image: string; token: string }>(`/anti-bot/captcha?operation=${operation}`, {}, false).then((r) => r.data); }
+  powChallenge(operation: "create_domain" | "refresh_domain") { return this.request<Record<string, unknown>>(`/anti-bot/pow?operation=${operation}`, {}, false).then((r) => r.data); }
   login(username: string, password: string, captcha?: { token: string; answer: string }) { const body = new URLSearchParams({ username, password, ...(captcha ? { captcha_token: captcha.token, captcha_answer: captcha.answer } : {}) }); return this.request<AuthResult>("/auth/login", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }).then((r) => r.data); }
   register(username: string, password: string, email?: string, captcha?: { token: string; answer: string }) { return this.request<AuthResult>("/auth/register", { method: "POST", body: JSON.stringify({ username, password, email: email || null, ...(captcha ? { captcha_token: captcha.token, captcha_answer: captcha.answer } : {}) }) }).then((r) => r.data); }
   async logout() { await this.request<void>("/auth/logout", { method: "POST" }, false).catch(() => undefined); this.setTokens(null); }
