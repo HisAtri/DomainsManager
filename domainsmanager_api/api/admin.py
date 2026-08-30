@@ -51,7 +51,10 @@ from domainsmanager_api.schemas.global_settings import (
     GlobalSettingBatchPatch,
     GlobalSettingPatch,
     GlobalSettingResponse,
+    TestEmailRequest,
+    TestEmailResponse,
 )
+from domainsmanager_api.notifier import send_test_email
 from domainsmanager_api.schemas.refresh_policy import (
     RefreshPolicyPatch,
     RefreshPolicyResponse,
@@ -75,6 +78,27 @@ from domainsmanager_persistence.models import (
 
 router = APIRouter(prefix="/admin", tags=["Admin users", "Admin domains"])
 GLOBAL_SETTING_KEY = "successful_refresh_ttl_seconds"
+
+
+@router.post(
+    "/settings/test-email",
+    response_model=TestEmailResponse,
+    operation_id="sendTestEmail",
+)
+async def test_email(
+    body: TestEmailRequest,
+    _: AdminUserDependency,
+    settings: RuntimeSettingsDependency,
+    resources: ResourcesDependency,
+) -> TestEmailResponse:
+    try:
+        await send_test_email(str(body.email), settings, resources.sessions)
+    except Exception as error:  # noqa: BLE001 - SMTP errors must be sanitised at the API boundary
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "test_email_failed", "message": "test email could not be sent"},
+        ) from error
+    return TestEmailResponse()
 
 
 def setting_value(definition, value: str) -> object:

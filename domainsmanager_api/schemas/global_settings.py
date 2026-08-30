@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import Field
+from pydantic import EmailStr, Field
 
 from domainsmanager_api.schemas.admin import StrictModel
 
@@ -41,3 +41,11 @@ class GlobalSettingBatchItem(StrictModel):
 
 class GlobalSettingBatchPatch(StrictModel):
     settings: list[GlobalSettingBatchItem] = Field(min_length=1)
+
+
+class TestEmailRequest(StrictModel):
+    email: EmailStr
+
+
+class TestEmailResponse(StrictModel):
+    status: str = "sent"

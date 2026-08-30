@@ -168,6 +168,27 @@ async def send_verification_email(
     )
 
 
+async def send_test_email(
+    recipient: str, settings: Settings, sessions: async_sessionmaker[AsyncSession]
+) -> None:
+    effective = await delivery_settings(settings, sessions)
+    if not effective.smtp_enabled:
+        raise NotificationDeliverySuppressed("SMTP service is disabled")
+    site_name = await _site_name(sessions, effective)
+    rendered = render_notification_email(
+        {"type": "email.test", "data": {"message": "SMTP configuration is working."}},
+        site_name=site_name,
+    )
+    await asyncio.to_thread(
+        _send_rendered_email,
+        recipient,
+        f"{site_name}：SMTP 测试邮件",
+        rendered.text,
+        rendered.html,
+        effective,
+    )
+
+
 def _caused_by_tls_error(error: BaseException) -> bool:
     current: BaseException | None = error
     while current is not None:

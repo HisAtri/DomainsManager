@@ -61,6 +61,12 @@ function Status({ status }: { status: Task["status"] | Check["outcome"] }) { con
 function UserStatus({ status }: { status: AdminUser["status"] }) { return <span className={`status ${status === "banned" ? "status-failed" : "status-healthy"}`}><i />{status === "banned" ? "已封禁" : "正常"}</span>; }
 function Brand() { const config = useSiteConfig(); return <div className="brand"><span className="brand-mark"><img src={assetSource(config.site_logo)} alt="" /></span><span className="brand-name">{config.site_name}</span></div>; }
 
+function EmailVerificationPage() {
+  const [message, setMessage] = useState("正在验证邮箱…");
+  useEffect(() => { const token = location.hash.startsWith("#token=") ? location.hash.slice(7) : ""; if (!token) { setMessage("验证链接无效或已过期。"); return; } api.confirmEmailVerification(token).then(() => setMessage("邮箱验证成功，可以关闭此页面。"), () => setMessage("验证链接无效或已过期，请返回系统重新发送验证邮件。")); }, []);
+  return <div className="auth"><section className="auth-card"><Brand /><h1>邮箱验证</h1><p>{message}</p></section></div>;
+}
+
 function ConfirmActionButton({ children, className, title, description, confirmLabel, onConfirm }: { children: ReactNode; className: string; title: string; description: string; confirmLabel: string; onConfirm: () => Promise<void> | void }) {
   const [open, setOpen] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null);
   const changeOpen = (value: boolean) => { if (busy) return; setOpen(value); if (!value) setError(null); };
@@ -78,7 +84,7 @@ function BanUserButton({ user, onBanned }: { user: AdminUser; onBanned: (reason:
 export function App() {
   const siteConfig = useSiteConfig();
   const [user, setUser] = useState<User | null>(null); const [ready, setReady] = useState(false); const [route, routeGo, setRouteState] = useRoute(); const [flash, setFlash] = useState<string | null>(null); const [mobileNavOpen, setMobileNavOpen] = useState(false); const [theme, setTheme] = useState<Theme>(initialThemeValue); const [settingsDirty, setSettingsDirty] = useState(false); const [pendingRoute, setPendingRoute] = useState<Route | null>(null);
-  useEffect(() => { api.restoreTokens().then((tokens) => tokens ? api.me().then(setUser).catch(() => api.setTokens(null)) : undefined).finally(() => setReady(true)); }, []);
+  useEffect(() => { api.restoreTokens().then((tokens) => tokens ? api.me().then((next) => { setUser(next); if (next.role === "admin") api.globalSettings().then((items) => { const siteUrl = items.find((item) => item.key === "site_url"); if (siteUrl && !siteUrl.value) api.updateGlobalSetting("site_url", location.origin, siteUrl.version).catch(() => undefined); }).catch(() => undefined); }).catch(() => api.setTokens(null)) : undefined).finally(() => setReady(true)); }, []);
   useEffect(() => { if (flash) { const id = setTimeout(() => setFlash(null), 4200); return () => clearTimeout(id); } }, [flash]);
   useEffect(() => { const close = (event: KeyboardEvent) => { if (event.key === "Escape") setMobileNavOpen(false); }; addEventListener("keydown", close); return () => removeEventListener("keydown", close); }, []);
   useEffect(() => { document.documentElement.dataset.theme = theme; localStorage.setItem("domainsmanager-theme", theme); }, [theme]);
@@ -86,6 +92,7 @@ export function App() {
   const toggleTheme = () => setTheme((current) => current === "light" ? "dark" : "light");
   const go = (next: Route, params?: RouteParams) => { if (settingsDirty && route === "admin-settings" && next !== route) setPendingRoute(next); else routeGo(next, params); };
   const authenticate = (result: { user: User; tokens: { access_token: string; expires_in: number } }) => { api.setTokens(result.tokens); setUser(result.user); location.hash = "dashboard"; };
+  if (location.pathname.endsWith("/email/verify")) return <EmailVerificationPage />;
   if (!ready) return <div className="loading-screen"><LoaderCircle className="spin" /> 正在连接服务…</div>;
   if (!user) return <AuthScreen onSuccess={authenticate} theme={theme} onToggleTheme={toggleTheme} />;
   const logout = () => api.logout().finally(() => { setMobileNavOpen(false); setUser(null); location.hash = "dashboard"; });
@@ -238,7 +245,7 @@ function SettingsPage({ user, onUser, onMessage }: { user: User; onUser: (user: 
     <div className="personal-settings-sections">
       <section className="personal-settings-section"><h2>个人资料</h2><div className="personal-settings-list">
         <div className="personal-setting-row"><div className="personal-setting-copy"><b>用户名</b><small>用户名当前不可修改</small></div><div className="personal-setting-control"><input value={user.username} readOnly /></div></div>
-        <div className="personal-setting-row"><div className="personal-setting-copy"><b>邮箱地址</b></div><div className="personal-setting-control"><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" /></div></div>
+        <div className="personal-setting-row"><div className="personal-setting-copy"><b>邮箱地址</b><small>{user.pending_email ? `等待验证：${user.pending_email}；完成验证前邮件通知会暂停。` : user.email_verified_at ? "已验证，可用于接收通知。" : "未验证，邮件通知不会发送。"}</small></div><div className="personal-setting-control"><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" /></div></div>
         <div className="personal-setting-actions"><button className="primary" onClick={saveProfile}>保存修改</button></div>
       </div></section>
       <section className="personal-settings-section"><h2>修改密码</h2><div className="personal-settings-list">
