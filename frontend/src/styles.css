@@ -776,6 +776,17 @@ tbody tr:hover { background: var(--dm-soft); }
 .picasso-setting-editor .footer-links-editor { display: grid; gap: 8px; }
 .picasso-setting-editor .asset-preview { margin-top: 0; }
 .picasso-setting-row.editor-code, .picasso-setting-row.editor-links { padding-top: 4px; }
+.rate-limit-policies { display: grid; gap: 14px; }
+.rate-limit-policy { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px; border: 1px solid var(--dm-border); border-radius: 10px; background: var(--dm-raised); }
+.rate-limit-policy-copy b, .rate-limit-policy-copy small { display: block; }
+.rate-limit-policy-copy b { color: var(--dm-text); font-size: 14px; font-weight: 600; }
+.rate-limit-policy-copy small { margin-top: 3px; color: var(--dm-muted); font-size: 12px; }
+.rate-limit-fields { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--dm-muted); font-size: 13px; white-space: nowrap; }
+.rate-limit-fields label { display: inline-flex; align-items: center; gap: 6px; }
+.rate-limit-fields input { box-sizing: border-box; width: 76px; padding: 8px 12px; border: 1px solid var(--dm-border-strong); border-radius: 8px; color: var(--dm-text); background: var(--dm-raised); outline: none; font-size: 14px; line-height: 20px; text-align: center; }
+.rate-limit-fields input:focus { border-color: var(--dm-accent); box-shadow: 0 0 0 3px var(--dm-focus); }
+.rate-limit-fields em { color: var(--dm-text-soft); font-style: normal; }
+.rate-limit-connector { color: var(--dm-text-soft); }
 
 @media (max-width: 767px) {
   .admin-check-filters { grid-template-columns: 1fr; padding-inline: 16px; }
@@ -787,6 +798,8 @@ tbody tr:hover { background: var(--dm-soft); }
   .picasso-setting-section + .picasso-setting-section { margin-top: 30px; }
   .picasso-setting-row { grid-template-columns: 1fr; gap: 8px; }
   .picasso-setting-copy { padding-top: 0; }
+  .rate-limit-policy { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .rate-limit-fields { white-space: normal; }
   .picasso-settings-head .unsaved-indicator { display: none; }
 }
 

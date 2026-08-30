@@ -29,6 +29,12 @@ const SMTP_DEFAULT_PORTS: Record<(typeof SMTP_ENCRYPTION_OPTIONS)[number]["value
   starttls: "587",
   ssl_tls: "465",
 };
+const RATE_LIMIT_POLICIES = [
+  { title: "普通接口", description: "适用于已认证用户的常规业务请求。", attemptsKey: "normal_rate_limit_attempts", windowKey: "normal_rate_limit_window_seconds" },
+  { title: "高成本接口", description: "适用于新增域名和手动刷新等高成本操作。", attemptsKey: "expensive_rate_limit_attempts", windowKey: "expensive_rate_limit_window_seconds" },
+] as const;
+type RateLimitKey = (typeof RATE_LIMIT_POLICIES)[number]["attemptsKey" | "windowKey"];
+const RATE_LIMIT_KEYS: ReadonlySet<string> = new Set(RATE_LIMIT_POLICIES.flatMap((policy) => [policy.attemptsKey, policy.windowKey]));
 
 const same = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
 const displayValue = (setting: GlobalSetting) => setting.kind === "boolean" ? Boolean(setting.value) : setting.kind === "json" ? setting.value ?? [] : String(setting.value ?? "");
@@ -45,6 +51,16 @@ function SettingEditor({ setting, value, onChange }: { setting: GlobalSetting; v
   if (setting.editor === "links") return <FooterLinksEditor value={(value as FooterLink[]) || []} onChange={onChange} />;
   if (setting.editor === "textarea" || setting.editor === "code" || setting.key === "email_domain_allowlist") return <div className="stacked-editor"><textarea aria-label={setting.label} className={setting.editor === "code" ? "code-editor" : undefined} value={String(value ?? "")} placeholder={setting.placeholder ?? (setting.key === "email_domain_allowlist" ? "@gmail.com" : undefined)} onChange={(event) => onChange(event.target.value)} /></div>;
   return <div className="stacked-editor"><input aria-label={setting.label} type={setting.kind === "integer" || setting.kind === "number" ? "number" : "text"} step={setting.kind === "number" ? "0.1" : "1"} min={setting.minimum ?? undefined} max={setting.maximum ?? undefined} value={String(value ?? "")} placeholder={setting.key === "webhook_proxy_url" ? "http://proxy.example:8080" : setting.placeholder ?? undefined} onChange={(event) => onChange(event.target.value)} />{setting.editor === "asset" && String(value ?? "") && <img className="asset-preview" src={assetSource(String(value))} alt={`${setting.label} 预览`} />}</div>;
+}
+
+function RateLimitSettings({ settings, draft, onChange }: { settings: GlobalSetting[]; draft: Draft; onChange: (key: RateLimitKey, value: string) => void }) {
+  const byKey = new Map(settings.map((setting) => [setting.key, setting]));
+  return <div className="rate-limit-policies">{RATE_LIMIT_POLICIES.map((policy) => {
+    const attempts = byKey.get(policy.attemptsKey);
+    const window = byKey.get(policy.windowKey);
+    if (!attempts || !window) return null;
+    return <section className="rate-limit-policy" key={policy.attemptsKey}><div className="rate-limit-policy-copy"><b>{policy.title}</b><small>{policy.description}</small></div><div className="rate-limit-fields"><label><span>允许</span><input aria-label={`${policy.title}请求次数`} type="number" min={attempts.minimum ?? undefined} max={attempts.maximum ?? undefined} value={String(draft[attempts.key] ?? "")} onChange={(event) => onChange(policy.attemptsKey, event.target.value)} /><em>次请求</em></label><span className="rate-limit-connector">在</span><label><input aria-label={`${policy.title}时间窗口`} type="number" min={window.minimum ?? undefined} max={window.maximum ?? undefined} value={String(draft[window.key] ?? "")} onChange={(event) => onChange(policy.windowKey, event.target.value)} /><em>秒时间窗口内</em></label></div></section>;
+  })}</div>;
 }
 
 function TestEmailControl({ onMessage }: { onMessage: (message: string) => void }) {
@@ -111,5 +127,5 @@ export function AdminSettingsV2({ onMessage, onDirtyChange }: { onMessage: (mess
       onMessage("设置已保存");
     } catch (error) { onMessage(error instanceof Error ? error.message : "设置保存失败"); } finally { setSaving(false); }
   };
-  return <div className="settings-route-shell picasso-settings"><aside className="settings-index" aria-label="系统设置分类"><div className="settings-index-title"><b>系统设置</b></div><nav>{groups.map((group) => <button key={group.id} className={group.id === activeGroup?.id ? "active" : ""} onClick={() => setActiveId(group.id)}><span>{group.title}</span></button>)}</nav></aside><div className="settings-route-main"><header className="picasso-settings-head"><div><h1>{activeGroup?.title || "系统设置"}</h1><p>{activeGroup?.description}</p></div><div className="admin-settings-actions">{dirty && <span className="unsaved-indicator"><i />有未保存的修改</span>}<button className="primary" onClick={save} disabled={saving || !dirty}>{saving && <LoaderCircle className="spin" size={16} />}保存设置</button></div></header><section className="picasso-settings-form">{sections.map((section) => <section className="picasso-setting-section" key={section.title || "default"}>{section.title && <header><h2>{section.title}</h2></header>}<div className="picasso-setting-list">{section.settings.map((setting) => <div className={`picasso-setting-row editor-${setting.editor}`} key={setting.key}><div className="picasso-setting-copy"><b>{setting.label}</b><small>{setting.description}</small></div><div className="picasso-setting-editor"><SettingEditor setting={setting} value={draft[setting.key]} onChange={(value) => change(setting.key, value)} /></div></div>)}</div></section>)}{activeGroup?.id === "notifications" && <TestEmailControl onMessage={onMessage} />}{!settings.length && <div className="empty">正在读取设置…</div>}</section></div></div>;
+  return <div className="settings-route-shell picasso-settings"><aside className="settings-index" aria-label="系统设置分类"><div className="settings-index-title"><b>系统设置</b></div><nav>{groups.map((group) => <button key={group.id} className={group.id === activeGroup?.id ? "active" : ""} onClick={() => setActiveId(group.id)}><span>{group.title}</span></button>)}</nav></aside><div className="settings-route-main"><header className="picasso-settings-head"><div><h1>{activeGroup?.title || "系统设置"}</h1><p>{activeGroup?.description}</p></div><div className="admin-settings-actions">{dirty && <span className="unsaved-indicator"><i />有未保存的修改</span>}<button className="primary" onClick={save} disabled={saving || !dirty}>{saving && <LoaderCircle className="spin" size={16} />}保存设置</button></div></header><section className="picasso-settings-form">{sections.map((section) => <section className="picasso-setting-section" key={section.title || "default"}>{section.title && <header><h2>{section.title}</h2></header>}{section.settings.some((setting) => RATE_LIMIT_KEYS.has(setting.key)) ? <RateLimitSettings settings={section.settings} draft={draft} onChange={change} /> : <div className="picasso-setting-list">{section.settings.map((setting) => <div className={`picasso-setting-row editor-${setting.editor}`} key={setting.key}><div className="picasso-setting-copy"><b>{setting.label}</b><small>{setting.description}</small></div><div className="picasso-setting-editor"><SettingEditor setting={setting} value={draft[setting.key]} onChange={(value) => change(setting.key, value)} /></div></div>)}</div>}</section>)}{activeGroup?.id === "notifications" && <TestEmailControl onMessage={onMessage} />}{!settings.length && <div className="empty">正在读取设置…</div>}</section></div></div>;
 }
