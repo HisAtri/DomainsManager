@@ -7,6 +7,8 @@ export const defaultSiteConfig: PublicSiteConfig = {
   revision: "default",
   registration_enabled: false,
   smtp_enabled: true,
+  anti_bot_mode: "disabled",
+  turnstile_site_key: "",
   site_name: "DomainsManager",
   site_url: "",
   site_logo: "/default.svg",

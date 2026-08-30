@@ -16,6 +16,9 @@ class RegisterRequest(StrictModel):
     username: str = Field(min_length=3, max_length=128, pattern=r"^[A-Za-z0-9_.-]+$")
     password: str = Field(min_length=6, max_length=256)
     email: EmailStr | None = None
+    captcha_token: str | None = Field(default=None, max_length=2048)
+    captcha_answer: str | None = Field(default=None, max_length=32)
+    turnstile_token: str | None = Field(default=None, max_length=4096)
 
 
 class LoginRequest(StrictModel):

@@ -55,6 +55,7 @@ from domainsmanager_api.schemas.global_settings import (
     TestEmailResponse,
 )
 from domainsmanager_api.notifier import send_test_email
+from domainsmanager_api.secret_settings import encrypt_secret
 from domainsmanager_api.schemas.refresh_policy import (
     RefreshPolicyPatch,
     RefreshPolicyResponse,
@@ -119,10 +120,8 @@ def setting_response(
     definition, setting: GlobalSetting | None, default: float | bool | str | None
 ) -> GlobalSettingResponse:
     if definition.secret:
-        value = setting.value if setting is not None else default
-        if hasattr(value, "get_secret_value"):
-            value = value.get_secret_value()
-        configured = bool(value)
+        value = None
+        configured = setting is not None or bool(default)
     else:
         value = setting_value(definition, setting.value) if setting else default
         if hasattr(value, "get_secret_value"):
@@ -225,7 +224,7 @@ async def valid_runtime_setting_combination(
 
 def setting_storage_value(definition, value: object, encryption_key) -> str:
     if definition.secret:
-        return str(value) if value is not None else ""
+        return encrypt_secret(str(value), encryption_key)
     if definition.kind == "boolean":
         return str(value).lower()
     if definition.kind == "json":

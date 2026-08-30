@@ -152,6 +152,13 @@ def site_setting(
 
 
 GLOBAL_SETTINGS = (
+    choice("anti_bot_mode", "安全设置", "反机器人", "保护公开认证和高成本操作。", ("disabled", "image_captcha", "turnstile")),
+    boolean("captcha_rotate", "安全设置", "字符旋转", ""),
+    boolean("captcha_offset", "安全设置", "字符偏移", ""),
+    boolean("captcha_warp", "安全设置", "字符形变", ""),
+    choice("pow_difficulty", "安全设置", "PoW 难度", "更高的值耗时更长", ("easy", "medium", "hard")),
+    string("turnstile_site_key", "安全设置", "Turnstile Site key", "站点密钥"),
+    secret("turnstile_secret_key", "安全设置", "Turnstile Secret Key", "密钥"),
     boolean(
         "registration_enabled",
         "账户与访问",

@@ -14,6 +14,8 @@ class PublicSiteConfig(StrictModel):
     revision: str
     registration_enabled: bool
     smtp_enabled: bool
+    anti_bot_mode: str = "disabled"
+    turnstile_site_key: str = ""
     site_name: str
     site_url: str
     site_logo: str

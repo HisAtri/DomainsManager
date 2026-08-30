@@ -42,6 +42,13 @@ class Settings(BaseSettings):
     server_host: str = "127.0.0.1"
     server_port: int = Field(default=7920, ge=1, le=65535)
     registration_enabled: bool = False
+    anti_bot_mode: Literal["disabled", "image_captcha", "turnstile"] = "disabled"
+    captcha_rotate: bool = True
+    captcha_offset: bool = True
+    captcha_warp: bool = True
+    pow_difficulty: Literal["easy", "medium", "hard"] = "medium"
+    turnstile_site_key: str = ""
+    turnstile_secret_key: SecretStr | None = None
     jwt_secret_key: SecretStr | None = None
     refresh_token_pepper: SecretStr | None = None
     jwt_issuer: str = "domainsmanager"

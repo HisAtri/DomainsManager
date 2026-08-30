@@ -11,6 +11,7 @@ from domainsmanager_api.api.health import router as health_router
 from domainsmanager_api.api.notifications import router as notifications_router
 from domainsmanager_api.api.oauth import router as oauth_router
 from domainsmanager_api.api.site_config import router as site_config_router
+from domainsmanager_api.anti_bot import router as anti_bot_router
 from domainsmanager_api.api.tasks import router as tasks_router
 from domainsmanager_api.errors import install_exception_handlers
 from domainsmanager_api.middleware import RequestIdMiddleware
@@ -76,6 +77,7 @@ def create_app(
     app.include_router(auth_router, prefix=effective_settings.api_prefix)
     app.include_router(oauth_router, prefix=effective_settings.api_prefix)
     app.include_router(site_config_router, prefix=effective_settings.api_prefix)
+    app.include_router(anti_bot_router, prefix=effective_settings.api_prefix)
     app.include_router(admin_router, prefix=effective_settings.api_prefix)
     app.include_router(domains_router, prefix=effective_settings.api_prefix)
     app.include_router(tasks_router, prefix=effective_settings.api_prefix)

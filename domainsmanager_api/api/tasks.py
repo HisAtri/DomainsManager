@@ -4,9 +4,11 @@ from datetime import datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 
-from domainsmanager_api.dependencies import CurrentUserDependency, TaskServiceDependency
+from domainsmanager_api.dependencies import CurrentUserDependency, TaskServiceDependency, get_session
+from domainsmanager_api.anti_bot import verify as verify_anti_bot
+from sqlalchemy.ext.asyncio import AsyncSession
 from domainsmanager_api.schemas.tasks import (
     DomainCheckPageResponse,
     DomainCheckResponse,
@@ -104,8 +106,10 @@ async def refresh_domain(
     response: Response,
     current: CurrentUserDependency,
     tasks: TaskServiceDependency,
+    session: Annotated[AsyncSession, Depends(get_session)],
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> RefreshTaskResponse:
+    await verify_anti_bot(request, session, "refresh_domain", pow_payload=body.pow_payload, turnstile_token=body.turnstile_token)
     if idempotency_key is None or not 8 <= len(idempotency_key) <= 128:
         raise HTTPException(
             status_code=422,

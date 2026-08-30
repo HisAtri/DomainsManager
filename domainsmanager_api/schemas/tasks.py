@@ -11,6 +11,8 @@ from domainsmanager_api.schemas.domains import StrictModel
 
 class RefreshDomainRequest(StrictModel):
     force_refresh: bool = False
+    pow_payload: str | None = Field(default=None, max_length=4096)
+    turnstile_token: str | None = Field(default=None, max_length=4096)
 
 
 class TaskErrorResponse(StrictModel):

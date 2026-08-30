@@ -91,8 +91,9 @@ class ApiClient {
     if (!navigator.locks) return action();
     return navigator.locks.request("domainsmanager.refresh-token", { mode: "exclusive" }, action);
   }
-  login(username: string, password: string) { const body = new URLSearchParams({ username, password }); return this.request<AuthResult>("/auth/login", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }).then((r) => r.data); }
-  register(username: string, password: string, email?: string) { return this.request<AuthResult>("/auth/register", { method: "POST", body: JSON.stringify({ username, password, email: email || null }) }).then((r) => r.data); }
+  captcha(operation: "login" | "register") { return this.request<{ image: string; token: string }>(`/anti-bot/captcha?operation=${operation}`, {}, false).then((r) => r.data); }
+  login(username: string, password: string, captcha?: { token: string; answer: string }) { const body = new URLSearchParams({ username, password, ...(captcha ? { captcha_token: captcha.token, captcha_answer: captcha.answer } : {}) }); return this.request<AuthResult>("/auth/login", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body }).then((r) => r.data); }
+  register(username: string, password: string, email?: string, captcha?: { token: string; answer: string }) { return this.request<AuthResult>("/auth/register", { method: "POST", body: JSON.stringify({ username, password, email: email || null, ...(captcha ? { captcha_token: captcha.token, captcha_answer: captcha.answer } : {}) }) }).then((r) => r.data); }
   async logout() { await this.request<void>("/auth/logout", { method: "POST" }, false).catch(() => undefined); this.setTokens(null); }
   me() { return this.request<User>("/auth/me").then((r) => r.data); }
   updateMe(email: string) { return this.request<User>("/auth/me", { method: "PATCH", body: JSON.stringify({ email: email || null }) }).then((r) => r.data); }

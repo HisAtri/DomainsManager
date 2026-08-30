@@ -13,6 +13,7 @@ type SettingsSection = { title?: string; keys: readonly string[] };
 type SettingsGroup = { id: string; title: string; description: string; sections: readonly SettingsSection[] };
 
 const SITE_GROUPS: readonly SettingsGroup[] = [
+  { id: "security", title: "安全设置", description: "反机器人保护", sections: [{ title: "反机器人", keys: ["anti_bot_mode"] }, { title: "图形验证码", keys: ["captcha_rotate", "captcha_offset", "captcha_warp", "pow_difficulty"] }, { title: "Cloudflare Turnstile", keys: ["turnstile_site_key", "turnstile_secret_key"] }] },
   { id: "site", title: "站点信息", description: "站点名称、Logo 和 Favicon", sections: [{ title: "基本信息", keys: ["site_name", "site_url", "site_logo", "site_favicon"] }] },
   { id: "footer", title: "页脚配置", description: "页脚链接、版权和备案信息", sections: [{ title: "页脚内容", keys: ["footer_links", "footer_copyright"] }, { title: "备案信息", keys: ["icp_number", "police_record_number"] }] },
   { id: "inject", title: "代码注入", description: "自定义样式、脚本与 HTML 注入", sections: [{ title: "样式与脚本", keys: ["custom_css", "custom_javascript"] }, { title: "HTML 注入", keys: ["head_html", "body_end_html"] }, { title: "网站统计", keys: ["analytics_code"] }] },
@@ -47,10 +48,19 @@ function FooterLinksEditor({ value, onChange }: { value: FooterLink[]; onChange:
 
 function SettingEditor({ setting, value, onChange }: { setting: GlobalSetting; value: unknown; onChange: (value: unknown) => void }) {
   if (setting.kind === "boolean") return <Switch.Root className="switch" checked={Boolean(value)} onCheckedChange={onChange}><Switch.Thumb className="switch-thumb" /></Switch.Root>;
+  if (setting.kind === "choice") return <SelectMenu aria-label={setting.label} value={String(value ?? "")} onChange={onChange} options={(setting.choices ?? []).map((choice) => ({ value: choice, label: choiceLabel(setting.key, choice) }))} />;
   if (setting.key === "smtp_encryption") return <SelectMenu aria-label={setting.label} value={String(value ?? "none")} onChange={onChange} options={SMTP_ENCRYPTION_OPTIONS.map((option) => ({ value: option.value, label: option.label }))} />;
   if (setting.editor === "links") return <FooterLinksEditor value={(value as FooterLink[]) || []} onChange={onChange} />;
   if (setting.editor === "textarea" || setting.editor === "code" || setting.key === "email_domain_allowlist") return <div className="stacked-editor"><textarea aria-label={setting.label} className={setting.editor === "code" ? "code-editor" : undefined} value={String(value ?? "")} placeholder={setting.placeholder ?? (setting.key === "email_domain_allowlist" ? "@gmail.com" : undefined)} onChange={(event) => onChange(event.target.value)} /></div>;
   return <div className="stacked-editor"><input aria-label={setting.label} type={setting.kind === "integer" || setting.kind === "number" ? "number" : "text"} step={setting.kind === "number" ? "0.1" : "1"} min={setting.minimum ?? undefined} max={setting.maximum ?? undefined} value={String(value ?? "")} placeholder={setting.key === "webhook_proxy_url" ? "http://proxy.example:8080" : setting.placeholder ?? undefined} onChange={(event) => onChange(event.target.value)} />{setting.editor === "asset" && String(value ?? "") && <img className="asset-preview" src={assetSource(String(value))} alt={`${setting.label} 预览`} />}</div>;
+}
+
+function choiceLabel(key: string, value: string) {
+  const labels: Record<string, Record<string, string>> = {
+    anti_bot_mode: { disabled: "关闭", image_captcha: "图形验证码", turnstile: "Turnstile" },
+    pow_difficulty: { easy: "简单", medium: "中等", hard: "困难" },
+  };
+  return labels[key]?.[value] ?? value;
 }
 
 function RateLimitSettings({ settings, draft, onChange }: { settings: GlobalSetting[]; draft: Draft; onChange: (key: RateLimitKey, value: string) => void }) {
@@ -80,7 +90,7 @@ export function AdminSettingsV2({ onMessage, onDirtyChange }: { onMessage: (mess
   }).catch((error: unknown) => onMessage(error instanceof Error ? error.message : "设置加载失败")), [onMessage]);
   useEffect(() => { load(); }, [load]);
   const runtimeGroup: SettingsGroup | null = useMemo(() => {
-    const runtimeSettings = settings.filter((item) => item.group !== "站点信息" && item.group !== "页面配置" && item.group !== NOTIFICATION_GROUP);
+    const runtimeSettings = settings.filter((item) => item.group !== "站点信息" && item.group !== "页面配置" && item.group !== "安全设置" && item.group !== NOTIFICATION_GROUP);
     if (!runtimeSettings.length) return null;
     const names = Array.from(new Set(runtimeSettings.map((item) => item.group)));
     return {
@@ -105,7 +115,8 @@ export function AdminSettingsV2({ onMessage, onDirtyChange }: { onMessage: (mess
   }, [settings]);
   const groups: readonly SettingsGroup[] = [...SITE_GROUPS, ...(runtimeGroup ? [runtimeGroup] : []), ...(notificationGroup ? [notificationGroup] : [])];
   const activeGroup = groups.find((group) => group.id === activeId) ?? groups[0];
-  const sections = (activeGroup?.sections ?? []).map((section) => ({ title: section.title, settings: section.keys.map((key) => settings.find((item) => item.key === key)).filter((item): item is GlobalSetting => Boolean(item)) })).filter((section) => section.settings.length);
+  const antiBotMode = String(draft.anti_bot_mode ?? "disabled");
+  const sections = (activeGroup?.sections ?? []).map((section) => ({ title: section.title, settings: section.keys.map((key) => settings.find((item) => item.key === key)).filter((item): item is GlobalSetting => Boolean(item)).filter((setting) => activeGroup?.id !== "security" || setting.key === "anti_bot_mode" || (antiBotMode === "image_captcha" && ["captcha_rotate", "captcha_offset", "captcha_warp", "pow_difficulty"].includes(setting.key)) || (antiBotMode === "turnstile" && ["turnstile_site_key", "turnstile_secret_key"].includes(setting.key))) })).filter((section) => section.settings.length);
   const dirtySettings = settings.filter((item) => !same(draft[item.key], displayValue(item)));
   const dirty = dirtySettings.length > 0;
   useEffect(() => { onDirtyChange(dirty); return () => onDirtyChange(false); }, [dirty, onDirtyChange]);

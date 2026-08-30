@@ -71,9 +71,15 @@ async def get_public_site_config(
     if request.headers.get("if-none-match") == etag:
         return Response(status_code=304, headers={"ETag": etag})
     response.headers["ETag"] = etag
+    anti_bot = GLOBAL_SETTING_BY_KEY["anti_bot_mode"]
+    anti_bot_row = await session.get(GlobalSetting, anti_bot.key)
+    site_key = GLOBAL_SETTING_BY_KEY["turnstile_site_key"]
+    site_key_row = await session.get(GlobalSetting, site_key.key)
     return PublicSiteConfig(
         revision=revision,
         registration_enabled=registration_enabled,
         smtp_enabled=smtp_enabled,
+        anti_bot_mode=anti_bot_row.value if anti_bot_row else str(anti_bot.default(settings)),
+        turnstile_site_key=site_key_row.value if site_key_row else str(site_key.default(settings)),
         **values,
     )

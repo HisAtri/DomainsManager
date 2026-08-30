@@ -14,6 +14,7 @@ from domainsmanager_api.dependencies import (
     get_session,
 )
 from domainsmanager_api.email_verification import begin as begin_email_verification
+from domainsmanager_api.anti_bot import verify as verify_anti_bot
 from domainsmanager_api.email_verification import confirm as confirm_email_verification
 from domainsmanager_api.email_verification import (
     resend_available,
@@ -152,7 +153,9 @@ async def register(
     response: Response,
     auth: AuthServiceDependency,
     context: AuthContextDependency,
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> AuthResultResponse:
+    await verify_anti_bot(request, session, "register", captcha_token=body.captcha_token, captcha_answer=body.captcha_answer, turnstile_token=body.turnstile_token)
     try:
         # Email is persisted as pending until the message link is confirmed.
         # This is deliberately performed after account/session creation.
@@ -193,11 +196,16 @@ async def login(
     response: Response,
     auth: AuthServiceDependency,
     context: AuthContextDependency,
+    session: Annotated[AsyncSession, Depends(get_session)],
     username: str = Form(min_length=1, max_length=320),
     password: str = Form(min_length=1, max_length=256),
     scope: str = Form(default=""),
+    captcha_token: str | None = Form(default=None),
+    captcha_answer: str | None = Form(default=None),
+    turnstile_token: str | None = Form(default=None),
 ) -> AuthResultResponse:
     del scope
+    await verify_anti_bot(request, session, "login", captcha_token=captcha_token, captcha_answer=captcha_answer, turnstile_token=turnstile_token)
     try:
         result = await auth.login(username, password, context)
     except Exception as error:
