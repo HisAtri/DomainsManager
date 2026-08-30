@@ -6,7 +6,7 @@ from typing import Any, Literal
 from domainsmanager_api.settings import Settings
 
 ValueKind = Literal[
-    "integer", "number", "boolean", "string", "secret", "choice", "json"
+    "integer", "number", "boolean", "string", "choice", "json"
 ]
 _MISSING = object()
 
@@ -29,10 +29,6 @@ class GlobalSettingDefinition:
     default_value: Any = _MISSING
 
     @property
-    def secret(self) -> bool:
-        return self.kind == "secret"
-
-    @property
     def uses_registry_default(self) -> bool:
         return self.default_value is not _MISSING
 
@@ -40,7 +36,7 @@ class GlobalSettingDefinition:
         if self.default_value is not _MISSING:
             return self.default_value
         value = getattr(settings, self.key)
-        return value.get_secret_value() if self.secret and value is not None else value
+        return value
 
 
 def integer(
@@ -107,12 +103,6 @@ def string(
     return GlobalSettingDefinition(key, group, label, description, "string", live=True)
 
 
-def secret(
-    key: str, group: str, label: str, description: str
-) -> GlobalSettingDefinition:
-    return GlobalSettingDefinition(key, group, label, description, "secret", live=True)
-
-
 def choice(
     key: str,
     group: str,
@@ -158,7 +148,7 @@ GLOBAL_SETTINGS = (
     boolean("captcha_warp", "安全设置", "字符形变", ""),
     choice("pow_difficulty", "安全设置", "PoW 难度", "更高的值耗时更长", ("easy", "medium", "hard")),
     string("turnstile_site_key", "安全设置", "Turnstile Site key", "站点密钥"),
-    secret("turnstile_secret_key", "安全设置", "Turnstile Secret Key", "密钥"),
+    string("turnstile_secret_key", "安全设置", "Turnstile Secret Key", "密钥"),
     boolean(
         "registration_enabled",
         "账户与访问",

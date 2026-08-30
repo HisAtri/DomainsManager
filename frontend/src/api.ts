@@ -103,10 +103,10 @@ class ApiClient {
   domains(params: Record<string, string | number | boolean | undefined> = {}) { return this.request<Page<Domain>>(`/domains?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
   domainStats() { return this.request<DomainStats>("/domains/stats").then((r) => r.data); }
   domain(id: string) { return this.request<Domain>(`/domains/${id}`); }
-  createDomain(name: string, monitor_enabled: boolean) { return this.request<{ domain: Domain }>("/domains", { method: "POST", body: JSON.stringify({ name, monitor_enabled }) }).then((r) => r.data.domain); }
+  createDomain(name: string, monitor_enabled: boolean, pow_payload?: string) { return this.request<{ domain: Domain }>("/domains", { method: "POST", body: JSON.stringify({ name, monitor_enabled, ...(pow_payload ? { pow_payload } : {}) }) }).then((r) => r.data.domain); }
   updateDomain(id: string, version: number, values: Partial<Pick<Domain, "monitor_enabled" | "renewal_mode" | "notes">>) { return this.request<Domain>(`/domains/${id}`, { method: "PATCH", headers: { "If-Match": `"${version}"` }, body: JSON.stringify(values) }); }
   deleteDomain(id: string) { return this.request<void>(`/domains/${id}`, { method: "DELETE" }); }
-  refreshDomain(id: string, force_refresh = false) { return this.request<Task>(`/domains/${id}/refresh`, { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ force_refresh }) }).then((r) => r.data); }
+  refreshDomain(id: string, force_refresh = false, pow_payload?: string) { return this.request<Task>(`/domains/${id}/refresh`, { method: "POST", headers: { "Idempotency-Key": crypto.randomUUID() }, body: JSON.stringify({ force_refresh, ...(pow_payload ? { pow_payload } : {}) }) }).then((r) => r.data); }
   checks(id: string, params: Record<string, string | number | undefined> = {}) { return this.request<Page<Check>>(`/domains/${id}/checks?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
   tasks(params: Record<string, string | number | undefined> = {}) { return this.request<Page<Task>>(`/tasks?${new URLSearchParams(Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)])).toString()}`).then((r) => r.data); }
   task(id: string) { return this.request<Task>(`/tasks/${id}`).then((r) => r.data); }

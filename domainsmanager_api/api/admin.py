@@ -55,7 +55,6 @@ from domainsmanager_api.schemas.global_settings import (
     TestEmailResponse,
 )
 from domainsmanager_api.notifier import send_test_email
-from domainsmanager_api.secret_settings import encrypt_secret
 from domainsmanager_api.schemas.refresh_policy import (
     RefreshPolicyPatch,
     RefreshPolicyResponse,
@@ -119,14 +118,10 @@ def setting_value(definition, value: str) -> object:
 def setting_response(
     definition, setting: GlobalSetting | None, default: float | bool | str | None
 ) -> GlobalSettingResponse:
-    if definition.secret:
-        value = None
-        configured = setting is not None or bool(default)
-    else:
-        value = setting_value(definition, setting.value) if setting else default
-        if hasattr(value, "get_secret_value"):
-            value = value.get_secret_value()
-        configured = value is not None and value != ""
+    value = setting_value(definition, setting.value) if setting else default
+    if hasattr(value, "get_secret_value"):
+        value = value.get_secret_value()
+    configured = value is not None and value != ""
     return GlobalSettingResponse(
         key=definition.key,
         group=definition.group,
@@ -156,8 +151,6 @@ def setting_response(
 
 
 def valid_setting_value(definition, value: object) -> bool:
-    if definition.secret:
-        return value is None or (isinstance(value, str) and len(value) <= 4096)
     if definition.kind == "boolean":
         return isinstance(value, bool)
     if definition.kind == "integer":
@@ -212,7 +205,6 @@ async def valid_runtime_setting_combination(
     overrides = {
         setting_key: setting_value(GLOBAL_SETTING_BY_KEY[setting_key], raw)
         for setting_key, raw in rows.items()
-        if not GLOBAL_SETTING_BY_KEY[setting_key].secret
     }
     overrides[key] = value
     try:
@@ -222,9 +214,7 @@ async def valid_runtime_setting_combination(
     return True
 
 
-def setting_storage_value(definition, value: object, encryption_key) -> str:
-    if definition.secret:
-        return encrypt_secret(str(value), encryption_key)
+def setting_storage_value(definition, value: object) -> str:
     if definition.kind == "boolean":
         return str(value).lower()
     if definition.kind == "json":
@@ -380,7 +370,6 @@ async def update_global_settings(
     overrides = {
         key: item.value
         for key, item in items.items()
-        if not GLOBAL_SETTING_BY_KEY[key].secret
     }
     current = {
         row.key: setting_value(GLOBAL_SETTING_BY_KEY[row.key], row.value)
@@ -391,7 +380,6 @@ async def update_global_settings(
                 )
             )
         ).scalars()
-        if not GLOBAL_SETTING_BY_KEY[row.key].secret
     }
     try:
         settings.__class__.model_validate(
@@ -409,32 +397,25 @@ async def update_global_settings(
     for key, item in items.items():
         definition = GLOBAL_SETTING_BY_KEY[key]
         setting = rows.get(key)
-        if definition.secret and item.value is None:
-            if setting is not None:
-                await session.delete(setting)
-            event_type = "admin.global_setting_secret_cleared"
-        else:
-            stored = setting_storage_value(
-                definition, item.value, settings.configuration_encryption_key
+        stored = setting_storage_value(definition, item.value)
+        if setting is None:
+            setting = GlobalSetting(
+                key=key,
+                value=stored,
+                version=1,
+                updated_by_user_id=admin.user.id,
+                updated_at=now,
             )
-            if setting is None:
-                setting = GlobalSetting(
-                    key=key,
-                    value=stored,
-                    version=1,
-                    updated_by_user_id=admin.user.id,
-                    updated_at=now,
-                )
-                session.add(setting)
-                rows[key] = setting
-            else:
-                (
-                    setting.value,
-                    setting.version,
-                    setting.updated_by_user_id,
-                    setting.updated_at,
-                ) = stored, setting.version + 1, admin.user.id, now
-            event_type = "admin.global_setting_updated"
+            session.add(setting)
+            rows[key] = setting
+        else:
+            (
+                setting.value,
+                setting.version,
+                setting.updated_by_user_id,
+                setting.updated_at,
+            ) = stored, setting.version + 1, admin.user.id, now
+        event_type = "admin.global_setting_updated"
         session.add(
             SecurityAuditEvent(
                 id=uuid4(),
@@ -480,7 +461,7 @@ async def update_global_setting(
             status_code=422,
             detail={"code": "validation_error", "message": "setting value is invalid"},
         )
-    if not definition.secret and not await valid_runtime_setting_combination(
+    if not await valid_runtime_setting_combination(
         session, settings, key, body.value
     ):
         raise HTTPException(
@@ -506,25 +487,7 @@ async def update_global_setting(
             detail={"code": "version_conflict", "message": "setting has changed"},
         )
     now = datetime.now(UTC)
-    if definition.secret and body.value is None:
-        if setting is not None:
-            await session.delete(setting)
-        session.add(
-            SecurityAuditEvent(
-                id=uuid4(),
-                actor_user_id=admin.user.id,
-                event_type="admin.global_setting_secret_cleared",
-                target_type="global_setting",
-                request_id=context.request_id,
-                event_metadata={"key": key},
-                occurred_at=now,
-            )
-        )
-        await session.commit()
-        return setting_response(definition, None, definition.default(settings))
-    stored_value = setting_storage_value(
-        definition, body.value, settings.configuration_encryption_key
-    )
+    stored_value = setting_storage_value(definition, body.value)
     if setting is None:
         setting = GlobalSetting(
             key=key,

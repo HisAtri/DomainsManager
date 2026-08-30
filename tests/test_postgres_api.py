@@ -37,7 +37,6 @@ async def test_fastapi_authentication_flow_against_postgresql() -> None:
         registration_enabled=True,
         bootstrap_admin_username="postgres-admin",
         bootstrap_admin_password="123456",
-        configuration_encryption_key="eAbLHc58_pjXLGKKZNoeuQLHYKkN9orkVRxMVokhGTY=",
     )
     try:
         with TestClient(create_app(settings)) as client:
@@ -80,7 +79,7 @@ async def test_fastapi_authentication_flow_against_postgresql() -> None:
 @pytest.mark.postgres
 @pytest.mark.api
 @pytest.mark.integration
-async def test_postgresql_admin_settings_are_versioned_and_secrets_are_encrypted() -> (
+async def test_postgresql_admin_settings_are_versioned() -> (
     None
 ):
     database = postgres_database()
@@ -100,7 +99,6 @@ async def test_postgresql_admin_settings_are_versioned_and_secrets_are_encrypted
         refresh_token_pepper="y",
         bootstrap_admin_username="postgres-admin",
         bootstrap_admin_password="123456",
-        configuration_encryption_key="eAbLHc58_pjXLGKKZNoeuQLHYKkN9orkVRxMVokhGTY=",
     )
     try:
         with TestClient(create_app(settings)) as client:

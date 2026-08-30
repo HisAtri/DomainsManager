@@ -1,5 +1,6 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Switch from "@radix-ui/react-switch";
+import "altcha/i18n";
 import { Activity, AlertCircle, ArrowRight, Bell, CheckCircle2, ChevronRight, Eye, EyeOff, Globe2, KeyRound, LayoutDashboard, LoaderCircle, LogOut, Menu, Moon, Plus, RefreshCw, Search, Settings as SettingsIcon, ShieldCheck, Sun, Trash2, Users, X } from "lucide-react";
 import { FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "./api";
@@ -116,6 +117,18 @@ function ImageCaptcha({ operation, onChange }: { operation: "login" | "register"
   return <label className="field-label">图形验证码<div className="captcha-input"><input required value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="请输入图片字符" autoComplete="off" /></div><img className="captcha-image" src={challenge.image} alt="图形验证码，点击更换" onClick={load} /></label>;
 }
 
+function PowChallenge({ operation, onChange }: { operation: "create_domain" | "refresh_domain"; onChange: (payload: string | null) => void }) {
+  const widget = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const element = widget.current;
+    if (!element) return;
+    const listener = (event: Event) => { const detail = (event as CustomEvent<{ state: string; payload?: string }>).detail; onChange(detail.state === "verified" ? detail.payload || null : null); };
+    element.addEventListener("statechange", listener);
+    return () => element.removeEventListener("statechange", listener);
+  }, [onChange]);
+  return <altcha-widget ref={widget} challenge={`/api/v1/anti-bot/pow?operation=${operation}`} name="pow_payload" language="zh-cn" auto="onload" />;
+}
+
 function AuthScreen({ onSuccess, theme, onToggleTheme }: { onSuccess: (result: { user: User; tokens: { access_token: string; expires_in: number } }) => void; theme: Theme; onToggleTheme: () => void }) {
   const siteConfig = useSiteConfig();
   const [register, setRegister] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null); const [captcha, setCaptcha] = useState<{ token: string; answer: string } | null>(null);
@@ -165,8 +178,10 @@ function DomainStateTag({ label, state, children }: { label: string; state: "ena
 function DomainTable({ items, onSelect, warningDays = 30 }: { items: Domain[]; onSelect?: (domain: Domain) => void; warningDays?: number }) { if (!items.length) return <EmptyState title="尚未添加域名" description="添加域名后，可在这里查看注册、到期和刷新信息。" />; return <div className="table-wrap"><table className="domain-table"><thead><tr><th>域名</th><th>注册时间</th><th>到期时间</th><th>剩余天数</th><th>最近更新</th></tr></thead><tbody>{items.map((domain) => { const remainingDays = daysUntil(lifecycleDate(domain)); const isExpired = remainingDays !== null && remainingDays < 0; const dnssecState = domain.dnssec_enabled === true ? "enabled" : domain.dnssec_enabled === false ? "disabled" : "unknown"; return <tr key={domain.id} onClick={() => onSelect?.(domain)}><td><div className="domain-cell"><strong className="domain-name">{domain.identity.unicode_name}</strong><span className="domain-states"><DomainStateTag state={dnssecState} label={domain.dnssec_enabled === true ? "DNSSEC 已开启" : domain.dnssec_enabled === false ? "DNSSEC 未开启" : "DNSSEC 状态待获取"}><ShieldCheck size={14} /></DomainStateTag><DomainStateTag state={domain.monitor_enabled ? "enabled" : "disabled"} label={domain.monitor_enabled ? "域名监控已开启" : "域名监控未开启"}><Activity size={14} /></DomainStateTag></span></div></td><td>{calendarDate(domain.registered_at)}</td><td className={isExpired ? "expiry-expired" : ""}>{calendarDate(lifecycleDate(domain))}</td><td className={expiryClass(remainingDays, warningDays)}>{remainingDays === null ? "—" : remainingDays < 0 ? `已过期 ${Math.abs(remainingDays)} 天` : `${remainingDays} 天`}</td><td className="muted">{date(domain.registry_updated_at || domain.updated_at)}</td></tr>; })}</tbody></table></div>; }
 
 function AddDomain({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (open: boolean) => void; onCreated: (domain: Domain) => void }) {
+  const siteConfig = useSiteConfig();
   const [name, setName] = useState("");
   const [monitor, setMonitor] = useState(true);
+  const [powPayload, setPowPayload] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -181,7 +196,7 @@ function AddDomain({ open, onOpenChange, onCreated }: { open: boolean; onOpenCha
     setBusy(true);
     setError(null);
     try {
-      onCreated(await api.createDomain(name, monitor));
+      onCreated(await api.createDomain(name, monitor, powPayload || undefined));
       setName("");
     } catch (err) {
       setError(errorText(err));
@@ -189,7 +204,7 @@ function AddDomain({ open, onOpenChange, onCreated }: { open: boolean; onOpenCha
       setBusy(false);
     }
   }
-  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="overlay" /><Dialog.Content className="dialog"><Dialog.Close className="dialog-close"><X size={18} /></Dialog.Close><Dialog.Title>添加域名</Dialog.Title><Dialog.Description>仅支持可注册域名；系统会标准化 Unicode 与 Punycode 输入。</Dialog.Description><form onSubmit={submit}><label className="field-label">域名<input autoFocus required value={name} onChange={(e) => { setName(e.target.value); if (error) setError(null); }} placeholder="例如 example.com" /></label><label className="toggle-line"><span><b>启用监控</b><small>默认值来自个人设置，添加后可随时调整</small></span><Switch.Root className="switch" checked={monitor} onCheckedChange={setMonitor}><Switch.Thumb className="switch-thumb" /></Switch.Root></label>{error && <div className="dialog-error" role="alert">{error}</div>}<div className="dialog-actions"><Dialog.Close asChild><button type="button" className="secondary">取消</button></Dialog.Close><button className="primary" disabled={busy}>{busy && <LoaderCircle className="spin" size={16} />}添加域名</button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root>;
+  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="overlay" /><Dialog.Content className="dialog"><Dialog.Close className="dialog-close"><X size={18} /></Dialog.Close><Dialog.Title>添加域名</Dialog.Title><Dialog.Description>仅支持可注册域名；系统会标准化 Unicode 与 Punycode 输入。</Dialog.Description><form onSubmit={submit}><label className="field-label">域名<input autoFocus required value={name} onChange={(e) => { setName(e.target.value); if (error) setError(null); }} placeholder="例如 example.com" /></label><label className="toggle-line"><span><b>启用监控</b><small>默认值来自个人设置，添加后可随时调整</small></span><Switch.Root className="switch" checked={monitor} onCheckedChange={setMonitor}><Switch.Thumb className="switch-thumb" /></Switch.Root></label>{siteConfig.anti_bot_mode === "image_captcha" && <PowChallenge operation="create_domain" onChange={setPowPayload} />}{error && <div className="dialog-error" role="alert">{error}</div>}<div className="dialog-actions"><Dialog.Close asChild><button type="button" className="secondary">取消</button></Dialog.Close><button className="primary" disabled={busy || siteConfig.anti_bot_mode === "image_captcha" && !powPayload}>{busy && <LoaderCircle className="spin" size={16} />}添加域名</button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root>;
 }
 function LookupResult({ check }: { check: Check | undefined }) { if (!check?.snapshot) return <section className="lookup-result empty-result"><div className="section-title"><b>WHOIS / RDAP 信息</b></div><p>尚未获得可展示的查询结果。完成一次成功刷新后，注册商、到期日、状态和名称服务器会显示在这里。</p></section>; const snapshot = check.snapshot; const registrar = typeof snapshot.registrar === "object" && snapshot.registrar !== null ? snapshot.registrar as Record<string, unknown> : null; const nameservers = Array.isArray(snapshot.nameservers) ? snapshot.nameservers.filter((item): item is string => typeof item === "string") : []; const statuses = Array.isArray(snapshot.statuses) ? snapshot.statuses.filter((item): item is string => typeof item === "string") : []; const sourceUrl = typeof snapshot.source_url === "string" ? snapshot.source_url : null; const field = (key: string) => typeof snapshot[key] === "string" ? snapshot[key] : "—"; const registrarName = registrar && typeof registrar.name === "string" ? registrar.name : "—"; const lifecycle = typeof snapshot.expiration_status === "string" && snapshot.expiration_status in expirationLabel ? expirationLabel[snapshot.expiration_status as Domain["expiration_status"]] : "待确认"; return <section className="lookup-result"><div className="section-title"><div><b>WHOIS / RDAP 信息</b><small>最近成功查询：{date(check.checked_at)} · {check.protocol?.toUpperCase() || "—"}</small></div>{sourceUrl && <a href={sourceUrl} target="_blank" rel="noreferrer">查询来源</a>}</div><dl className="lookup-grid"><div><dt>注册商</dt><dd>{registrarName}</dd></div><div><dt>注册日期</dt><dd>{field("registered_at")}</dd></div><div><dt>注册商到期</dt><dd>{field("registrar_expires_at")}</dd></div><div><dt>注册局到期</dt><dd>{field("registry_expires_at")}</dd></div><div><dt>生命周期</dt><dd>{lifecycle}</dd></div><div><dt>最近更新</dt><dd>{field("updated_at")}</dd></div><div><dt>DNSSEC</dt><dd>{snapshot.dnssec_enabled === true ? "已启用" : snapshot.dnssec_enabled === false ? "未启用" : "—"}</dd></div><div><dt>查询耗时</dt><dd>{check.duration_ms === null ? "—" : `${check.duration_ms} ms`}</dd></div></dl><div className="lookup-list"><b>域名状态</b>{statuses.length ? <div>{statuses.map((item) => <span className="plain-badge" key={item}>{item}</span>)}</div> : <small>未返回状态</small>}</div><div className="lookup-list"><b>名称服务器</b>{nameservers.length ? <ul>{nameservers.map((item) => <li key={item}>{item}</li>)}</ul> : <small>未返回名称服务器</small>}</div><details className="raw-snapshot"><summary>查看原始响应</summary><pre>{JSON.stringify(snapshot, null, 2)}</pre></details></section>; }
 

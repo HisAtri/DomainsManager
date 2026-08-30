@@ -24,7 +24,6 @@ async def make_client(tmp_path: Path) -> TestClient:
                 registration_enabled=True,
                 bootstrap_admin_username="task-admin",
                 bootstrap_admin_password="123456",
-                configuration_encryption_key="eAbLHc58_pjXLGKKZNoeuQLHYKkN9orkVRxMVokhGTY=",
             )
         )
     )

@@ -20,7 +20,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from domainsmanager_api.dependencies import get_session
 from domainsmanager_api.global_setting_registry import GLOBAL_SETTING_BY_KEY
-from domainsmanager_api.secret_settings import decrypt_secret
 from domainsmanager_persistence.models import GlobalSetting
 
 Operation = Literal["register", "login", "create_domain", "refresh_domain"]
@@ -32,11 +31,6 @@ class CaptchaChallenge(BaseModel):
     operation: Operation
     image: str
     token: str
-
-
-class PowChallenge(BaseModel):
-    operation: Literal["create_domain", "refresh_domain"]
-    challenge: dict
 
 
 def _fernet(request: Request) -> Fernet:
@@ -52,8 +46,6 @@ async def config(session: AsyncSession, request: Request) -> dict[str, object]:
         row, definition = rows[key], GLOBAL_SETTING_BY_KEY[key]
         if row is None:
             value = definition.default(request.app.state.settings)
-        elif definition.secret:
-            value = decrypt_secret(row.value, request.app.state.settings.configuration_encryption_key)
         elif definition.kind == "boolean":
             value = row.value == "true"
         else:
@@ -85,13 +77,13 @@ async def captcha(operation: Operation, request: Request, session: AsyncSession 
     return CaptchaChallenge(operation=operation, image="data:image/png;base64," + base64.b64encode(output.getvalue()).decode(), token=token)
 
 
-@router.get("/pow", response_model=PowChallenge)
-async def pow(operation: Literal["create_domain", "refresh_domain"], request: Request, session: AsyncSession = Depends(get_session)) -> PowChallenge:
+@router.get("/pow")
+async def pow(operation: Literal["create_domain", "refresh_domain"], request: Request, session: AsyncSession = Depends(get_session)) -> dict:
     settings = await config(session, request)
     if settings["anti_bot_mode"] != "image_captcha":
         raise HTTPException(404)
     challenge = create_challenge(algorithm="PBKDF2/SHA-256", cost=_COSTS[str(settings["pow_difficulty"])], hmac_secret=request.app.state.settings.jwt_secret_key.get_secret_value(), expires_at=datetime.now(UTC) + timedelta(minutes=5), data={"operation": operation})
-    return PowChallenge(operation=operation, challenge=challenge.to_dict())
+    return challenge.to_dict()
 
 
 async def verify(request: Request, session: AsyncSession, operation: Operation, *, captcha_token: str | None = None, captcha_answer: str | None = None, pow_payload: str | None = None, turnstile_token: str | None = None) -> None:

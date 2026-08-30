@@ -8,7 +8,6 @@ from email.message import EmailMessage
 from email.utils import parsedate_to_datetime
 
 import httpx
-from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -52,9 +51,7 @@ async def delivery_settings(
             if key == "smtp_starttls":
                 values["smtp_encryption"] = "starttls" if raw == "true" else "none"
             continue
-        if definition.secret:
-            values[key] = SecretStr(raw)
-        elif definition.kind == "boolean":
+        if definition.kind == "boolean":
             values[key] = raw == "true"
         elif definition.kind == "integer":
             values[key] = int(raw)

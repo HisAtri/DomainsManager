@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     captcha_warp: bool = True
     pow_difficulty: Literal["easy", "medium", "hard"] = "medium"
     turnstile_site_key: str = ""
-    turnstile_secret_key: SecretStr | None = None
+    turnstile_secret_key: str = ""
     jwt_secret_key: SecretStr | None = None
     refresh_token_pepper: SecretStr | None = None
     jwt_issuer: str = "domainsmanager"
@@ -97,7 +97,6 @@ class Settings(BaseSettings):
     smtp_password: SecretStr | None = None
     smtp_encryption: Literal["none", "starttls", "ssl_tls"] = "starttls"
     smtp_starttls: bool = True
-    configuration_encryption_key: SecretStr | None = None
     bootstrap_admin_username: str | None = None
     bootstrap_admin_password: SecretStr | None = None
     request_id_header: str = "X-Request-ID"

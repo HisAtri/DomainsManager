@@ -54,7 +54,7 @@ class Resources:
         keys = [
             key
             for key, definition in GLOBAL_SETTING_BY_KEY.items()
-            if not definition.secret and key in runtime_fields
+            if key in runtime_fields
         ]
         async with self.sessions() as session:
             rows = {

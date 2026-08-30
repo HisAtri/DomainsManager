@@ -104,6 +104,33 @@ def test_admin_updates_site_settings_and_public_config(tmp_path: Path) -> None:
 
 
 @pytest.mark.api
+def test_admin_saves_turnstile_keys_as_plaintext(
+    tmp_path: Path,
+) -> None:
+    with make_client(tmp_path) as client:
+        login = client.post(
+            "/api/v1/auth/login", data={"username": "admin", "password": "123456"}
+        )
+        headers = {"Authorization": f"Bearer {login.json()['tokens']['access_token']}"}
+        settings = client.get("/api/v1/admin/settings", headers=headers).json()
+        versions = {item["key"]: item["version"] for item in settings}
+        response = client.put(
+            "/api/v1/admin/settings",
+            headers=headers,
+            json={
+                "settings": [
+                    {"key": "anti_bot_mode", "value": "turnstile", "version": versions["anti_bot_mode"]},
+                    {"key": "turnstile_site_key", "value": "site-key", "version": versions["turnstile_site_key"]},
+                    {"key": "turnstile_secret_key", "value": "secret-key", "version": versions["turnstile_secret_key"]},
+                ]
+            },
+        )
+        assert response.status_code == 200
+        by_key = {item["key"]: item for item in response.json()}
+        assert by_key["turnstile_secret_key"]["value"] == "secret-key"
+
+
+@pytest.mark.api
 def test_footer_links_reject_unsafe_urls(tmp_path: Path) -> None:
     with make_client(tmp_path) as client:
         login = client.post("/api/v1/auth/login", data={"username": "admin", "password": "123456"})
