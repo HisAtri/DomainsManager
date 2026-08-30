@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { assetSource } from "./site-config";
 import type { FooterLink, GlobalSetting } from "./types";
+import { SelectMenu } from "./select-menu";
 
 type Draft = Record<string, unknown>;
 
@@ -40,7 +41,7 @@ function FooterLinksEditor({ value, onChange }: { value: FooterLink[]; onChange:
 
 function SettingEditor({ setting, value, onChange }: { setting: GlobalSetting; value: unknown; onChange: (value: unknown) => void }) {
   if (setting.kind === "boolean") return <Switch.Root className="switch" checked={Boolean(value)} onCheckedChange={onChange}><Switch.Thumb className="switch-thumb" /></Switch.Root>;
-  if (setting.key === "smtp_encryption") return <select aria-label={setting.label} value={String(value ?? "none")} onChange={(event) => onChange(event.target.value)}>{SMTP_ENCRYPTION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select>;
+  if (setting.key === "smtp_encryption") return <SelectMenu aria-label={setting.label} value={String(value ?? "none")} onChange={onChange} options={SMTP_ENCRYPTION_OPTIONS.map((option) => ({ value: option.value, label: option.label }))} />;
   if (setting.editor === "links") return <FooterLinksEditor value={(value as FooterLink[]) || []} onChange={onChange} />;
   if (setting.editor === "textarea" || setting.editor === "code" || setting.key === "email_domain_allowlist") return <div className="stacked-editor"><textarea aria-label={setting.label} className={setting.editor === "code" ? "code-editor" : undefined} value={String(value ?? "")} placeholder={setting.placeholder ?? (setting.key === "email_domain_allowlist" ? "@gmail.com" : undefined)} onChange={(event) => onChange(event.target.value)} /></div>;
   return <div className="stacked-editor"><input aria-label={setting.label} type={setting.kind === "integer" || setting.kind === "number" ? "number" : "text"} step={setting.kind === "number" ? "0.1" : "1"} min={setting.minimum ?? undefined} max={setting.maximum ?? undefined} value={String(value ?? "")} placeholder={setting.key === "webhook_proxy_url" ? "http://proxy.example:8080" : setting.placeholder ?? undefined} onChange={(event) => onChange(event.target.value)} />{setting.editor === "asset" && String(value ?? "") && <img className="asset-preview" src={assetSource(String(value))} alt={`${setting.label} 预览`} />}</div>;
