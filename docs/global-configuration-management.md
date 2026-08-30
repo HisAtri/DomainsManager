@@ -8,6 +8,8 @@
 
 当前已落地运行策略及站点展示注册键：账户注册开关、域名监控、刷新任务、调度、通知设置（Webhook 与 SMTP），以及站点品牌、页脚、备案和自定义页面内容。运行策略默认值来自应用 Settings；站点展示默认值由配置注册表提供；管理员覆盖值统一存入 `global_setting`。
 
+邮箱验证相关设置也存于 `global_setting`：`site_url` 用于生成验证链接，`email_verification_enabled` 控制注册和改邮箱是否必须验证，`email_domain_allowlist` 为逐行维护的可选域名后缀白名单。
+
 ## 2. 配置分类
 
 | 类别 | 存储位置 | 示例 | 管理方式 |

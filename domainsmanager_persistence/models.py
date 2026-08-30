@@ -70,6 +70,8 @@ class AppUser(TimestampMixin, Base):
     )
     password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
     email: Mapped[str | None] = mapped_column(String(320))
+    pending_email: Mapped[str | None] = mapped_column(String(320))
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     role: Mapped[str] = mapped_column(String(16), default="user", nullable=False)
     totp_secret_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary)
     totp_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -86,6 +88,24 @@ class AppUser(TimestampMixin, Base):
         DateTime(timezone=True), nullable=False
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EmailVerificationChallenge(Base):
+    __tablename__ = "email_verification_challenge"
+    __table_args__ = (
+        Index("ix_email_verification_challenge_user", "user_id", "created_at"),
+        Index("ix_email_verification_challenge_expires", "expires_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("app_user.id", ondelete="CASCADE"), nullable=False
+    )
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AuthSession(Base):

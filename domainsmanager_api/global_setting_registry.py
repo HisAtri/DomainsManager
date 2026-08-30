@@ -158,6 +158,18 @@ GLOBAL_SETTINGS = (
         "开放用户注册",
         "控制新用户是否可以自行创建账户。",
     ),
+    boolean(
+        "email_verification_enabled",
+        "账户与访问",
+        "启用邮箱验证",
+        "开启后，注册和修改邮箱都需要通过邮件链接验证后才会生效。",
+    ),
+    string(
+        "email_domain_allowlist",
+        "账户与访问",
+        "邮箱后缀白名单",
+        "每行一个邮箱后缀，例如 @gmail.com；留空表示不限制。",
+    ),
     integer(
         "check_interval_seconds",
         "域名监控",
@@ -312,6 +324,13 @@ GLOBAL_SETTINGS = (
         "站点名称",
         "用于浏览器标题和页面左上角显示。",
         default="DomainsManager",
+    ),
+    site_setting(
+        "site_url",
+        "站点信息",
+        "站点地址",
+        "用于生成邮箱验证链接。首次管理员登录时会自动填入当前站点地址。",
+        placeholder="https://console.example.com",
     ),
     site_setting(
         "site_logo",
