@@ -144,6 +144,30 @@ async def deliver(
     return NotificationDeliveryResult("success")
 
 
+async def send_verification_email(
+    recipient: str,
+    verification_url: str,
+    settings: Settings,
+    sessions: async_sessionmaker[AsyncSession],
+) -> None:
+    effective = await delivery_settings(settings, sessions)
+    if not effective.smtp_enabled:
+        raise NotificationDeliverySuppressed("SMTP service is disabled")
+    site_name = await _site_name(sessions, effective)
+    rendered = render_notification_email(
+        {"type": "email.verification", "data": {"verification_url": verification_url}},
+        site_name=site_name,
+    )
+    await asyncio.to_thread(
+        _send_rendered_email,
+        recipient,
+        rendered.subject,
+        rendered.text,
+        rendered.html,
+        effective,
+    )
+
+
 def _caused_by_tls_error(error: BaseException) -> bool:
     current: BaseException | None = error
     while current is not None:
@@ -180,14 +204,26 @@ async def _site_name(
 
 
 def _send_email(message: OutboxMessage, settings: Settings, site_name: str) -> None:
+    rendered = render_notification_email(message.payload, site_name=site_name)
+    _send_rendered_email(
+        message.recipient_email, rendered.subject, rendered.text, rendered.html, settings
+    )
+
+
+def _send_rendered_email(
+    recipient: str,
+    subject: str,
+    text: str,
+    html: str,
+    settings: Settings,
+) -> None:
     if not settings.smtp_host or not settings.smtp_from:
         raise ValueError("SMTP is not configured")
     email = EmailMessage()
-    email["From"], email["To"] = settings.smtp_from, message.recipient_email
-    rendered = render_notification_email(message.payload, site_name=site_name)
-    email["Subject"] = rendered.subject
-    email.set_content(rendered.text)
-    email.add_alternative(rendered.html, subtype="html")
+    email["From"], email["To"] = settings.smtp_from, recipient
+    email["Subject"] = subject
+    email.set_content(text)
+    email.add_alternative(html, subtype="html")
     username = settings.smtp_username or settings.smtp_from
     client_factory = smtplib.SMTP_SSL if settings.smtp_encryption == "ssl_tls" else smtplib.SMTP
     with client_factory(settings.smtp_host, settings.smtp_port, timeout=settings.notification_delivery_timeout_seconds) as client:

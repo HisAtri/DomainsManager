@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from types import TracebackType
 from uuid import UUID, uuid4
 
@@ -17,8 +17,6 @@ from domainsmanager_application.auth import (
     UserRecord,
 )
 from domainsmanager_persistence.domains import SqlAlchemyDomainRepository
-from domainsmanager_persistence.notifications import SqlAlchemyNotificationRuleRepository
-from domainsmanager_persistence.tasks import SqlAlchemyTaskRepository
 from domainsmanager_persistence.models import (
     AppUser,
     AuthRefreshToken,
@@ -26,6 +24,10 @@ from domainsmanager_persistence.models import (
     SecurityAuditEvent,
     SystemState,
 )
+from domainsmanager_persistence.notifications import (
+    SqlAlchemyNotificationRuleRepository,
+)
+from domainsmanager_persistence.tasks import SqlAlchemyTaskRepository
 
 
 class RecordNotFoundError(RuntimeError):
@@ -35,7 +37,7 @@ class RecordNotFoundError(RuntimeError):
 def as_utc(value: datetime | None) -> datetime | None:
     if value is None or value.tzinfo is not None:
         return value
-    return value.replace(tzinfo=timezone.utc)
+    return value.replace(tzinfo=UTC)
 
 
 class SqlAlchemyUserRepository:
@@ -82,6 +84,8 @@ class SqlAlchemyUserRepository:
                 username_normalized=user.username_normalized,
                 password_hash=user.password_hash,
                 email=user.email,
+                pending_email=user.pending_email,
+                email_verified_at=user.email_verified_at,
                 role=user.role,
                 preferences=dict(user.preferences),
                 is_active=user.is_active,
@@ -105,9 +109,12 @@ class SqlAlchemyUserRepository:
         user_id: UUID,
         *,
         email: str | None,
+        email_verified_at: datetime | None,
         updated_at: datetime,
     ) -> None:
-        await self._update_user(user_id, email=email, updated_at=updated_at)
+        await self._update_user(
+            user_id, email=email, email_verified_at=email_verified_at, updated_at=updated_at
+        )
 
     async def update_preferences(
         self,
@@ -168,6 +175,8 @@ class SqlAlchemyUserRepository:
             username_normalized=row.username_normalized,
             password_hash=row.password_hash,
             email=row.email,
+            pending_email=row.pending_email,
+            email_verified_at=as_utc(row.email_verified_at),
             role=row.role,
             preferences=dict(row.preferences),
             is_active=row.is_active,
@@ -417,7 +426,7 @@ class SqlAlchemyUnitOfWork:
         self._session: AsyncSession | None = None
         self._transaction = None
 
-    async def __aenter__(self) -> "SqlAlchemyUnitOfWork":
+    async def __aenter__(self) -> SqlAlchemyUnitOfWork:
         self._session = self._sessions()
         self._transaction = await self._session.begin()
         self.users = SqlAlchemyUserRepository(self._session)

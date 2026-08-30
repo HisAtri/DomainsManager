@@ -90,6 +90,8 @@ class UserResponse(StrictModel):
     id: UUID
     username: str
     email: EmailStr | None
+    pending_email: EmailStr | None = None
+    email_verified_at: datetime | None = None
     role: Literal["user", "admin"]
     status: Literal["active", "banned"]
     last_login_at: datetime | None
@@ -106,3 +108,13 @@ class TokenPairResponse(StrictModel):
 class AuthResultResponse(StrictModel):
     user: UserResponse
     tokens: TokenPairResponse
+
+
+class EmailVerificationConfirmRequest(StrictModel):
+    token: str = Field(min_length=20, max_length=512)
+
+
+class EmailVerificationResponse(StrictModel):
+    status: Literal["pending", "verified"]
+    email: EmailStr | None = None
+    pending_email: EmailStr | None = None

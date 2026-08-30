@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Callable
+from typing import Any
 from uuid import UUID, uuid4
 
 from domainsmanager_application.auth import (
@@ -129,6 +130,8 @@ class AuthService:
             username_normalized=normalized,
             password_hash=password_hash,
             email=email,
+            pending_email=None,
+            email_verified_at=now if email is not None else None,
             role="user",
             preferences={},
             is_active=True,
@@ -326,7 +329,9 @@ class AuthService:
             if user is None:
                 raise InvalidTokenError("user is unavailable")
             self._ensure_user_active(user)
-            await uow.users.update_profile(user.id, email=email, updated_at=now)
+            await uow.users.update_profile(
+                user.id, email=email, email_verified_at=now if email is not None else None, updated_at=now
+            )
             await uow.audits.add(
                 self._audit("user.profile_updated", now, context, user.id, user.id)
             )
@@ -409,6 +414,8 @@ class AuthService:
             username_normalized=normalized,
             password_hash=password_hash,
             email=None,
+            pending_email=None,
+            email_verified_at=None,
             role="admin",
             preferences={},
             is_active=True,

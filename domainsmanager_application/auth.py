@@ -30,6 +30,8 @@ class UserRecord:
     last_login_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    pending_email: str | None = None
+    email_verified_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +98,7 @@ class UserRepository(Protocol):
         user_id: UUID,
         *,
         email: str | None,
+        email_verified_at: datetime | None,
         updated_at: datetime,
     ) -> None: ...
 
@@ -205,7 +208,7 @@ class UnitOfWork(Protocol):
     tasks: TaskRepository
     notifications: NotificationRepository
 
-    async def __aenter__(self) -> "UnitOfWork": ...
+    async def __aenter__(self) -> UnitOfWork: ...
 
     async def __aexit__(
         self,
