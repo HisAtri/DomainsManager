@@ -15,6 +15,7 @@ class PublicSiteConfig(StrictModel):
     registration_enabled: bool
     smtp_enabled: bool
     site_name: str
+    site_url: str
     site_logo: str
     site_favicon: str
     footer_links: list[FooterLink] = Field(default_factory=list)

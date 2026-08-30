@@ -8,6 +8,7 @@ export const defaultSiteConfig: PublicSiteConfig = {
   registration_enabled: false,
   smtp_enabled: true,
   site_name: "DomainsManager",
+  site_url: "",
   site_logo: "/default.svg",
   site_favicon: "/default.svg",
   footer_links: [],
