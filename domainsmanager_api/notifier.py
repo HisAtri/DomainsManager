@@ -12,7 +12,10 @@ from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from domainsmanager_api.email_renderer import render_notification_email
+from domainsmanager_api.email_renderer import (
+    render_notification_email,
+    render_verification_email,
+)
 from domainsmanager_api.global_setting_registry import GLOBAL_SETTING_BY_KEY
 from domainsmanager_api.settings import Settings
 from domainsmanager_application.notifications import (
@@ -154,9 +157,8 @@ async def send_verification_email(
     if not effective.smtp_enabled:
         raise NotificationDeliverySuppressed("SMTP service is disabled")
     site_name = await _site_name(sessions, effective)
-    rendered = render_notification_email(
-        {"type": "email.verification", "data": {"verification_url": verification_url}},
-        site_name=site_name,
+    rendered = render_verification_email(
+        site_name=site_name, verification_url=verification_url
     )
     await asyncio.to_thread(
         _send_rendered_email,

@@ -8,6 +8,7 @@ from typing import Any
 
 _TEMPLATE_PACKAGE = "domainsmanager_api.email_templates"
 _NOTIFICATION_TEMPLATE = "notification.html"
+_VERIFICATION_TEMPLATE = "verification.html"
 
 _EVENT_PRESENTATION = {
     "domain.expiration_warning": ("域名即将到期", "请及时处理域名续费，避免服务中断。"),
@@ -50,6 +51,27 @@ def render_notification_email(payload: dict[str, Any], *, site_name: str) -> Ren
     )
     text = "\n".join([title, summary, *(_text_rows({"事件类型": event_type, **fields})), f"生成时间：{created_at}"])
     return RenderedEmail(subject=f"{site_name}：{title}", text=text, html=html)
+
+
+def render_verification_email(
+    *, site_name: str, verification_url: str, expires_in_minutes: int = 30
+) -> RenderedEmail:
+    safe_site_name = escape(site_name)
+    safe_url = escape(verification_url, quote=True)
+    html = load_email_template(_VERIFICATION_TEMPLATE).substitute(
+        site_name=safe_site_name,
+        verification_url=safe_url,
+        expires_in_minutes=expires_in_minutes,
+    )
+    text = "\n".join(
+        [
+            f"{site_name}：验证您的邮箱地址",
+            "请打开以下链接完成邮箱验证。验证完成后，此邮箱才能接收域名通知。",
+            verification_url,
+            f"该链接将在 {expires_in_minutes} 分钟后失效；若非本人操作，请忽略此邮件。",
+        ]
+    )
+    return RenderedEmail(subject=f"{site_name}：验证邮箱地址", text=text, html=html)
 
 
 def _detail_rows(fields: dict[str, Any]) -> str:

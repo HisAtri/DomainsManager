@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>验证邮箱地址</title>
+  </head>
+  <body style="margin:0;padding:0;background:#f5f7fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#1d2939;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f5f7fb;">
+      <tr><td align="center" style="padding:32px 16px;">
+        <table role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background:#fff;border:1px solid #eaecf0;border-radius:12px;">
+          <tr><td style="padding:28px 32px 20px;border-bottom:1px solid #eaecf0;"><div style="font-size:13px;font-weight:700;letter-spacing:.08em;color:#5b5ce2;">$site_name</div><h1 style="margin:12px 0 0;font-size:22px;line-height:1.35;color:#101828;">验证您的邮箱地址</h1></td></tr>
+          <tr><td style="padding:24px 32px;"><p style="margin:0 0 22px;font-size:15px;line-height:1.65;color:#475467;">请点击下方按钮完成邮箱验证。验证完成后，此邮箱才能接收域名通知。</p><a href="$verification_url" style="display:inline-block;padding:12px 18px;border-radius:7px;background:#5b5ce2;color:#fff;font-size:14px;font-weight:600;text-decoration:none;">验证邮箱地址</a><p style="margin:26px 0 8px;font-size:12px;line-height:1.6;color:#667085;">按钮无法点击？请复制以下链接到浏览器打开：</p><p style="margin:0;font-size:12px;line-height:1.6;word-break:break-all;"><a href="$verification_url" style="color:#5b5ce2;">$verification_url</a></p><p style="margin:22px 0 0;font-size:12px;line-height:1.6;color:#98a2b3;">该链接将在 $expires_in_minutes 分钟后失效；若非本人操作，请忽略此邮件。</p></td></tr>
+          <tr><td style="padding:18px 32px;background:#fcfcfd;border-top:1px solid #eaecf0;font-size:12px;line-height:1.5;color:#98a2b3;">此邮件由 $site_name 自动发送，请勿直接回复。</td></tr>
+        </table>
+      </td></tr>
+    </table>
+  </body>
+</html>

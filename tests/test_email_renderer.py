@@ -1,6 +1,7 @@
 from domainsmanager_api.email_renderer import (
     load_email_template,
     render_notification_email,
+    render_verification_email,
 )
 
 
@@ -26,3 +27,15 @@ def test_renders_html_and_plain_text_notification() -> None:
     assert "&lt;unsafe&gt;" in rendered.html
     assert "<unsafe>" not in rendered.html
     assert "text/html" not in rendered.html
+
+
+def test_renders_a_dedicated_verification_email() -> None:
+    rendered = render_verification_email(
+        site_name="我的域名中心",
+        verification_url="https://console.example.test/email/verify#token=abc",
+    )
+
+    assert rendered.subject == "我的域名中心：验证邮箱地址"
+    assert "验证您的邮箱地址" in rendered.html
+    assert "验证邮箱地址</a>" in rendered.html
+    assert "域名监控通知" not in rendered.html
