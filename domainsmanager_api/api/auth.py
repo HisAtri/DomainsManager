@@ -49,6 +49,7 @@ from domainsmanager_application.services import (
     TokenPair,
     UsernameTakenError,
 )
+from domainsmanager_persistence.models import AppUser
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -165,6 +166,8 @@ async def register(
     session_factory = request.app.state.resources.sessions
     async with session_factory() as session:
         config = await setting_values(session, request.app.state.settings)
+        if bool(config["email_verification_enabled"]) and body.email is None:
+            raise HTTPException(status_code=422, detail={"code": "email_verification_required", "message": "email is required when verification is enabled"})
         if bool(config["email_verification_enabled"]) and body.email is not None:
             validate_allowlist(str(body.email), str(config["email_domain_allowlist"]))
             try:
@@ -298,6 +301,25 @@ async def update_me(
 async def confirm_email(body: EmailVerificationConfirmRequest, session: Annotated[AsyncSession, Depends(get_session)]) -> EmailVerificationResponse:
     user = await confirm_email_verification(session, body.token)
     return EmailVerificationResponse(status="verified", email=user.email)
+
+
+@router.post("/me/email-verifications/resend", response_model=EmailVerificationResponse, operation_id="resendEmailVerification")
+async def resend_email_verification(
+    current: CurrentUserDependency,
+    session: Annotated[AsyncSession, Depends(get_session)],
+    settings: RuntimeSettingsDependency,
+    resources: ResourcesDependency,
+) -> EmailVerificationResponse:
+    user = await session.get(AppUser, current.user.id)
+    if user is None or not user.pending_email:
+        raise HTTPException(status_code=409, detail={"code": "email_verification_not_pending", "message": "there is no pending email verification"})
+    config = await setting_values(session, settings)
+    try:
+        link = await begin_email_verification(session, user_id=user.id, email=user.pending_email, site_url=validate_site_url(str(config["site_url"])))
+        await send_verification_email(user.pending_email, link, settings, resources.sessions)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail={"code": "email_verification_configuration_error", "message": str(error)}) from error
+    return EmailVerificationResponse(status="pending", pending_email=user.pending_email)
 
 
 @router.post(

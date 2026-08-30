@@ -245,7 +245,7 @@ function SettingsPage({ user, onUser, onMessage }: { user: User; onUser: (user: 
     <div className="personal-settings-sections">
       <section className="personal-settings-section"><h2>个人资料</h2><div className="personal-settings-list">
         <div className="personal-setting-row"><div className="personal-setting-copy"><b>用户名</b><small>用户名当前不可修改</small></div><div className="personal-setting-control"><input value={user.username} readOnly /></div></div>
-        <div className="personal-setting-row"><div className="personal-setting-copy"><b>邮箱地址</b><small>{user.pending_email ? `等待验证：${user.pending_email}；完成验证前邮件通知会暂停。` : user.email_verified_at ? "已验证，可用于接收通知。" : "未验证，邮件通知不会发送。"}</small></div><div className="personal-setting-control"><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" /></div></div>
+        <div className="personal-setting-row"><div className="personal-setting-copy"><b>邮箱地址</b><small>{user.pending_email ? `等待验证：${user.pending_email}；完成验证前邮件通知会暂停。` : user.email_verified_at ? "已验证，可用于接收通知。" : "未验证，邮件通知不会发送。"}</small></div><div className="personal-setting-control"><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" />{user.pending_email && <button className="secondary" onClick={async () => { try { await api.resendEmailVerification(); onMessage("验证邮件已重新发送"); } catch (error) { onMessage(errorText(error)); } }}>重新发送验证邮件</button>}</div></div>
         <div className="personal-setting-actions"><button className="primary" onClick={saveProfile}>保存修改</button></div>
       </div></section>
       <section className="personal-settings-section"><h2>修改密码</h2><div className="personal-settings-list">

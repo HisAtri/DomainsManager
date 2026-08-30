@@ -135,6 +135,7 @@ class ApiClient {
   updateGlobalSettings(settings: { key: string; value: unknown; version: number }[]) { return this.request<GlobalSetting[]>("/admin/settings", { method: "PUT", body: JSON.stringify({ settings }) }).then((r) => r.data); }
   sendTestEmail(email: string) { return this.request<{ status: string }>("/admin/settings/test-email", { method: "POST", body: JSON.stringify({ email }) }).then((r) => r.data); }
   confirmEmailVerification(token: string) { return this.request<{ status: string; email: string | null }>("/auth/email-verifications/confirm", { method: "POST", body: JSON.stringify({ token }) }).then((r) => r.data); }
+  resendEmailVerification() { return this.request<{ status: string; pending_email: string | null }>("/auth/me/email-verifications/resend", { method: "POST" }).then((r) => r.data); }
   siteConfig() { return this.request<PublicSiteConfig>("/site/config", { method: "GET" }, false).then((r) => r.data); }
 }
 export const api = new ApiClient();
