@@ -79,6 +79,8 @@ async def resend_available(session: AsyncSession, user_id: UUID) -> bool:
         .order_by(EmailVerificationChallenge.created_at.desc())
         .limit(1)
     )
+    if latest is not None and latest.tzinfo is None:
+        latest = latest.replace(tzinfo=UTC)
     return latest is None or latest <= datetime.now(UTC) - RESEND_COOLDOWN
 
 
