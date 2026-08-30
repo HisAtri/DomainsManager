@@ -45,6 +45,30 @@ async def test_verification_promotes_pending_email_once(tmp_path: Path) -> None:
         await engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_resending_keeps_previous_verification_links_valid(tmp_path: Path) -> None:
+    database = sqlite_database(tmp_path / "verification-resend.db")
+    await run_migrations(database)
+    engine = create_engine(database)
+    sessions = create_session_factory(engine)
+    user_id = uuid4()
+    now = datetime(2026, 8, 30, tzinfo=UTC)
+    try:
+        async with sessions() as session:
+            session.add(AppUser(id=user_id, username="resend", username_normalized="resend", password_hash="hash", email=None, role="user", preferences={}, is_active=True, password_changed_at=now, created_at=now, updated_at=now))
+            await session.commit()
+        async with sessions() as session:
+            first = await begin(session, user_id=user_id, email="new@example.test", site_url="https://console.example.test")
+        async with sessions() as session:
+            second = await begin(session, user_id=user_id, email="new@example.test", site_url="https://console.example.test")
+        assert first != second
+        async with sessions() as session:
+            user = await confirm(session, first.split("#token=", 1)[1])
+            assert user.email == "new@example.test"
+    finally:
+        await engine.dispose()
+
+
 def test_allowlist_and_site_url_validation() -> None:
     validate_allowlist("person@gmail.com", "@gmail.com\n@example.org")
     with pytest.raises(Exception):

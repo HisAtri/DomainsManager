@@ -54,11 +54,6 @@ async def begin(
 ) -> str:
     now = datetime.now(UTC)
     token = secrets.token_urlsafe(32)
-    await session.execute(
-        update(EmailVerificationChallenge)
-        .where(EmailVerificationChallenge.user_id == user_id, EmailVerificationChallenge.consumed_at.is_(None))
-        .values(consumed_at=now)
-    )
     session.add(EmailVerificationChallenge(
         id=uuid4(), user_id=user_id, email=email,
         token_hash=hashlib.sha256(token.encode()).hexdigest(),
