@@ -19,6 +19,7 @@ from domainsmanager_persistence.models import (
 )
 
 TOKEN_TTL = timedelta(minutes=30)
+RESEND_COOLDOWN = timedelta(seconds=60)
 
 
 async def setting_values(session: AsyncSession, settings: Settings) -> dict[str, object]:
@@ -66,6 +67,19 @@ async def begin(
     await session.execute(update(AppUser).where(AppUser.id == user_id).values(pending_email=email, email_verified_at=None, updated_at=now))
     await session.commit()
     return f"{site_url}/email/verify#token={token}"
+
+
+async def resend_available(session: AsyncSession, user_id: UUID) -> bool:
+    latest = await session.scalar(
+        select(EmailVerificationChallenge.created_at)
+        .where(
+            EmailVerificationChallenge.user_id == user_id,
+            EmailVerificationChallenge.consumed_at.is_(None),
+        )
+        .order_by(EmailVerificationChallenge.created_at.desc())
+        .limit(1)
+    )
+    return latest is None or latest <= datetime.now(UTC) - RESEND_COOLDOWN
 
 
 async def confirm(session: AsyncSession, token: str) -> AppUser:

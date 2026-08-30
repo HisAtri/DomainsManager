@@ -16,6 +16,7 @@ from domainsmanager_api.dependencies import (
 from domainsmanager_api.email_verification import begin as begin_email_verification
 from domainsmanager_api.email_verification import confirm as confirm_email_verification
 from domainsmanager_api.email_verification import (
+    resend_available,
     setting_values,
     validate_allowlist,
     validate_site_url,
@@ -313,6 +314,8 @@ async def resend_email_verification(
     user = await session.get(AppUser, current.user.id)
     if user is None or not user.pending_email:
         raise HTTPException(status_code=409, detail={"code": "email_verification_not_pending", "message": "there is no pending email verification"})
+    if not await resend_available(session, user.id):
+        raise HTTPException(status_code=429, detail={"code": "email_verification_resend_cooldown", "message": "please wait before requesting another verification email"}, headers={"Retry-After": "60"})
     config = await setting_values(session, settings)
     try:
         link = await begin_email_verification(session, user_id=user.id, email=user.pending_email, site_url=validate_site_url(str(config["site_url"])))

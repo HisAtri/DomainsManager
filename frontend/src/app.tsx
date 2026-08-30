@@ -1,7 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Switch from "@radix-ui/react-switch";
 import { Activity, AlertCircle, ArrowRight, Bell, CheckCircle2, ChevronRight, Eye, EyeOff, Globe2, KeyRound, LayoutDashboard, LoaderCircle, LogOut, Menu, Moon, Plus, RefreshCw, Search, Settings as SettingsIcon, ShieldCheck, Sun, Trash2, Users, X } from "lucide-react";
-import { FormEvent, type ReactNode, useCallback, useEffect, useState } from "react";
+import { FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "./api";
 import { AdminSettingsV2 } from "./admin-site-settings";
 import { assetSource, SiteFooter, useSiteConfig } from "./site-config";
@@ -63,7 +63,8 @@ function Brand() { const config = useSiteConfig(); return <div className="brand"
 
 function EmailVerificationPage() {
   const [message, setMessage] = useState("正在验证邮箱…");
-  useEffect(() => { const token = location.hash.startsWith("#token=") ? location.hash.slice(7) : ""; if (!token) { setMessage("验证链接无效或已过期。"); return; } api.confirmEmailVerification(token).then(() => setMessage("邮箱验证成功，可以关闭此页面。"), () => setMessage("验证链接无效或已过期，请返回系统重新发送验证邮件。")); }, []);
+  const submitted = useRef(false);
+  useEffect(() => { if (submitted.current) return; submitted.current = true; const token = new URLSearchParams(location.hash.slice(1)).get("token"); if (!token) { setMessage("验证链接无效或已过期。"); return; } api.confirmEmailVerification(token).then(() => setMessage("邮箱验证成功，可以关闭此页面。"), () => setMessage("验证链接无效或已过期，请返回系统重新发送验证邮件。")); }, []);
   return <div className="auth"><section className="auth-card"><Brand /><h1>邮箱验证</h1><p>{message}</p></section></div>;
 }
 
@@ -91,7 +92,7 @@ export function App() {
   useEffect(() => { const guardHashNavigation = () => { const next = routeFromHash(); if (!settingsDirty || route !== "admin-settings" || next === route) return; history.replaceState(null, "", "#admin-settings"); setRouteState("admin-settings"); setPendingRoute(next); }; addEventListener("hashchange", guardHashNavigation); return () => removeEventListener("hashchange", guardHashNavigation); }, [route, settingsDirty, setRouteState]);
   const toggleTheme = () => setTheme((current) => current === "light" ? "dark" : "light");
   const go = (next: Route, params?: RouteParams) => { if (settingsDirty && route === "admin-settings" && next !== route) setPendingRoute(next); else routeGo(next, params); };
-  const authenticate = (result: { user: User; tokens: { access_token: string; expires_in: number } }) => { api.setTokens(result.tokens); setUser(result.user); if (result.user.pending_email) setFlash(`验证邮件已发送至 ${result.user.pending_email}，请完成验证后再接收邮件通知。`); location.hash = "dashboard"; };
+  const authenticate = (result: { user: User; tokens: { access_token: string; expires_in: number } }) => { api.setTokens(result.tokens); setUser(result.user); if (result.user.pending_email) setFlash(`验证邮件已发送至 ${result.user.pending_email}，请点击邮件中的链接完成验证。`); location.hash = "dashboard"; };
   if (location.pathname.endsWith("/email/verify")) return <EmailVerificationPage />;
   if (!ready) return <div className="loading-screen"><LoaderCircle className="spin" /> 正在连接服务…</div>;
   if (!user) return <AuthScreen onSuccess={authenticate} theme={theme} onToggleTheme={toggleTheme} />;
@@ -236,6 +237,9 @@ function SettingsPage({ user, onUser, onMessage }: { user: User; onUser: (user: 
   const [settings, setSettings] = useState<Settings | null>(null);
   const [email, setEmail] = useState(user.email || "");
   const [passwords, setPasswords] = useState({ current: "", next: "", confirm: "" });
+  const [resendBusy, setResendBusy] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  useEffect(() => { if (!resendCooldown) return; const timer = setInterval(() => setResendCooldown((remaining) => Math.max(0, remaining - 1)), 1000); return () => clearInterval(timer); }, [resendCooldown]);
   useEffect(() => { api.settings().then(setSettings).catch((e) => onMessage(errorText(e))); }, [onMessage]);
   const saveProfile = async () => { try { onUser(await api.updateMe(email)); onMessage("个人资料已保存"); } catch (error) { onMessage(errorText(error)); } };
   const savePassword = async () => { if (passwords.next !== passwords.confirm) { onMessage("两次输入的新密码不一致"); return; } try { await api.changePassword(passwords.current, passwords.next); setPasswords({ current: "", next: "", confirm: "" }); onMessage("密码已更新，其他会话已被撤销"); } catch (error) { onMessage(errorText(error)); } };
@@ -245,7 +249,7 @@ function SettingsPage({ user, onUser, onMessage }: { user: User; onUser: (user: 
     <div className="personal-settings-sections">
       <section className="personal-settings-section"><h2>个人资料</h2><div className="personal-settings-list">
         <div className="personal-setting-row"><div className="personal-setting-copy"><b>用户名</b><small>用户名当前不可修改</small></div><div className="personal-setting-control"><input value={user.username} readOnly /></div></div>
-        <div className="personal-setting-row"><div className="personal-setting-copy"><b>邮箱地址</b><small>{user.pending_email ? `等待验证：${user.pending_email}；完成验证前邮件通知会暂停。` : user.email_verified_at ? "已验证，可用于接收通知。" : "未验证，邮件通知不会发送。"}</small></div><div className="personal-setting-control"><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" />{user.pending_email && <button className="secondary" onClick={async () => { try { await api.resendEmailVerification(); onMessage("验证邮件已重新发送"); } catch (error) { onMessage(errorText(error)); } }}>重新发送验证邮件</button>}</div></div>
+        <div className="personal-setting-row"><div className="personal-setting-copy"><b>邮箱地址</b><small>{user.pending_email ? `等待验证：${user.pending_email}；完成验证前邮件通知会暂停。` : user.email_verified_at ? "已验证，可用于接收通知。" : "未验证，邮件通知不会发送。"}</small></div><div className="personal-setting-control"><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" />{user.pending_email && <button className="secondary" disabled={resendBusy || resendCooldown > 0} onClick={async () => { setResendBusy(true); try { await api.resendEmailVerification(); setResendCooldown(60); onMessage("验证邮件已重新发送，请查收邮箱"); } catch (error) { onMessage(errorText(error)); } finally { setResendBusy(false); } }}>{resendBusy ? "发送中…" : resendCooldown ? `${resendCooldown} 秒后可重发` : "重新发送验证邮件"}</button>}</div></div>
         <div className="personal-setting-actions"><button className="primary" onClick={saveProfile}>保存修改</button></div>
       </div></section>
       <section className="personal-settings-section"><h2>修改密码</h2><div className="personal-settings-list">

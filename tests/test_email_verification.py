@@ -5,7 +5,13 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select
 
-from domainsmanager_api.email_verification import begin, confirm, validate_allowlist, validate_site_url
+from domainsmanager_api.email_verification import (
+    begin,
+    confirm,
+    resend_available,
+    validate_allowlist,
+    validate_site_url,
+)
 from domainsmanager_persistence.db import create_engine, create_session_factory, run_migrations
 from domainsmanager_persistence.models import AppUser
 from tests.database import sqlite_database
@@ -26,6 +32,8 @@ async def test_verification_promotes_pending_email_once(tmp_path: Path) -> None:
         async with sessions() as session:
             link = await begin(session, user_id=user_id, email="new@example.test", site_url="https://console.example.test")
             token = link.split("#token=", 1)[1]
+        async with sessions() as session:
+            assert not await resend_available(session, user_id)
         async with sessions() as session:
             user = await confirm(session, token)
             assert user.email == "new@example.test"
