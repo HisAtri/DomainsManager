@@ -108,6 +108,21 @@ async def verify(request: Request, session: AsyncSession, operation: Operation, 
             except (ValueError, KeyError, TypeError):
                 reject()
         return
-    if not settings["turnstile_secret_key"] or not turnstile_token: reject()
-    response = await httpx.AsyncClient(timeout=5).post("https://challenges.cloudflare.com/turnstile/v0/siteverify", data={"secret": settings["turnstile_secret_key"], "response": turnstile_token, "remoteip": request.client.host if request.client else ""})
-    if not response.json().get("success") or response.json().get("action") != operation: reject()
+    if not settings["turnstile_secret_key"] or not turnstile_token:
+        reject()
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            response = await client.post(
+                "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+                data={
+                    "secret": settings["turnstile_secret_key"],
+                    "response": turnstile_token,
+                    "remoteip": request.client.host if request.client else "",
+                },
+            )
+        result = response.json()
+    except (httpx.HTTPError, ValueError, TypeError):
+        reject()
+        return
+    if not isinstance(result, dict) or not result.get("success") or result.get("action") != operation:
+        reject()

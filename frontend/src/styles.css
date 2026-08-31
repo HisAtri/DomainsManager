@@ -864,6 +864,8 @@ tbody tr:hover { background: var(--dm-soft); }
 .captcha-row input { margin-top: 0; flex: 1; min-width: 0; }
 .captcha-image { width: 118px; height: 40px; flex: 0 0 auto; border: 1px solid #d0d5dd; border-radius: 7px; background: #fff; object-fit: cover; cursor: pointer; }
 :root[data-theme="dark"] .captcha-image { border-color: var(--dm-border); background: var(--dm-raised); }
+.turnstile-challenge { min-height: 65px; margin-top: 12px; }
+.turnstile-challenge .form-error { margin-top: 7px; }
 
 .shortcut-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
 .shortcut-card { display: flex; align-items: center; gap: 14px; min-height: 88px; padding: 16px 18px; border: 1px solid var(--dm-border); border-radius: 10px; color: var(--dm-text); text-align: left; background: var(--dm-surface); transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }

@@ -8,6 +8,7 @@ import { assetSource, SiteFooter, useSiteConfig } from "./site-config";
 import { SelectMenu } from "./select-menu";
 import type { AdminCheckPage, AdminDomain, AdminDomainPage, AdminSession, AdminUser, AdminUserPage, Check, Domain, DomainStats, GlobalSetting, NotificationDelivery, NotificationRule, OperationalMetrics, Page, SecurityAuditEvent, Settings, Task, User } from "./types";
 import { PowStatus, solvePow, usePowChallenge } from "./pow-challenge";
+import { TurnstileChallenge } from "./turnstile";
 
 type Route = "dashboard" | "domains" | "tasks" | "notifications" | "settings" | "admin-users" | "admin-domains" | "admin-checks" | "admin-operations" | "admin-audit" | "admin-settings";
 type Theme = "light" | "dark";
@@ -119,11 +120,12 @@ function ImageCaptcha({ operation, onChange }: { operation: "login" | "register"
 
 function AuthScreen({ onSuccess, theme, onToggleTheme }: { onSuccess: (result: { user: User; tokens: { access_token: string; expires_in: number } }) => void; theme: Theme; onToggleTheme: () => void }) {
   const siteConfig = useSiteConfig();
-  const [register, setRegister] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null); const [captcha, setCaptcha] = useState<{ token: string; answer: string } | null>(null);
+  const [register, setRegister] = useState(false); const [busy, setBusy] = useState(false); const [error, setError] = useState<string | null>(null); const [captcha, setCaptcha] = useState<{ token: string; answer: string } | null>(null); const [turnstileToken, setTurnstileToken] = useState<string | null>(null); const [turnstileGeneration, setTurnstileGeneration] = useState(0);
   const canRegister = siteConfig.registration_enabled;
   const showRegister = register && canRegister;
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (siteConfig.anti_bot_mode === "image_captcha" && !captcha) { setError("请完成图形验证码"); return; } const data = new FormData(event.currentTarget); setBusy(true); setError(null); try { const username = String(data.get("username")); const password = String(data.get("password")); onSuccess(showRegister ? await api.register(username, password, String(data.get("email") || ""), captcha || undefined) : await api.login(username, password, captcha || undefined)); } catch (e) { setError(errorText(e)); } finally { setBusy(false); } }
-  return <div className="auth"><button type="button" className="auth-theme-toggle" onClick={onToggleTheme} aria-label={theme === "light" ? "切换到深色模式" : "切换到浅色模式"}>{theme === "light" ? <Moon size={18} /> : <Sun size={18} />}</button><section className="auth-card"><Brand /><h1>{showRegister ? "创建账号" : "欢迎回来"}</h1><p>{showRegister ? "开始集中管理你的域名资产。" : "登录后继续管理域名资产。"}</p><form onSubmit={submit}>{showRegister && <label>邮箱<input name="email" type="email" placeholder="name@example.com" /></label>}<label>用户名<input name="username" required minLength={3} placeholder="请输入用户名" autoComplete="username" /></label><label>密码<PasswordField name="password" placeholder="至少 6 位字符" autoComplete={showRegister ? "new-password" : "current-password"} minLength={6} /></label>{siteConfig.anti_bot_mode === "image_captcha" && <ImageCaptcha operation={showRegister ? "register" : "login"} onChange={setCaptcha} />}{error && <div className="form-error">{error}</div>}<button className="primary wide" disabled={busy || siteConfig.anti_bot_mode === "image_captcha" && !captcha}>{busy && <LoaderCircle className="spin" size={17} />}{showRegister ? "创建并登录" : "登录"}</button></form>{canRegister ? <button className="auth-switch" onClick={() => { setCaptcha(null); setRegister(!register); }}>{showRegister ? "已有账号？登录" : "没有账号？注册"}</button> : <p className="auth-hint">当前未开放自行注册。</p>}</section></div>;
+  const challengeReady = siteConfig.anti_bot_mode === "disabled" || siteConfig.anti_bot_mode === "image_captcha" && Boolean(captcha) || siteConfig.anti_bot_mode === "turnstile" && Boolean(turnstileToken);
+  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!challengeReady) { setError(siteConfig.anti_bot_mode === "turnstile" ? "请完成 Turnstile 校验" : "请完成图形验证码"); return; } const data = new FormData(event.currentTarget); setBusy(true); setError(null); try { const username = String(data.get("username")); const password = String(data.get("password")); onSuccess(showRegister ? await api.register(username, password, String(data.get("email") || ""), captcha || undefined, turnstileToken || undefined) : await api.login(username, password, captcha || undefined, turnstileToken || undefined)); } catch (e) { setError(errorText(e)); if (siteConfig.anti_bot_mode === "turnstile") { setTurnstileToken(null); setTurnstileGeneration((value) => value + 1); } } finally { setBusy(false); } }
+  return <div className="auth"><button type="button" className="auth-theme-toggle" onClick={onToggleTheme} aria-label={theme === "light" ? "切换到深色模式" : "切换到浅色模式"}>{theme === "light" ? <Moon size={18} /> : <Sun size={18} />}</button><section className="auth-card"><Brand /><h1>{showRegister ? "创建账号" : "欢迎回来"}</h1><p>{showRegister ? "开始集中管理你的域名资产。" : "登录后继续管理域名资产。"}</p><form onSubmit={submit}>{showRegister && <label>邮箱<input name="email" type="email" placeholder="name@example.com" /></label>}<label>用户名<input name="username" required minLength={3} placeholder="请输入用户名" autoComplete="username" /></label><label>密码<PasswordField name="password" placeholder="至少 6 位字符" autoComplete={showRegister ? "new-password" : "current-password"} minLength={6} /></label>{siteConfig.anti_bot_mode === "image_captcha" && <ImageCaptcha operation={showRegister ? "register" : "login"} onChange={setCaptcha} />}{siteConfig.anti_bot_mode === "turnstile" && <TurnstileChallenge key={`${showRegister ? "register" : "login"}-${turnstileGeneration}`} siteKey={siteConfig.turnstile_site_key} action={showRegister ? "register" : "login"} onChange={setTurnstileToken} />}{error && <div className="form-error">{error}</div>}<button className="primary wide" disabled={busy || !challengeReady}>{busy && <LoaderCircle className="spin" size={17} />}{showRegister ? "创建并登录" : "登录"}</button></form>{canRegister ? <button className="auth-switch" onClick={() => { setCaptcha(null); setTurnstileToken(null); setRegister(!register); }}>{showRegister ? "已有账号？登录" : "没有账号？注册"}</button> : <p className="auth-hint">当前未开放自行注册。</p>}</section></div>;
 }
 
 function Sidebar({ user, route, go, onLogout, theme, onToggleTheme, onNavigate }: { user: User; route: Route; go: (r: Route) => void; onLogout: () => void; theme: Theme; onToggleTheme: () => void; onNavigate?: () => void }) { const Item = ({ value, icon: Icon, children }: { value: Route; icon: typeof Globe2; children: string }) => <button onClick={() => { go(value); onNavigate?.(); }} className={`nav-item ${route === value ? "nav-active" : ""}`}><Icon size={18} />{children}</button>; return <aside className="sidebar"><div className="sidebar-brand"><Brand /></div><nav><p className="nav-label">工作台</p><Item value="dashboard" icon={LayoutDashboard}>仪表盘</Item><Item value="domains" icon={Globe2}>我的域名</Item><Item value="tasks" icon={Activity}>刷新任务</Item><Item value="notifications" icon={Bell}>通知中心</Item>{user.role === "admin" && <><p className="nav-label nav-spaced">管理</p><Item value="admin-users" icon={Users}>用户管理</Item><Item value="admin-domains" icon={ShieldCheck}>全局域名</Item><Item value="admin-checks" icon={Activity}>检查记录</Item><Item value="admin-operations" icon={Activity}>运行状态</Item><Item value="admin-audit" icon={ShieldCheck}>安全审计</Item><Item value="admin-settings" icon={SettingsIcon}>系统设置</Item></>}</nav><div className="sidebar-footer"><div className="signed-user"><b>{user.username.slice(0, 1).toUpperCase()}</b><span>{user.username}<small>{user.role === "admin" ? "管理员" : "普通用户"}</small></span><div className="user-chips"><button type="button" className={`user-chip${route === "settings" ? " nav-active" : ""}`} onClick={() => { go("settings"); onNavigate?.(); }} aria-label="个人设置" title="个人设置"><SettingsIcon size={16} /></button><button type="button" className="user-chip" onClick={onToggleTheme} aria-label={theme === "light" ? "切换到深色模式" : "切换到浅色模式"} title={theme === "light" ? "切换到深色模式" : "切换到浅色模式"}>{theme === "light" ? <Moon size={16} /> : <Sun size={16} />}</button></div></div><ConfirmActionButton className="logout-button" title="退出登录？" description="当前浏览器中的登录状态将被清除。" confirmLabel="退出登录" onConfirm={onLogout}><LogOut size={16} />退出登录</ConfirmActionButton></div></aside>; }
@@ -171,10 +173,14 @@ function AddDomain({ open, onOpenChange, onCreated }: { open: boolean; onOpenCha
   const [monitor, setMonitor] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileGeneration, setTurnstileGeneration] = useState(0);
   const pow = usePowChallenge({ operation: "create_domain", enabled: siteConfig.anti_bot_mode === "image_captcha", active: open });
   useEffect(() => {
     if (!open) {
       setError(null);
+      setTurnstileToken(null);
+      setTurnstileGeneration((value) => value + 1);
       return;
     }
     api.settings().then((settings) => setMonitor(settings.default_monitor_enabled)).catch(() => undefined);
@@ -184,21 +190,94 @@ function AddDomain({ open, onOpenChange, onCreated }: { open: boolean; onOpenCha
     setBusy(true);
     setError(null);
     try {
-      onCreated(await api.createDomain(name, monitor, pow.payload || undefined));
+      onCreated(await api.createDomain(name, monitor, pow.payload || undefined, turnstileToken || undefined));
       setName("");
     } catch (err) {
       if (err instanceof ApiError && err.code === "anti_bot_verification_failed") pow.retry();
+      if (siteConfig.anti_bot_mode === "turnstile") { setTurnstileToken(null); setTurnstileGeneration((value) => value + 1); }
       setError(errorText(err));
     } finally {
       setBusy(false);
     }
   }
-  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="overlay" /><Dialog.Content className="dialog"><Dialog.Close className="dialog-close"><X size={18} /></Dialog.Close><Dialog.Title>添加域名</Dialog.Title><Dialog.Description>仅支持可注册域名；系统会标准化 Unicode 与 Punycode 输入。</Dialog.Description><form onSubmit={submit}><label className="field-label">域名<input autoFocus required value={name} onChange={(e) => { setName(e.target.value); if (error) setError(null); }} placeholder="例如 example.com" /></label><label className="toggle-line"><span><b>启用监控</b><small>默认值来自个人设置，添加后可随时调整</small></span><Switch.Root className="switch" checked={monitor} onCheckedChange={setMonitor}><Switch.Thumb className="switch-thumb" /></Switch.Root></label>{siteConfig.anti_bot_mode === "image_captcha" && <PowStatus state={pow.state} onRetry={pow.retry} />}{error && <div className="dialog-error" role="alert">{error}</div>}<div className="dialog-actions"><Dialog.Close asChild><button type="button" className="secondary">取消</button></Dialog.Close><button className="primary" disabled={busy || !pow.ready}>{busy && <LoaderCircle className="spin" size={16} />}添加域名</button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root>;
+  return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="overlay" /><Dialog.Content className="dialog"><Dialog.Close className="dialog-close"><X size={18} /></Dialog.Close><Dialog.Title>添加域名</Dialog.Title><Dialog.Description>仅支持可注册域名；系统会标准化 Unicode 与 Punycode 输入。</Dialog.Description><form onSubmit={submit}><label className="field-label">域名<input autoFocus required value={name} onChange={(e) => { setName(e.target.value); if (error) setError(null); }} placeholder="例如 example.com" /></label><label className="toggle-line"><span><b>启用监控</b><small>默认值来自个人设置，添加后可随时调整</small></span><Switch.Root className="switch" checked={monitor} onCheckedChange={setMonitor}><Switch.Thumb className="switch-thumb" /></Switch.Root></label>{siteConfig.anti_bot_mode === "image_captcha" && <PowStatus state={pow.state} onRetry={pow.retry} />}{siteConfig.anti_bot_mode === "turnstile" && <TurnstileChallenge key={`create-domain-${turnstileGeneration}`} siteKey={siteConfig.turnstile_site_key} action="create_domain" onChange={setTurnstileToken} />}{error && <div className="dialog-error" role="alert">{error}</div>}<div className="dialog-actions"><Dialog.Close asChild><button type="button" className="secondary">取消</button></Dialog.Close><button className="primary" disabled={busy || !pow.ready || siteConfig.anti_bot_mode === "turnstile" && !turnstileToken}>{busy && <LoaderCircle className="spin" size={16} />}添加域名</button></div></form></Dialog.Content></Dialog.Portal></Dialog.Root>;
 }
 function LookupResult({ check }: { check: Check | undefined }) { if (!check?.snapshot) return <section className="lookup-result empty-result"><div className="section-title"><b>WHOIS / RDAP 信息</b></div><p>尚未获得可展示的查询结果。完成一次成功刷新后，注册商、到期日、状态和名称服务器会显示在这里。</p></section>; const snapshot = check.snapshot; const registrar = typeof snapshot.registrar === "object" && snapshot.registrar !== null ? snapshot.registrar as Record<string, unknown> : null; const nameservers = Array.isArray(snapshot.nameservers) ? snapshot.nameservers.filter((item): item is string => typeof item === "string") : []; const statuses = Array.isArray(snapshot.statuses) ? snapshot.statuses.filter((item): item is string => typeof item === "string") : []; const sourceUrl = typeof snapshot.source_url === "string" ? snapshot.source_url : null; const field = (key: string) => typeof snapshot[key] === "string" ? snapshot[key] : "—"; const registrarName = registrar && typeof registrar.name === "string" ? registrar.name : "—"; const lifecycle = typeof snapshot.expiration_status === "string" && snapshot.expiration_status in expirationLabel ? expirationLabel[snapshot.expiration_status as Domain["expiration_status"]] : "待确认"; return <section className="lookup-result"><div className="section-title"><div><b>WHOIS / RDAP 信息</b><small>最近成功查询：{date(check.checked_at)} · {check.protocol?.toUpperCase() || "—"}</small></div>{sourceUrl && <a href={sourceUrl} target="_blank" rel="noreferrer">查询来源</a>}</div><dl className="lookup-grid"><div><dt>注册商</dt><dd>{registrarName}</dd></div><div><dt>注册日期</dt><dd>{field("registered_at")}</dd></div><div><dt>注册商到期</dt><dd>{field("registrar_expires_at")}</dd></div><div><dt>注册局到期</dt><dd>{field("registry_expires_at")}</dd></div><div><dt>生命周期</dt><dd>{lifecycle}</dd></div><div><dt>最近更新</dt><dd>{field("updated_at")}</dd></div><div><dt>DNSSEC</dt><dd>{snapshot.dnssec_enabled === true ? "已启用" : snapshot.dnssec_enabled === false ? "未启用" : "—"}</dd></div><div><dt>查询耗时</dt><dd>{check.duration_ms === null ? "—" : `${check.duration_ms} ms`}</dd></div></dl><div className="lookup-list"><b>域名状态</b>{statuses.length ? <div>{statuses.map((item) => <span className="plain-badge" key={item}>{item}</span>)}</div> : <small>未返回状态</small>}</div><div className="lookup-list"><b>名称服务器</b>{nameservers.length ? <ul>{nameservers.map((item) => <li key={item}>{item}</li>)}</ul> : <small>未返回名称服务器</small>}</div><details className="raw-snapshot"><summary>查看原始响应</summary><pre>{JSON.stringify(snapshot, null, 2)}</pre></details></section>; }
 
-function DomainDetail({ initial, onClose, onMessage }: { initial: Domain; onClose: () => void; onMessage: (message: string) => void }) { const siteConfig = useSiteConfig(); const [domain, setDomain] = useState(initial); const [checks, setChecks] = useState<Check[]>([]); const [task, setTask] = useState<Task | null>(null); const [saving, setSaving] = useState(false); const [forceRefresh, setForceRefresh] = useState(false); const [powSolving, setPowSolving] = useState(false); const powAbort = useRef<AbortController | null>(null); const load = useCallback(async () => { try { const [current, history] = await Promise.all([api.domain(initial.id), api.checks(initial.id, { page_size: 20 })]); setDomain(current.data); setChecks(history.items); } catch (e) { onMessage(errorText(e)); } }, [initial.id, onMessage]); useEffect(() => { load(); }, [load]); useEffect(() => () => powAbort.current?.abort(), []); async function refreshTaskStatus() { if (!task) return; try { const next = await api.task(task.id); setTask(next); if (["success", "info"].includes(next.status)) load(); } catch (e) { onMessage(errorText(e)); } } async function save(values: Partial<Pick<Domain, "monitor_enabled" | "renewal_mode" | "notes">>) { setSaving(true); try { const next = await api.updateDomain(domain.id, domain.version, values); setDomain(next.data); } catch (e) { onMessage(e instanceof ApiError && e.status === 409 ? "记录已被更新，请关闭后重新打开。" : errorText(e)); } finally { setSaving(false); } } async function refresh() { powAbort.current?.abort(); const controller = new AbortController(); powAbort.current = controller; try { let payload: string | undefined; if (siteConfig.anti_bot_mode === "image_captcha") { setPowSolving(true); payload = await solvePow("refresh_domain", controller.signal); if (controller.signal.aborted) return; } setTask(await api.refreshDomain(domain.id, forceRefresh, payload)); } catch (e) { if (controller.signal.aborted) return; onMessage(errorText(e)); } finally { if (!controller.signal.aborted) setPowSolving(false); } }
-  return <div className="drawer-backdrop" onClick={onClose}><aside className="drawer wide-drawer" onClick={(e) => e.stopPropagation()}><button className="drawer-close" onClick={onClose}><X size={19} /></button><span className="eyebrow">域名详情</span><h2>{domain.identity.unicode_name}</h2><dl className="domain-meta"><div><dt>标准化域名（ASCII）</dt><dd>{domain.identity.ascii_name}</dd></div><div><dt>公共后缀</dt><dd>{domain.identity.public_suffix}</dd></div></dl><LookupResult check={checks.find((check) => check.outcome === "success" && check.snapshot !== null)} /><section className="detail-grid"><label className="toggle-line"><span><b>域名监控</b><small>控制后续监控任务</small></span><Switch.Root className="switch" checked={domain.monitor_enabled} onCheckedChange={(monitor_enabled) => save({ monitor_enabled })}><Switch.Thumb className="switch-thumb" /></Switch.Root></label><label className="field-label">续期方式<SelectMenu value={domain.renewal_mode || "unknown"} onChange={(value) => save({ renewal_mode: value as Domain["renewal_mode"] })} options={[{ value: "unknown", label: "未知" }, { value: "automatic", label: "自动续期" }, { value: "manual", label: "手动续期" }]} /></label><label className="field-label full">备注<textarea value={domain.notes || ""} onChange={(e) => setDomain({ ...domain, notes: e.target.value })} onBlur={(e) => save({ notes: e.target.value })} placeholder="记录续费、所有权或操作说明" /></label></section><div className="refresh-actions"><label className="toggle-line compact-toggle"><span><b>强制刷新</b><small>跳过成功结果缓存</small></span><Switch.Root className="switch" checked={forceRefresh} onCheckedChange={setForceRefresh}><Switch.Thumb className="switch-thumb" /></Switch.Root></label><button className="primary wide" onClick={refresh} disabled={saving || powSolving || !!task && ["queued", "running"].includes(task.status)}><RefreshCw size={17} className={powSolving || task && ["queued", "running"].includes(task.status) ? "spin" : ""} />{powSolving ? "正在校验…" : task && ["queued", "running"].includes(task.status) ? "刷新任务执行中" : forceRefresh ? "强制刷新" : "立即刷新"}</button></div>{task && <div className="task-inline"><span>刷新任务</span><Status status={task.status} />{task.error && <small>{task.error.message}</small>}{task.result?.message && <small>{task.result.message}</small>}<button className="text-button" onClick={refreshTaskStatus}>刷新状态</button></div>}<section className="history"><div className="section-title"><b>检查历史</b><small>每次实际刷新都会保留一条检查结果。</small></div>{checks.map((check) => <article className="history-row" key={check.id}><span><Status status={check.outcome} /><b>{date(check.checked_at)}</b><small>{check.protocol?.toUpperCase() || "—"} · {check.duration_ms ? `${check.duration_ms} ms` : ""}</small></span>{check.error_message && <em>{check.error_message}</em>}{check.changed_fields.length > 0 && <em>已变更：{check.changed_fields.join("、")}</em>}</article>)}{!checks.length && <EmptyState text="暂无检查记录；可点击“立即刷新”创建任务。" />}</section><ConfirmActionButton className="danger-link" title="移除这个域名？" description={`将从当前账户移除 ${domain.identity.ascii_name}，已有检查历史仍会保留。`} confirmLabel="移除域名" onConfirm={async () => { await api.deleteDomain(domain.id); onMessage("域名已移除"); onClose(); }}><Trash2 size={15} />移除域名</ConfirmActionButton></aside></div>; }
+function DomainDetail({ initial, onClose, onMessage }: { initial: Domain; onClose: () => void; onMessage: (message: string) => void }) {
+  const siteConfig = useSiteConfig();
+  const [domain, setDomain] = useState(initial);
+  const [checks, setChecks] = useState<Check[]>([]);
+  const [task, setTask] = useState<Task | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [forceRefresh, setForceRefresh] = useState(false);
+  const [powSolving, setPowSolving] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileGeneration, setTurnstileGeneration] = useState(0);
+  const powAbort = useRef<AbortController | null>(null);
+  const load = useCallback(async () => {
+    try {
+      const [current, history] = await Promise.all([api.domain(initial.id), api.checks(initial.id, { page_size: 20 })]);
+      setDomain(current.data);
+      setChecks(history.items);
+    } catch (error) {
+      onMessage(errorText(error));
+    }
+  }, [initial.id, onMessage]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => () => powAbort.current?.abort(), []);
+
+  async function refreshTaskStatus() {
+    if (!task) return;
+    try {
+      const next = await api.task(task.id);
+      setTask(next);
+      if (["success", "info"].includes(next.status)) load();
+    } catch (error) {
+      onMessage(errorText(error));
+    }
+  }
+
+  async function save(values: Partial<Pick<Domain, "monitor_enabled" | "renewal_mode" | "notes">>) {
+    setSaving(true);
+    try {
+      const next = await api.updateDomain(domain.id, domain.version, values);
+      setDomain(next.data);
+    } catch (error) {
+      onMessage(error instanceof ApiError && error.status === 409 ? "记录已被更新，请关闭后重新打开。" : errorText(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function refresh() {
+    powAbort.current?.abort();
+    const controller = new AbortController();
+    powAbort.current = controller;
+    try {
+      let payload: string | undefined;
+      if (siteConfig.anti_bot_mode === "image_captcha") {
+        setPowSolving(true);
+        payload = await solvePow("refresh_domain", controller.signal);
+        if (controller.signal.aborted) return;
+      }
+      setTask(await api.refreshDomain(domain.id, forceRefresh, payload, turnstileToken || undefined));
+    } catch (error) {
+      if (controller.signal.aborted) return;
+      onMessage(errorText(error));
+    } finally {
+      if (!controller.signal.aborted) setPowSolving(false);
+      if (siteConfig.anti_bot_mode === "turnstile") {
+        setTurnstileToken(null);
+        setTurnstileGeneration((value) => value + 1);
+      }
+    }
+  }
+
+  const taskRunning = Boolean(task && ["queued", "running"].includes(task.status));
+  const turnstileReady = siteConfig.anti_bot_mode !== "turnstile" || Boolean(turnstileToken);
+  return <div className="drawer-backdrop" onClick={onClose}><aside className="drawer wide-drawer" onClick={(e) => e.stopPropagation()}><button className="drawer-close" onClick={onClose}><X size={19} /></button><span className="eyebrow">域名详情</span><h2>{domain.identity.unicode_name}</h2><dl className="domain-meta"><div><dt>标准化域名（ASCII）</dt><dd>{domain.identity.ascii_name}</dd></div><div><dt>公共后缀</dt><dd>{domain.identity.public_suffix}</dd></div></dl><LookupResult check={checks.find((check) => check.outcome === "success" && check.snapshot !== null)} /><section className="detail-grid"><label className="toggle-line"><span><b>域名监控</b><small>控制后续监控任务</small></span><Switch.Root className="switch" checked={domain.monitor_enabled} onCheckedChange={(monitor_enabled) => save({ monitor_enabled })}><Switch.Thumb className="switch-thumb" /></Switch.Root></label><label className="field-label">续期方式<SelectMenu value={domain.renewal_mode || "unknown"} onChange={(value) => save({ renewal_mode: value as Domain["renewal_mode"] })} options={[{ value: "unknown", label: "未知" }, { value: "automatic", label: "自动续期" }, { value: "manual", label: "手动续期" }]} /></label><label className="field-label full">备注<textarea value={domain.notes || ""} onChange={(e) => setDomain({ ...domain, notes: e.target.value })} onBlur={(e) => save({ notes: e.target.value })} placeholder="记录续费、所有权或操作说明" /></label></section>{siteConfig.anti_bot_mode === "turnstile" && <TurnstileChallenge key={`refresh-domain-${turnstileGeneration}`} siteKey={siteConfig.turnstile_site_key} action="refresh_domain" onChange={setTurnstileToken} />}<div className="refresh-actions"><label className="toggle-line compact-toggle"><span><b>强制刷新</b><small>跳过成功结果缓存</small></span><Switch.Root className="switch" checked={forceRefresh} onCheckedChange={setForceRefresh}><Switch.Thumb className="switch-thumb" /></Switch.Root></label><button className="primary wide" onClick={refresh} disabled={saving || powSolving || taskRunning || !turnstileReady}><RefreshCw size={17} className={powSolving || taskRunning ? "spin" : ""} />{powSolving ? "正在校验…" : taskRunning ? "刷新任务执行中" : forceRefresh ? "强制刷新" : "立即刷新"}</button></div>{task && <div className="task-inline"><span>刷新任务</span><Status status={task.status} />{task.error && <small>{task.error.message}</small>}{task.result?.message && <small>{task.result.message}</small>}<button className="text-button" onClick={refreshTaskStatus}>刷新状态</button></div>}<section className="history"><div className="section-title"><b>检查历史</b><small>每次实际刷新都会保留一条检查结果。</small></div>{checks.map((check) => <article className="history-row" key={check.id}><span><Status status={check.outcome} /><b>{date(check.checked_at)}</b><small>{check.protocol?.toUpperCase() || "—"} · {check.duration_ms ? `${check.duration_ms} ms` : ""}</small></span>{check.error_message && <em>{check.error_message}</em>}{check.changed_fields.length > 0 && <em>已变更：{check.changed_fields.join("、")}</em>}</article>)}{!checks.length && <EmptyState text="暂无检查记录；可点击“立即刷新”创建任务。" />}</section><ConfirmActionButton className="danger-link" title="移除这个域名？" description={`将从当前账户移除 ${domain.identity.ascii_name}，已有检查历史仍会保留。`} confirmLabel="移除域名" onConfirm={async () => { await api.deleteDomain(domain.id); onMessage("域名已移除"); onClose(); }}><Trash2 size={15} />移除域名</ConfirmActionButton></aside></div>;
+}
 
 function NotificationStatus({ status }: { status: NotificationDelivery["status"] }) { const label = { pending: "等待投递", running: "投递中", sent: "已发送", dead_letter: "投递失败", skipped: "已跳过" }[status]; const tone = status === "sent" ? "status-healthy" : status === "dead_letter" ? "status-failed" : status === "skipped" ? "status-attention" : "status-pending"; return <span className={`status ${tone}`}><i />{label}</span>; }
 const notificationEventLabel = (event: NotificationRule["event_type"]) => ({ "domain.expiration_warning": "到期提醒", "domain.status_changed": "状态变化", "domain.query_failed": "查询失败" })[event];

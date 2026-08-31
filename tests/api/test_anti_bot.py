@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import httpx
 import pytest
 from altcha import Challenge, Payload, create_challenge, solve_challenge
 from fastapi.testclient import TestClient
@@ -68,6 +69,36 @@ def enable_pow(client: TestClient) -> None:
                     "key": "pow_difficulty",
                     "value": "easy",
                     "version": versions["pow_difficulty"],
+                },
+            ]
+        },
+    )
+    assert response.status_code == 200
+
+
+def enable_turnstile(client: TestClient) -> None:
+    headers = admin_headers(client)
+    settings = client.get("/api/v1/admin/settings", headers=headers).json()
+    versions = {item["key"]: item["version"] for item in settings}
+    response = client.put(
+        "/api/v1/admin/settings",
+        headers=headers,
+        json={
+            "settings": [
+                {
+                    "key": "anti_bot_mode",
+                    "value": "turnstile",
+                    "version": versions["anti_bot_mode"],
+                },
+                {
+                    "key": "turnstile_site_key",
+                    "value": "test-site-key",
+                    "version": versions["turnstile_site_key"],
+                },
+                {
+                    "key": "turnstile_secret_key",
+                    "value": "test-secret-key",
+                    "version": versions["turnstile_secret_key"],
                 },
             ]
         },
@@ -189,3 +220,78 @@ async def test_expired_pow_payload_is_rejected(tmp_path: Path) -> None:
         )
         assert expired.status_code == 422
         assert expired.json()["code"] == "anti_bot_verification_failed"
+
+
+@pytest.mark.asyncio
+@pytest.mark.api
+async def test_turnstile_tokens_protect_all_four_operations(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def siteverify(_client, _url: str, *, data: dict[str, str]):
+        action = data["response"].removeprefix("token-")
+        return httpx.Response(200, json={"success": True, "action": action})
+
+    monkeypatch.setattr(httpx.AsyncClient, "post", siteverify)
+    client = await make_client(tmp_path)
+    with client:
+        enable_turnstile(client)
+
+        missing = client.post(
+            "/api/v1/auth/login",
+            data={"username": "pow-admin", "password": "123456"},
+        )
+        assert missing.status_code == 422
+
+        mismatched = client.post(
+            "/api/v1/auth/login",
+            data={
+                "username": "pow-admin",
+                "password": "123456",
+                "turnstile_token": "token-register",
+            },
+        )
+        assert mismatched.status_code == 422
+
+        registered = client.post(
+            "/api/v1/auth/register",
+            json={
+                "username": "turnstile-owner",
+                "password": "123456",
+                "turnstile_token": "token-register",
+            },
+        )
+        assert registered.status_code == 201
+
+        logged_in = client.post(
+            "/api/v1/auth/login",
+            data={
+                "username": "turnstile-owner",
+                "password": "123456",
+                "turnstile_token": "token-login",
+            },
+        )
+        assert logged_in.status_code == 200
+        headers = {
+            "Authorization": f"Bearer {logged_in.json()['tokens']['access_token']}"
+        }
+
+        created = client.post(
+            "/api/v1/domains",
+            json={
+                "name": "example.org",
+                "monitor_enabled": False,
+                "turnstile_token": "token-create_domain",
+            },
+            headers=headers,
+        )
+        assert created.status_code == 201
+
+        refreshed = client.post(
+            f"/api/v1/domains/{created.json()['domain']['id']}/refresh",
+            json={
+                "force_refresh": False,
+                "turnstile_token": "token-refresh_domain",
+            },
+            headers={**headers, "Idempotency-Key": "turnstile-refresh-1"},
+        )
+        assert refreshed.status_code == 202
