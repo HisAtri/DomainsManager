@@ -77,8 +77,8 @@ def render_verification_email(
 def _detail_rows(fields: dict[str, Any]) -> str:
     return "".join(
         "<tr>"
-        f'<td style="width:38%;padding:11px 14px;border-bottom:1px solid #eaecf0;font-size:13px;color:#667085;">{escape(key)}</td>'
-        f'<td style="padding:11px 14px;border-bottom:1px solid #eaecf0;font-size:13px;color:#344054;word-break:break-word;">{escape(_format_value(value))}</td>'
+        f'<td style="width:38%;padding:11px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#64748b;">{escape(key)}</td>'
+        f'<td style="padding:11px 14px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#334155;word-break:break-word;">{escape(_format_value(value))}</td>'
         "</tr>"
         for key, value in fields.items()
     )
