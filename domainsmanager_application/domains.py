@@ -271,9 +271,7 @@ class DomainService:
 
     async def _warning_days(self, uow: UnitOfWork, user_id: UUID) -> int:
         user = await uow.users.get_by_id(user_id)
-        return warning_days_from_preferences(
-            None if user is None else user.preferences
-        )
+        return warning_days_from_preferences(None if user is None else user.preferences)
 
     async def _resolved_list_query(
         self, uow: UnitOfWork, user_id: UUID, query: DomainListQuery

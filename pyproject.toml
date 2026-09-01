@@ -68,6 +68,10 @@ exclude = ["modules/qwhois.py"]
 [tool.hatch.build.targets.wheel.force-include]
 "alembic.ini" = "domainsmanager_persistence/alembic.ini"
 "migrations" = "domainsmanager_persistence/migrations"
+"frontend/dist" = "domainsmanager_api/frontend"
+
+[tool.hatch.build.targets.sdist.force-include]
+"frontend/dist" = "frontend/dist"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

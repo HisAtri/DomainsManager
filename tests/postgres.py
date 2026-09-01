@@ -18,6 +18,7 @@ PROJECT_TABLES = {
     "auth_session",
     "domain_check",
     "domain_refresh_task",
+    "email_verification_challenge",
     "global_setting",
     "idempotency_record",
     "lookup_cache_head",

@@ -85,10 +85,10 @@ def test_live_replaces_invalid_request_id(client: TestClient) -> None:
 @pytest.mark.api
 def test_missing_and_unsupported_routes_return_uniform_errors(client: TestClient) -> None:
     missing = client.get("/not-a-route", headers={"X-Request-ID": "request-4040"})
-    assert missing.status_code == 404
+    assert missing.status_code == 503
     assert missing.json() == {
-        "code": "http_error",
-        "message": "Not Found",
+        "code": "frontend_unavailable",
+        "message": "Bundled frontend assets are unavailable; install a release wheel built with the frontend assets.",
         "request_id": "request-4040",
     }
 

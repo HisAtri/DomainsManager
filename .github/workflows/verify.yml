@@ -10,6 +10,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
       - run: uv sync --extra api --group dev
       - run: uv run ruff format --check domainsmanager_api/api/domains.py domainsmanager_api/schemas/domains.py domainsmanager_api/schemas/admin.py domainsmanager_api/schemas/admin_domains.py domainsmanager_api/schemas/global_settings.py domainsmanager_application/domains.py domainsmanager_persistence/domains.py migrations/versions/d4e7f1c9a862_add_managed_domain_soft_delete.py migrations/versions/b7c6d5e4f3a2_add_admin_query_indexes.py tests/api/test_domains.py tests/api/test_admin.py tests/test_admin_indexes.py tests/test_postgres_admin_concurrency.py tests/test_domain_persistence.py tests/test_resources.py
       - run: uv run ruff check domainsmanager_api/api/domains.py domainsmanager_api/schemas/domains.py domainsmanager_api/schemas/admin.py domainsmanager_api/schemas/admin_domains.py domainsmanager_api/schemas/global_settings.py domainsmanager_application/domains.py domainsmanager_persistence/domains.py migrations/versions/d4e7f1c9a862_add_managed_domain_soft_delete.py migrations/versions/b7c6d5e4f3a2_add_admin_query_indexes.py tests/api/test_domains.py tests/api/test_admin.py tests/test_admin_indexes.py tests/test_postgres_admin_concurrency.py tests/test_domain_persistence.py tests/test_resources.py

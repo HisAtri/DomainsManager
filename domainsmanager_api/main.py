@@ -1,9 +1,11 @@
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 
+from domainsmanager_api.anti_bot import router as anti_bot_router
 from domainsmanager_api.api.admin import router as admin_router
 from domainsmanager_api.api.auth import router as auth_router
 from domainsmanager_api.api.domains import router as domains_router
@@ -11,9 +13,9 @@ from domainsmanager_api.api.health import router as health_router
 from domainsmanager_api.api.notifications import router as notifications_router
 from domainsmanager_api.api.oauth import router as oauth_router
 from domainsmanager_api.api.site_config import router as site_config_router
-from domainsmanager_api.anti_bot import router as anti_bot_router
 from domainsmanager_api.api.tasks import router as tasks_router
 from domainsmanager_api.errors import install_exception_handlers
+from domainsmanager_api.frontend import FrontendApp
 from domainsmanager_api.middleware import RequestIdMiddleware
 from domainsmanager_api.resources import Resources, create_resources
 from domainsmanager_api.settings import Settings, get_settings
@@ -57,6 +59,7 @@ def create_app(
         version=effective_settings.app_version,
         docs_url="/docs" if effective_settings.docs_enabled else None,
         redoc_url="/redoc" if effective_settings.docs_enabled else None,
+        openapi_url="/openapi.json" if effective_settings.docs_enabled else None,
         lifespan=lifespan,
     )
     app.state.settings = effective_settings
@@ -82,6 +85,16 @@ def create_app(
     app.include_router(domains_router, prefix=effective_settings.api_prefix)
     app.include_router(tasks_router, prefix=effective_settings.api_prefix)
     app.include_router(notifications_router, prefix=effective_settings.api_prefix)
+    frontend = FrontendApp(effective_settings.frontend_dist_path)
+
+    @app.api_route(
+        "/{path:path}",
+        methods=["GET", "HEAD"],
+        include_in_schema=False,
+    )
+    async def serve_frontend(request: Request, path: str) -> Response:
+        return await frontend.handle(request, path)
+
     return app
 
 

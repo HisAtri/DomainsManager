@@ -3,15 +3,24 @@ from __future__ import annotations
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from domainsmanager_api.anti_bot import verify as verify_anti_bot
 from domainsmanager_api.dependencies import (
     CurrentUserDependency,
     DomainServiceDependency,
+    get_session,
 )
-from domainsmanager_api.anti_bot import verify as verify_anti_bot
-from domainsmanager_api.dependencies import get_session
-from sqlalchemy.ext.asyncio import AsyncSession
 from domainsmanager_api.schemas.domains import (
     CreateDomainRequest,
     CreateDomainResult,
@@ -157,7 +166,13 @@ async def create_domain(
     domains: DomainServiceDependency,
     session: Annotated[AsyncSession, Depends(get_session)],
 ) -> CreateDomainResult:
-    await verify_anti_bot(request, session, "create_domain", pow_payload=body.pow_payload, turnstile_token=body.turnstile_token)
+    await verify_anti_bot(
+        request,
+        session,
+        "create_domain",
+        pow_payload=body.pow_payload,
+        turnstile_token=body.turnstile_token,
+    )
     try:
         record, restored = await domains.create(
             current.user.id,

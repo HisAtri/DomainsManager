@@ -199,7 +199,10 @@ async def test_admin_user_and_domain_access(tmp_path: Path) -> None:
         )
         assert banned.status_code == 200
         assert banned.json()["status"] == "banned"
-        assert client.get("/api/v1/admin/users", headers=admin).json()["summary"]["banned"] == 1
+        assert (
+            client.get("/api/v1/admin/users", headers=admin).json()["summary"]["banned"]
+            == 1
+        )
         repeated_ban = client.post(
             f"/api/v1/admin/users/{member_id}/ban",
             json={"reason": "test ban"},
@@ -296,10 +299,10 @@ async def test_admin_list_filters_and_stable_sorting(tmp_path: Path) -> None:
             await session.execute(
                 update(ManagedDomain)
                 .where(ManagedDomain.id == alpha_id)
-                    .values(
-                        expires_at=datetime(2026, 12, 1, tzinfo=UTC),
-                        registrar_expires_at=datetime(2026, 12, 1, tzinfo=UTC),
-                        last_check_at=checked_late,
+                .values(
+                    expires_at=datetime(2026, 12, 1, tzinfo=UTC),
+                    registrar_expires_at=datetime(2026, 12, 1, tzinfo=UTC),
+                    last_check_at=checked_late,
                     last_outcome="success",
                 )
             )
@@ -307,10 +310,10 @@ async def test_admin_list_filters_and_stable_sorting(tmp_path: Path) -> None:
                 update(ManagedDomain)
                 .where(ManagedDomain.id == zeta_id)
                 .values(
-                        monitor_enabled=False,
-                        expires_at=datetime(2027, 12, 1, tzinfo=UTC),
-                        registrar_expires_at=datetime(2027, 12, 1, tzinfo=UTC),
-                        last_check_at=checked_early,
+                    monitor_enabled=False,
+                    expires_at=datetime(2027, 12, 1, tzinfo=UTC),
+                    registrar_expires_at=datetime(2027, 12, 1, tzinfo=UTC),
+                    last_check_at=checked_early,
                     last_outcome="not_found",
                 )
             )

@@ -96,7 +96,9 @@ class DomainListParameters(StrictModel):
         if self.lifecycle is not None and (
             self.expires_from is not None or self.expires_to is not None
         ):
-            raise ValueError("lifecycle cannot be combined with expires_from or expires_to")
+            raise ValueError(
+                "lifecycle cannot be combined with expires_from or expires_to"
+            )
         return self
 
 

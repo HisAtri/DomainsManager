@@ -100,10 +100,11 @@ class Settings(BaseSettings):
     bootstrap_admin_username: str | None = None
     bootstrap_admin_password: SecretStr | None = None
     request_id_header: str = "X-Request-ID"
-    docs_enabled: bool = True
+    docs_enabled: bool = False
     cors_origins: list[str] = Field(default_factory=list)
     oauth_providers: list[str] = Field(default_factory=list)
     api_prefix: str = Field(default="/api/v1", pattern=r"^/[a-z0-9/_-]+$")
+    frontend_dist_path: Path | None = None
 
     def database_config(self) -> DatabaseConfig:
         return DatabaseConfig(

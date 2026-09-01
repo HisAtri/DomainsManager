@@ -267,7 +267,9 @@ async def test_domain_stats_and_lifecycle_filters_keep_expired_separate(
             json={"name": "old.com", "monitor_enabled": True},
             headers=headers,
         )
-        assert {item.status_code for item in (monitored, unmonitored, expiring, expired)} == {201}
+        assert {
+            item.status_code for item in (monitored, unmonitored, expiring, expired)
+        } == {201}
 
         set_registrar_expiry(database, "soon.com", now + timedelta(days=7))
         set_registrar_expiry(database, "old.com", now - timedelta(days=25))
@@ -305,12 +307,12 @@ async def test_domain_stats_and_lifecycle_filters_keep_expired_separate(
             params={"monitor_enabled": True},
             headers=headers,
         )
-        assert [item["identity"]["ascii_name"] for item in expiring_list.json()["items"]] == [
-            "soon.com"
-        ]
-        assert [item["identity"]["ascii_name"] for item in expired_list.json()["items"]] == [
-            "old.com"
-        ]
+        assert [
+            item["identity"]["ascii_name"] for item in expiring_list.json()["items"]
+        ] == ["soon.com"]
+        assert [
+            item["identity"]["ascii_name"] for item in expired_list.json()["items"]
+        ] == ["old.com"]
         assert monitored_list.json()["total"] == 3
         rejected = client.get(
             "/api/v1/domains",
