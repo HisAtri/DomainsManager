@@ -35,6 +35,7 @@ domainsmanager-verify-release = "domainsmanager_api.release_verify:main"
 [project.optional-dependencies]
 api = [
     "alembic>=1.19.0",
+    "aiosqlite>=0.22.1",
     "asyncpg>=0.31.0",
     "email-validator>=2.2.0",
     "fastapi>=0.116.0",
@@ -51,6 +52,7 @@ rate-limit-redis = [
 ]
 persistence = [
     "alembic>=1.19.0",
+    "aiosqlite>=0.22.1",
     "asyncpg>=0.31.0",
     "sqlalchemy[asyncio]>=2.0.51",
 ]
@@ -116,6 +118,7 @@ dev = [
     "hatchling>=1.31.0",
     "pwdlib[argon2]>=0.3.0",
     "pydantic-settings>=2.10.0",
+    "pyinstaller>=6.22.2",
     "pyjwt>=2.10.1",
     "python-multipart>=0.0.20",
     "pyyaml>=6.0.2",
