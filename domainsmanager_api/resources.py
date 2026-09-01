@@ -1,9 +1,12 @@
+import logging
+import secrets
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+from pydantic import SecretStr
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
@@ -32,6 +35,10 @@ from domainsmanager_persistence import (
 )
 from domainsmanager_persistence.auth import SqlAlchemyUnitOfWorkFactory
 from domainsmanager_persistence.models import GlobalSetting
+
+logger = logging.getLogger(__name__)
+
+_EPHEMERAL_SECRET_BYTES = 48
 
 
 @dataclass(slots=True)
@@ -88,16 +95,24 @@ class Resources:
             max_attempts=effective.task_max_attempts,
             retry_base_delay=timedelta(seconds=effective.task_retry_base_seconds),
             retry_max_delay=timedelta(seconds=effective.task_retry_max_seconds),
-            successful_check_interval=timedelta(seconds=effective.check_interval_seconds),
-            successful_refresh_ttl=timedelta(seconds=effective.successful_refresh_ttl_seconds),
+            successful_check_interval=timedelta(
+                seconds=effective.check_interval_seconds
+            ),
+            successful_refresh_ttl=timedelta(
+                seconds=effective.successful_refresh_ttl_seconds
+            ),
         )
         self.scheduler._policy = SchedulerPolicy(
             check_interval=timedelta(seconds=effective.check_interval_seconds),
             batch_size=effective.scheduler_batch_size,
         )
         self.notifier._max_attempts = effective.notification_max_attempts
-        self.notifier._retry_base_delay = timedelta(seconds=effective.notification_retry_base_seconds)
-        self.notifier._retry_max_delay = timedelta(seconds=effective.notification_retry_max_seconds)
+        self.notifier._retry_base_delay = timedelta(
+            seconds=effective.notification_retry_base_seconds
+        )
+        self.notifier._retry_max_delay = timedelta(
+            seconds=effective.notification_retry_max_seconds
+        )
         self.rate_limiter.update(effective)
         return effective
 
@@ -110,8 +125,14 @@ class Resources:
             async with self.engine.connect() as connection:
                 await connection.execute(text("SELECT 1"))
                 revisions = (
-                    await connection.execute(text("SELECT version_num FROM alembic_version"))
-                ).scalars().all()
+                    (
+                        await connection.execute(
+                            text("SELECT version_num FROM alembic_version")
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
         except Exception:  # noqa: BLE001 - readiness must never leak backend failures
             return False
         return set(revisions) == heads
@@ -122,13 +143,10 @@ class Resources:
 
 
 def create_resources(settings: Settings) -> Resources:
-    if settings.jwt_secret_key is None or not settings.jwt_secret_key.get_secret_value():
-        raise ValueError("DOMAINSMANAGER_JWT_SECRET_KEY must not be empty")
-    if (
-        settings.refresh_token_pepper is None
-        or not settings.refresh_token_pepper.get_secret_value()
-    ):
-        raise ValueError("DOMAINSMANAGER_REFRESH_TOKEN_PEPPER must not be empty")
+    _ensure_auth_secrets(settings)
+
+    assert settings.jwt_secret_key is not None
+    assert settings.refresh_token_pepper is not None
 
     database = settings.database_config()
     engine = create_engine(database)
@@ -194,8 +212,36 @@ def create_resources(settings: Settings) -> Resources:
             unit_of_work=unit_of_work,
             deliver=lambda message: deliver(message, settings, sessions),
             max_attempts=settings.notification_max_attempts,
-            retry_base_delay=timedelta(seconds=settings.notification_retry_base_seconds),
+            retry_base_delay=timedelta(
+                seconds=settings.notification_retry_base_seconds
+            ),
             retry_max_delay=timedelta(seconds=settings.notification_retry_max_seconds),
         ),
         rate_limiter=create_rate_limiter(settings),
     )
+
+
+def _ensure_auth_secrets(settings: Settings) -> None:
+    generated: list[str] = []
+    if (
+        settings.jwt_secret_key is None
+        or not settings.jwt_secret_key.get_secret_value()
+    ):
+        settings.jwt_secret_key = SecretStr(
+            secrets.token_urlsafe(_EPHEMERAL_SECRET_BYTES)
+        )
+        generated.append("DOMAINSMANAGER_JWT_SECRET_KEY")
+    if (
+        settings.refresh_token_pepper is None
+        or not settings.refresh_token_pepper.get_secret_value()
+    ):
+        settings.refresh_token_pepper = SecretStr(
+            secrets.token_urlsafe(_EPHEMERAL_SECRET_BYTES)
+        )
+        generated.append("DOMAINSMANAGER_REFRESH_TOKEN_PEPPER")
+    if generated:
+        logger.warning(
+            "%s not configured; Configure these "
+            "values in the environment or .env to preserve sessions.",
+            ", ".join(generated),
+        )
