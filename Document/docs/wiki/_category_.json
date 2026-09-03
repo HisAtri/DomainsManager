@@ -1,0 +1,8 @@
+{
+  "label": "项目 Wiki",
+  "position": 4,
+  "link": {
+    "type": "generated-index",
+    "description": "记录项目设计、术语和维护信息。"
+  }
+}

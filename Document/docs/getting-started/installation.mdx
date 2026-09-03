@@ -1,0 +1,70 @@
+---
+sidebar_position: 1
+---
+
+# 安装
+
+本章节将介绍 DomainsManager 的安装、部署和初始配置。
+
+## 快速开始
+
+### 已打包的二进制
+
+你可以访问 [GitHub Release](https://github.com/HisAtri/DomainsManager/releases/latest) 页面，下载对应平台、对应架构的二进制可执行文件。
+
+项目目前提供以下架构的二进制包
+
+- Linux
+  - AMD64
+  - aarch64
+  - armv7
+- Windows
+  - AMD64
+
+
+```sh
+cat >> .env <<EOF
+DOMAINSMANAGER_JWT_SECRET_KEY=$(openssl rand -hex 64)
+DOMAINSMANAGER_REFRESH_TOKEN_PEPPER=$(openssl rand -hex 64)
+EOF
+
+./domainsmanager
+```
+
+:::warning
+
+这里提供的是最简单的启动方式，生产环境下建议配置好`.env`。
+
+:::
+
+### 从源码运行
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+<Tabs>
+<TabItem value="Python" label="Python">
+
+```bash
+git pull git@github.com:HisAtri/DomainsManager.git
+cd DomainsManager
+
+python3 -m venv .venv
+source ./.venv/bin/activate
+python -m pip install -e ".[api]"
+python -m domainsmanager_api.server
+```
+
+</TabItem>
+<TabItem value="uv" label="uv">
+
+```bash
+git pull git@github.com:HisAtri/DomainsManager.git
+cd DomainsManager
+
+uv sync --extra api --group dev
+uv run domainsmanager-server
+```
+
+</TabItem>
+</Tabs>
