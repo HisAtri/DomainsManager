@@ -1,0 +1,37 @@
+---
+sidebar_position: 2
+---
+
+# 顶级域名
+
+顶级域名（Top Level Domain），指的是根区域`.`后的第一个节点；或者说，它是整个域名系统（Domain Name System）路由表的第一级。
+不同的组织/机构在互联网名称与数字地址分配机构 (ICANN) 的规则下，拥有对于不同 TLD 的管理权力。
+
+## TLD & Public Suffix
+
+我们有时会把 `edu.cn`、`eu.org` 也叫做 TLD，这实际上并不准确。
+
+顶级域名（TLD）仅指 DNS 层级中根节点 `.` 下的第一级，例如 `.com` `.net` `.cn`
+
+而公共后缀（Public Suffix）是互联网中域名“互不信任”的边界。所有的 TLD 都是 Public Suffix，而一些二级、三级甚至更多级后缀也是 Public Suffix，例如 `.com.cn` `.eu.org` 等。
+
+Mozilla 基金会维护了一张表格，即 [Public Suffix List](https://publicsuffix.org/list/)，它列出了所有（Mozilla基金会的维护者们认为的） Public Suffix。
+
+## gTLD & ccTLD
+
+gTLD（Generic Top-Level Domain，通用顶级域名）受到 ICANN 的直接监管。`.com` `.net` `.xyz` 都是典型的 gTLD。2023年，ICANN要求所有 gTLD 注册局及注册商，必须要在2024年2月3日起满足ICANN规定的RDAP部署要求。
+
+ccTLD（Country Code Top-Level Domain，国家和地区代码顶级域名）通常由两个字母组成，对应 ISO 3166-1 国家或地区代码，各国对自己的 ccTLD 享有自治权，例如，`.cn` 由 CNNIC 管理，ICANN 无权插手绝大多数运营事宜。因此 ccTLD 可以自行决定注册条件、价格甚至基础设施支持程度，如上文提到的RDAP，目前仍然有不少 ccTLD 不支持RDAP，或者支持进度极为缓慢（比如 CNNIC），甚至有部分 ccTLD 的 WHOIS 服务器都长期处于不可用状态（说你呢`.uy`）
+
+此外，还有 `.arpa` 等供 rDNS 等特殊用途的顶级域名。
+
+## 已支持的TLD
+
+:::note
+
+所有 gTLD 目前理应全面支持 RDAP 端点，ICANN 也在计划终止 gTLD 的 WHOIS 服务，因此本项目不会积极维护 gTLD 的 WHOIS 解析方法。
+许多 ccTLD 也支持 RDAP 端点，但鉴于部分端点的可用性相当感人，WHOIS 解析依然会覆盖这些支持 RDAP 的 ccTLD。
+
+:::
+
+项目目前支持以下 ccTLD 的 WHOIS 解析
