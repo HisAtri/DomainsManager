@@ -12,20 +12,30 @@ from domainsmanager_lookup._internal.cache.memory import (
 from domainsmanager_lookup._internal.clients.iana import IanaClient
 from domainsmanager_lookup._internal.clients.iana_whois import IanaWhoisRecord
 from domainsmanager_lookup._internal.clients.rdap import RdapClient
+from domainsmanager_lookup._internal.clients.whois import WhoisClient
+from domainsmanager_lookup._internal.errors import LookupFailedError
 from domainsmanager_lookup._internal.models.registry import RegistryEndpoint
 from domainsmanager_lookup._internal.models.response import RawLookupResponse
 from domainsmanager_lookup._internal.normalization.domain import DomainNormalizer
 from domainsmanager_lookup._internal.parsers.rdap import RdapParser
-from domainsmanager_lookup._internal.parsers.whois import WhoisParser
+from domainsmanager_lookup._internal.parsers.whois import (
+    ProfiledWhoisParser,
+    WhoisParser,
+)
 from domainsmanager_lookup._internal.services.domain_lookup import DomainLookupService
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 class FakeEndpointProvider:
-    def __init__(self, rdap_url: str = "https://rdap.example") -> None:
+    def __init__(
+        self,
+        rdap_url: str | None = "https://rdap.example",
+        whois_server: str | None = "whois.example",
+    ) -> None:
         self.calls = 0
         self.rdap_url = rdap_url
+        self.whois_server = whois_server
 
     async def discover(self, domain):
         self.calls += 1
@@ -33,8 +43,8 @@ class FakeEndpointProvider:
         return RegistryEndpoint(
             key=domain.public_suffix,
             tld=domain.tld,
-            whois_server="whois.example",
-            rdap_urls=[self.rdap_url],
+            whois_server=self.whois_server,
+            rdap_urls=[] if self.rdap_url is None else [self.rdap_url],
             fetched_at=NOW,
             expires_at=NOW + timedelta(days=1),
         )
@@ -352,6 +362,72 @@ class DomainLookupServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(whois.calls, 1)
         self.assertEqual(provider.calls, 1)
 
+    async def test_uses_whois_directly_when_rdap_endpoint_is_missing(self):
+        provider = FakeEndpointProvider(rdap_url=None)
+        rdap = FakeClient("rdap", RDAP_BODY)
+        whois = FakeClient("whois", WHOIS_BODY)
+        service = DomainLookupService(
+            endpoint_provider=provider,
+            clients={"rdap": rdap, "whois": whois},
+            parsers={"rdap": RdapParser(), "whois": WhoisParser()},
+            clock=lambda: NOW,
+        )
+
+        result = await service.lookup("example.com")
+
+        self.assertEqual(result.info.source, "whois")
+        self.assertEqual(rdap.calls, 0)
+        self.assertEqual(whois.calls, 1)
+
+    async def test_fails_when_rdap_fallback_has_no_whois_profile(self):
+        rdap = FakeClient("rdap", "", error=OSError("RDAP unavailable"))
+        service = DomainLookupService(
+            endpoint_provider=FakeEndpointProvider(),
+            clients={"rdap": rdap, "whois": WhoisClient()},
+            parsers={"rdap": RdapParser(), "whois": ProfiledWhoisParser()},
+            clock=lambda: NOW,
+        )
+
+        with self.assertRaisesRegex(LookupFailedError, "Profile"):
+            await service.lookup("example.com")
+
+        self.assertEqual(rdap.calls, 1)
+
+    async def test_fails_without_querying_when_no_protocol_endpoint_exists(self):
+        rdap = FakeClient("rdap", RDAP_BODY)
+        whois = FakeClient("whois", WHOIS_BODY)
+        service = DomainLookupService(
+            endpoint_provider=FakeEndpointProvider(
+                rdap_url=None,
+                whois_server=None,
+            ),
+            clients={"rdap": rdap, "whois": whois},
+            parsers={"rdap": RdapParser(), "whois": WhoisParser()},
+            clock=lambda: NOW,
+        )
+
+        with self.assertRaises(LookupFailedError):
+            await service.lookup("example.com")
+
+        self.assertEqual(rdap.calls, 0)
+        self.assertEqual(whois.calls, 0)
+
+    async def test_fails_when_rdap_and_whois_are_unavailable(self):
+        rdap = FakeClient("rdap", "", error=OSError("RDAP unavailable"))
+        whois = FakeClient("whois", "", error=OSError("WHOIS unavailable"))
+        service = DomainLookupService(
+            endpoint_provider=FakeEndpointProvider(),
+            clients={"rdap": rdap, "whois": whois},
+            parsers={"rdap": RdapParser(), "whois": WhoisParser()},
+            clock=lambda: NOW,
+        )
+
+        with self.assertRaises(LookupFailedError):
+            await service.lookup("example.com")
+
+        self.assertEqual(rdap.calls, 1)
+        self.assertEqual(whois.calls, 1)
+
     async def test_registry_rdap_not_found_marks_domain_released_without_whois(self):
         def handler(_request: httpx.Request) -> httpx.Response:
             return httpx.Response(
@@ -366,11 +442,14 @@ class DomainLookupServiceTests(unittest.IsolatedAsyncioTestCase):
         async with httpx.AsyncClient(
             transport=httpx.MockTransport(handler)
         ) as http_client:
+            whois = FakeClient("whois", WHOIS_BODY)
             service = DomainLookupService(
                 endpoint_provider=FakeEndpointProvider("https://registry.example"),
-                clients={"rdap": RdapClient(http_client=http_client)},
-                parsers={"rdap": RdapParser()},
-                protocol_order=("rdap",),
+                clients={
+                    "rdap": RdapClient(http_client=http_client),
+                    "whois": whois,
+                },
+                parsers={"rdap": RdapParser(), "whois": WhoisParser()},
                 clock=lambda: NOW,
             )
             result = await service.lookup("example.com")
@@ -378,6 +457,7 @@ class DomainLookupServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.info.expiration_status, "released")
         self.assertEqual(result.info.expiration_checked_at, NOW)
         self.assertEqual(result.response.status_code, 404)
+        self.assertEqual(whois.calls, 0)
 
     async def test_falls_back_when_rdap_json_has_wrong_root_type(self):
         provider = FakeEndpointProvider()

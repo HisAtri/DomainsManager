@@ -151,6 +151,10 @@ class DomainLookupService:
             ) from exc
 
         for protocol in self._protocol_order:
+            if protocol == "rdap" and not endpoint.rdap_urls:
+                continue
+            if protocol == "whois" and not endpoint.whois_server:
+                continue
             try:
                 response = await self._clients[protocol].query(domain, endpoint)
                 try:
