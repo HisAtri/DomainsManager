@@ -1,5 +1,8 @@
 from domainsmanager_lookup._internal.whois_profiles.base import WhoisProfile
-from domainsmanager_lookup._internal.whois_profiles.key_value import KeyValueWhoisParser, WhoisFieldMap
+from domainsmanager_lookup._internal.whois_profiles.key_value import (
+    KeyValueWhoisParser,
+    WhoisFieldMap,
+)
 from domainsmanager_lookup._internal.whois_profiles.query import StandardWhoisQuery
 
 
