@@ -129,6 +129,37 @@ def test_admin_saves_turnstile_keys_as_plaintext(
         by_key = {item["key"]: item for item in response.json()}
         assert by_key["turnstile_secret_key"]["value"] == "secret-key"
 
+        response = client.put(
+            "/api/v1/admin/settings",
+            headers=headers,
+            json={
+                "settings": [
+                    {
+                        "key": "anti_bot_mode",
+                        "value": "image_captcha",
+                        "version": by_key["anti_bot_mode"]["version"],
+                    },
+                    {
+                        "key": "captcha_rotate",
+                        "value": False,
+                        "version": by_key["captcha_rotate"]["version"],
+                    },
+                ]
+            },
+        )
+        assert response.status_code == 200
+        by_key = {item["key"]: item for item in response.json()}
+        assert by_key["turnstile_site_key"]["value"] == "site-key"
+        assert by_key["turnstile_site_key"]["version"] == 1
+        assert by_key["turnstile_secret_key"]["value"] == "secret-key"
+        assert by_key["turnstile_secret_key"]["version"] == 1
+
+        current = client.get("/api/v1/admin/settings", headers=headers)
+        assert current.status_code == 200
+        current_by_key = {item["key"]: item for item in current.json()}
+        assert current_by_key["turnstile_site_key"]["value"] == "site-key"
+        assert current_by_key["turnstile_secret_key"]["value"] == "secret-key"
+
 
 @pytest.mark.api
 def test_footer_links_reject_unsafe_urls(tmp_path: Path) -> None:

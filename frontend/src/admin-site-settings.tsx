@@ -132,8 +132,10 @@ export function AdminSettingsV2({ onMessage, onDirtyChange }: { onMessage: (mess
     setSaving(true);
     try {
       const updated = await api.updateGlobalSettings(dirtySettings.map((item) => ({ key: item.key, version: item.version, value: apiValue(item, draft[item.key]) })));
-      setSettings(updated);
-      setDraft(Object.fromEntries(updated.map((item) => [item.key, displayValue(item)])));
+      const byKey = new Map(updated.map((item) => [item.key, item]));
+      const merged = settings.map((item) => byKey.get(item.key) ?? item);
+      setSettings(merged);
+      setDraft(Object.fromEntries(merged.map((item) => [item.key, displayValue(item)])));
       dispatchEvent(new Event("site-config-updated"));
       onMessage("设置已保存");
     } catch (error) { onMessage(error instanceof Error ? error.message : "设置保存失败"); } finally { setSaving(false); }

@@ -430,6 +430,16 @@ async def update_global_settings(
         )
     await session.commit()
     await resources.reload_global_policies()
+    rows = {
+        row.key: row
+        for row in (
+            await session.execute(
+                select(GlobalSetting).where(
+                    GlobalSetting.key.in_(GLOBAL_SETTING_BY_KEY)
+                )
+            )
+        ).scalars()
+    }
     return [
         setting_response(
             definition, rows.get(definition.key), definition.default(settings)
