@@ -64,6 +64,7 @@ class LookupOutcome(BaseModel):
     snapshot: DomainSnapshot | None = None
     error_code: LookupErrorCode | None = None
     error_message: str | None = None
+    retry_after: datetime | None = None
 
     @model_validator(mode="after")
     def validate_result(self) -> "LookupOutcome":

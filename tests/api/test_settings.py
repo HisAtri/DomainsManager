@@ -32,6 +32,7 @@ def test_settings_default_to_local_only_server() -> None:
     assert settings.server_host == "127.0.0.1"
     assert settings.server_port == 7920
     assert settings.registration_enabled is False
+    assert settings.check_interval_seconds == 604_800
     assert not hasattr(settings, "database_url")
 
 

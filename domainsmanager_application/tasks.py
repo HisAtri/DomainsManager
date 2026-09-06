@@ -28,7 +28,7 @@ class IdempotencyConflictError(TaskError):
 @dataclass(frozen=True, slots=True)
 class TaskExecutionPolicy:
     lease_duration: timedelta = timedelta(minutes=2)
-    successful_check_interval: timedelta = timedelta(days=1)
+    successful_check_interval: timedelta = timedelta(days=7)
     successful_refresh_ttl: timedelta = timedelta(minutes=30)
     max_attempts: int = 5
     retry_base_delay: timedelta = timedelta(minutes=1)
@@ -70,6 +70,7 @@ class RefreshTaskRecord:
     result_message: str | None = None
     source_check_id: UUID | None = None
     fresh_until: datetime | None = None
+    origin: str = "manual"
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,6 +127,7 @@ class RefreshTaskService:
         *,
         force_refresh: bool,
         idempotency_key: str,
+        origin: str = "manual",
     ) -> RefreshTaskRecord:
         now = self._clock()
         fingerprint = sha256(str(force_refresh).encode()).hexdigest()
@@ -162,8 +164,9 @@ class RefreshTaskService:
                 error_message=None,
                 available_at=now,
                 max_attempts=self._policy.max_attempts,
+                origin=origin,
             )
-            await uow.tasks.add(
+            task = await uow.tasks.add(
                 task, idempotency_key, fingerprint, now + timedelta(days=1)
             )
             await uow.commit()
@@ -231,6 +234,7 @@ class RefreshTaskService:
                 domain.id,
                 force_refresh=True,
                 idempotency_key="rdap-expiration-backfill-v1",
+                origin="backfill",
             )
         return len(candidates)
 
@@ -316,7 +320,13 @@ class RefreshTaskService:
                 )
             else:
                 retry_at = (
-                    self._policy.retry_at(completed, task.attempt_count)
+                    (
+                        result.retry_after
+                        if result.error_code is not None
+                        and result.error_code.value == "rate_limited"
+                        and result.retry_after is not None
+                        else self._policy.retry_at(completed, task.attempt_count)
+                    )
                     if self._is_retryable(result.error_code)
                     and task.attempt_count < task.max_attempts
                     else None

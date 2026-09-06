@@ -34,6 +34,21 @@ class RefreshLease:
     expires_at: datetime
 
 
+@dataclass(frozen=True, slots=True)
+class EndpointGateLease:
+    protocol: str
+    endpoint: str
+    token: UUID
+    expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class EndpointGateState:
+    blocked_until: datetime | None
+    lease_until: datetime | None
+    failure_count: int
+
+
 @runtime_checkable
 class LookupStore(Protocol):
     async def get_current(
@@ -55,3 +70,28 @@ class LookupStore(Protocol):
     ) -> RefreshLease | None: ...
 
     async def release_lease(self, lease: RefreshLease) -> None: ...
+
+    async def try_acquire_endpoint_gate(
+        self,
+        protocol: str,
+        endpoint: str,
+        owner: str,
+        ttl: timedelta,
+    ) -> EndpointGateLease | None: ...
+
+    async def get_endpoint_gate_state(
+        self, protocol: str, endpoint: str
+    ) -> EndpointGateState | None: ...
+
+    async def release_endpoint_gate(
+        self, lease: EndpointGateLease, *, succeeded: bool
+    ) -> None: ...
+
+    async def block_endpoint_gate(
+        self,
+        lease: EndpointGateLease,
+        *,
+        retry_after: datetime | None,
+        retry_base: timedelta,
+        retry_max: timedelta,
+    ) -> datetime: ...

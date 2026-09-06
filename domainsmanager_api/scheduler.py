@@ -37,6 +37,9 @@ async def run(
     effective_stop = stop or Event()
     scheduler_id = default_scheduler_id()
     try:
+        await run_component_cycle(
+            "scheduler", scheduler_id, resources.scheduler.spread_overdue()
+        )
         while not effective_stop.is_set():
             if isinstance(resources, Resources):
                 effective_settings = await resources.reload_global_policies()

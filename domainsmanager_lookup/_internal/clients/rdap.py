@@ -1,9 +1,13 @@
 from datetime import UTC, datetime, timedelta
+from email.utils import parsedate_to_datetime
 from urllib.parse import urlsplit
 
 import httpx
 
-from domainsmanager_lookup._internal.errors import ProtocolUnavailableError
+from domainsmanager_lookup._internal.errors import (
+    ProtocolUnavailableError,
+    UpstreamRateLimitError,
+)
 from domainsmanager_lookup._internal.models.domain import NormalizedDomain
 from domainsmanager_lookup._internal.models.registry import RegistryEndpoint
 from domainsmanager_lookup._internal.models.response import (
@@ -60,6 +64,14 @@ class RdapClient:
     ) -> RawLookupResponse:
         response = await self._get(url, follow_redirects=follow_redirects)
         now = datetime.now(UTC)
+        if response.status_code == 429:
+            raise UpstreamRateLimitError(
+                "rdap",
+                url,
+                retry_after=self._parse_retry_after(
+                    response.headers.get("retry-after"), now
+                ),
+            )
         if response.status_code != 404:
             response.raise_for_status()
         return RawLookupResponse(
@@ -102,3 +114,19 @@ class RdapClient:
             or parsed.port not in {None, 443}
         ):
             raise ProtocolUnavailableError("注册局提供的注册商 RDAP 链接不安全")
+
+    @staticmethod
+    def _parse_retry_after(value: str | None, now: datetime) -> datetime | None:
+        if value is None:
+            return None
+        try:
+            seconds = int(value.strip())
+        except ValueError:
+            try:
+                parsed = parsedate_to_datetime(value)
+            except (TypeError, ValueError, OverflowError):
+                return None
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            return parsed.astimezone(UTC)
+        return now + timedelta(seconds=max(0, seconds))

@@ -180,7 +180,7 @@ async def test_admin_user_and_domain_access(tmp_path: Path) -> None:
         metrics = client.get("/api/v1/admin/operations/metrics", headers=admin)
         assert metrics.status_code == 200
         assert metrics.json()["refresh_tasks"] == {
-            "queued": 2,
+            "queued": 1,
             "running": 0,
             "expired_leases": 0,
         }

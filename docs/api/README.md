@@ -2,7 +2,7 @@
 
 ## 刷新任务执行策略
 
-Worker 在外部查询期间以任务租约三分之一的间隔续约。成功检查会记录稳定快照哈希和变更字段，并将下次常规检查时间设置为 `DOMAINSMANAGER_CHECK_INTERVAL_SECONDS`（默认 86400 秒）之后；失败检查不会覆盖最近一次成功快照。`changed_fields` 仅比较注册商、状态、注册/到期/注册局更新时间、名称服务器和 DNSSEC 状态。该内部调度时间当前不通过普通用户域名 API 暴露。
+Worker 在外部查询期间以任务租约三分之一的间隔续约。成功检查会记录稳定快照哈希和变更字段，并将下次常规检查时间设置为 `DOMAINSMANAGER_CHECK_INTERVAL_SECONDS`（默认 604800 秒）之后；失败检查不会覆盖最近一次成功快照。`changed_fields` 仅比较注册商、状态、注册/到期/注册局更新时间、名称服务器和 DNSSEC 状态。该内部调度时间当前不通过普通用户域名 API 暴露。
 
 刷新任务默认最多尝试 5 次。`rate_limited` 与 `temporary_failure` 使用指数退避重新排队；其他错误或达到重试上限后进入 `failed`。可通过 `DOMAINSMANAGER_TASK_MAX_ATTEMPTS`、`DOMAINSMANAGER_TASK_RETRY_BASE_SECONDS`、`DOMAINSMANAGER_TASK_RETRY_MAX_SECONDS` 和 `DOMAINSMANAGER_TASK_LEASE_SECONDS` 调整策略。Worker 租约保持由后续 Worker 心跳实现。
 

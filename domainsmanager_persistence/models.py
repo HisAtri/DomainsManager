@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
@@ -257,6 +258,17 @@ class DomainRefreshTask(TimestampMixin, Base):
         Index(
             "ix_domain_refresh_task_domain_created", "managed_domain_id", "created_at"
         ),
+        Index(
+            "uq_domain_refresh_task_active_domain",
+            "managed_domain_id",
+            unique=True,
+            postgresql_where=text("status IN ('queued', 'running')"),
+            sqlite_where=text("status IN ('queued', 'running')"),
+        ),
+        CheckConstraint(
+            "origin IN ('manual', 'scheduled', 'monitor_enabled', 'backfill')",
+            name="domain_refresh_task_valid_origin",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
@@ -267,6 +279,9 @@ class DomainRefreshTask(TimestampMixin, Base):
         ForeignKey("managed_domain.id", ondelete="CASCADE"), nullable=False
     )
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="queued")
+    origin: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="manual", server_default="manual"
+    )
     force_refresh: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
@@ -289,6 +304,24 @@ class DomainRefreshTask(TimestampMixin, Base):
     result_code: Mapped[str | None] = mapped_column(String(64))
     result_message: Mapped[str | None] = mapped_column(String(512))
     fresh_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class EndpointRequestGate(Base):
+    __tablename__ = "endpoint_request_gate"
+    __table_args__ = (
+        CheckConstraint("failure_count >= 0", name="endpoint_gate_failure_nonnegative"),
+        Index("ix_endpoint_request_gate_blocked", "blocked_until"),
+        Index("ix_endpoint_request_gate_lease", "lease_until"),
+    )
+
+    protocol: Mapped[str] = mapped_column(String(16), primary_key=True)
+    endpoint: Mapped[str] = mapped_column(String(2048), primary_key=True)
+    blocked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failure_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    lease_token: Mapped[UUID | None] = mapped_column(Uuid)
+    lease_owner: Mapped[str | None] = mapped_column(String(128))
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class IdempotencyRecord(Base):

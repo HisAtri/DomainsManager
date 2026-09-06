@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from domainsmanager_application.tasks import (
     CheckPage,
     DomainCheckRecord,
+    IdempotencyConflictError,
     RefreshTaskRecord,
     TaskPage,
 )
@@ -55,25 +56,64 @@ class SqlAlchemyTaskRepository:
         key: str,
         fingerprint: str,
         expires_at: datetime,
-    ) -> None:
-        self._session.add(
-            DomainRefreshTask(
-                id=task.id,
-                user_id=task.user_id,
-                managed_domain_id=task.domain_id,
-                status=task.status,
-                force_refresh=task.force_refresh,
-                attempt_count=task.attempt_count,
-                max_attempts=task.max_attempts,
-                available_at=task.available_at or task.created_at,
-                created_at=task.created_at,
-                updated_at=task.updated_at,
-                result_code=task.result_code,
-                result_message=task.result_message,
-                source_check_id=task.source_check_id,
-                fresh_until=task.fresh_until,
+    ) -> RefreshTaskRecord:
+        existing = await self._active_for_domain(task.domain_id, for_update=True)
+        if existing is not None:
+            await self._add_idempotency(
+                task, existing.id, key, fingerprint, expires_at
             )
+            return self._task_record(existing, task.domain_name)
+
+        row = DomainRefreshTask(
+            id=task.id,
+            user_id=task.user_id,
+            managed_domain_id=task.domain_id,
+            status=task.status,
+            origin=task.origin,
+            force_refresh=task.force_refresh,
+            attempt_count=task.attempt_count,
+            max_attempts=task.max_attempts,
+            available_at=task.available_at or task.created_at,
+            created_at=task.created_at,
+            updated_at=task.updated_at,
+            result_code=task.result_code,
+            result_message=task.result_message,
+            source_check_id=task.source_check_id,
+            fresh_until=task.fresh_until,
         )
+        try:
+            async with self._session.begin_nested():
+                self._session.add(row)
+                await self._session.flush()
+        except IntegrityError:
+            existing = await self._active_for_domain(task.domain_id, for_update=True)
+            if existing is None:
+                raise
+            await self._add_idempotency(
+                task, existing.id, key, fingerprint, expires_at
+            )
+            return self._task_record(existing, task.domain_name)
+
+        await self._add_idempotency(task, task.id, key, fingerprint, expires_at)
+        return task
+
+    async def _add_idempotency(
+        self,
+        task: RefreshTaskRecord,
+        task_id: UUID,
+        key: str,
+        fingerprint: str,
+        expires_at: datetime,
+    ) -> None:
+        existing = await self.get_idempotent(
+            task.user_id, "domain_refresh", task.domain_id, key
+        )
+        if existing is not None:
+            if existing.request_fingerprint != fingerprint:
+                raise IdempotencyConflictError(
+                    "idempotency key has a different request"
+                )
+            return
         self._session.add(
             IdempotencyRecord(
                 id=uuid4(),
@@ -82,12 +122,23 @@ class SqlAlchemyTaskRepository:
                 resource_id=task.domain_id,
                 key=key,
                 request_fingerprint=fingerprint,
-                task_id=task.id,
+                task_id=task_id,
                 created_at=task.created_at,
                 expires_at=expires_at,
             )
         )
         await self._session.flush()
+
+    async def _active_for_domain(
+        self, domain_id: UUID, *, for_update: bool = False
+    ) -> DomainRefreshTask | None:
+        statement = select(DomainRefreshTask).where(
+            DomainRefreshTask.managed_domain_id == domain_id,
+            DomainRefreshTask.status.in_(("queued", "running")),
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return (await self._session.execute(statement)).scalar_one_or_none()
 
     async def get(self, user_id: UUID, task_id: UUID) -> RefreshTaskRecord | None:
         result = await self._session.execute(
@@ -642,6 +693,7 @@ class SqlAlchemyTaskRepository:
             domain_id=task.managed_domain_id,
             domain_name=domain_name,
             status=task.status,
+            origin=task.origin,
             force_refresh=task.force_refresh,
             attempt_count=task.attempt_count,
             created_at=as_utc(task.created_at),

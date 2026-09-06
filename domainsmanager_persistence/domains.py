@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -15,7 +16,7 @@ from domainsmanager_application.domains import (
     ManagedDomainRecord,
     ScheduledDomain,
 )
-from domainsmanager_persistence.models import ManagedDomain
+from domainsmanager_persistence.models import DomainRefreshTask, ManagedDomain
 
 
 def as_utc(value: datetime | None) -> datetime | None:
@@ -289,6 +290,52 @@ class SqlAlchemyDomainRepository:
             )
         await self._session.flush()
         return claimed
+
+    async def spread_due(
+        self,
+        now: datetime,
+        interval: timedelta,
+        limit: int,
+        offset_seconds: Callable[[int], int],
+    ) -> int:
+        rows = (
+            (
+                await self._session.execute(
+                    select(ManagedDomain)
+                    .where(
+                        ManagedDomain.monitor_enabled.is_(True),
+                        ManagedDomain.deleted_at.is_(None),
+                        ManagedDomain.next_check_at.is_not(None),
+                        ManagedDomain.next_check_at <= now,
+                    )
+                    .order_by(ManagedDomain.next_check_at, ManagedDomain.id)
+                    .limit(limit)
+                    .with_for_update(skip_locked=True)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        upper = max(0, int(interval.total_seconds()))
+        for domain in rows:
+            delay = min(max(0, offset_seconds(upper)), upper)
+            scheduled_at = now + timedelta(seconds=delay)
+            if scheduled_at <= now:
+                scheduled_at = now + timedelta(microseconds=1)
+            domain.next_check_at = scheduled_at
+            domain.updated_at = now
+            domain.version += 1
+            await self._session.execute(
+                update(DomainRefreshTask)
+                .where(
+                    DomainRefreshTask.managed_domain_id == domain.id,
+                    DomainRefreshTask.status == "queued",
+                    DomainRefreshTask.origin == "scheduled",
+                )
+                .values(available_at=scheduled_at, updated_at=now)
+            )
+        await self._session.flush()
+        return len(rows)
 
     async def list_expiration_backfill_candidates(
         self, limit: int

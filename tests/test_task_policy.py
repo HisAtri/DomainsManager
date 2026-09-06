@@ -4,7 +4,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from domainsmanager_application.auth import UserRecord
 from domainsmanager_application.domains import ManagedDomainRecord
@@ -21,6 +21,7 @@ from domainsmanager_persistence.db import (
     run_migrations,
 )
 from domainsmanager_persistence.models import (
+    DomainRefreshTask,
     ManagedDomain,
     NotificationOutbox,
     NotificationRule,
@@ -38,6 +39,90 @@ def test_task_retry_policy_uses_bounded_exponential_backoff() -> None:
     assert policy.retry_at(now, 1) == now + timedelta(seconds=10)
     assert policy.retry_at(now, 2) == now + timedelta(seconds=20)
     assert policy.retry_at(now, 3) == now + timedelta(seconds=25)
+
+
+@pytest.mark.asyncio
+async def test_enqueue_reuses_existing_active_task_even_for_force_refresh(
+    tmp_path: Path,
+) -> None:
+    database = sqlite_database(tmp_path / "task-merge.db")
+    await run_migrations(database)
+    engine = create_engine(database)
+    factory = SqlAlchemyUnitOfWorkFactory(create_session_factory(engine))
+    now = datetime(2026, 9, 6, tzinfo=UTC)
+    user_id = uuid4()
+    domain_id = uuid4()
+    try:
+        async with factory() as uow:
+            await uow.users.add(
+                UserRecord(
+                    id=user_id,
+                    username="merge-user",
+                    username_normalized="merge-user",
+                    password_hash="hash",
+                    email=None,
+                    role="user",
+                    preferences={},
+                    is_active=True,
+                    banned_at=None,
+                    password_changed_at=now,
+                    last_login_at=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            await uow.domains.add(
+                ManagedDomainRecord(
+                    id=domain_id,
+                    user_id=user_id,
+                    name_ascii="example.com",
+                    name_unicode="example.com",
+                    registrable_domain="example.com",
+                    public_suffix="com",
+                    tld="com",
+                    monitor_enabled=True,
+                    renewal_mode=None,
+                    notes=None,
+                    expires_at=None,
+                    last_check_at=None,
+                    last_outcome=None,
+                    version=1,
+                    created_at=now,
+                    updated_at=now,
+                    deleted_at=None,
+                )
+            )
+            await uow.commit()
+
+        service = RefreshTaskService(
+            unit_of_work=factory,
+            lookup=object(),  # type: ignore[arg-type]
+            clock=lambda: now,
+        )
+        first = await service.enqueue(
+            user_id,
+            domain_id,
+            force_refresh=False,
+            idempotency_key="first-key",
+        )
+        merged = await service.enqueue(
+            user_id,
+            domain_id,
+            force_refresh=True,
+            idempotency_key="second-key",
+        )
+
+        assert merged.id == first.id
+        assert merged.force_refresh is False
+        async with engine.connect() as connection:
+            active_count = await connection.scalar(
+                select(func.count())
+                .select_from(DomainRefreshTask)
+                .where(DomainRefreshTask.status.in_(("queued", "running")))
+            )
+        assert active_count == 1
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio

@@ -13,7 +13,10 @@ from domainsmanager_lookup._internal.clients.iana import IanaClient
 from domainsmanager_lookup._internal.clients.iana_whois import IanaWhoisRecord
 from domainsmanager_lookup._internal.clients.rdap import RdapClient
 from domainsmanager_lookup._internal.clients.whois import WhoisClient
-from domainsmanager_lookup._internal.errors import LookupFailedError
+from domainsmanager_lookup._internal.errors import (
+    LookupFailedError,
+    UpstreamRateLimitError,
+)
 from domainsmanager_lookup._internal.models.registry import RegistryEndpoint
 from domainsmanager_lookup._internal.models.response import RawLookupResponse
 from domainsmanager_lookup._internal.normalization.domain import DomainNormalizer
@@ -23,6 +26,8 @@ from domainsmanager_lookup._internal.parsers.whois import (
     WhoisParser,
 )
 from domainsmanager_lookup._internal.services.domain_lookup import DomainLookupService
+from domainsmanager_lookup.endpoint_gate import EndpointRequestGate
+from domainsmanager_lookup.memory_store import MemoryLookupStore
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
 
@@ -150,6 +155,28 @@ class IanaClientTests(unittest.IsolatedAsyncioTestCase):
 
 
 class DomainLookupServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_rate_limit_retry_time_survives_lookup_fallback_processing(self):
+        retry_after = datetime.now(UTC) + timedelta(minutes=3)
+        service = DomainLookupService(
+            endpoint_provider=FakeEndpointProvider(whois_server=None),
+            clients={
+                "rdap": FakeClient(
+                    "rdap",
+                    RDAP_BODY,
+                    error=UpstreamRateLimitError(
+                        "rdap", "https://rdap.example", retry_after=retry_after
+                    ),
+                )
+            },
+            parsers={"rdap": RdapParser()},
+            protocol_order=("rdap",),
+            endpoint_gate=EndpointRequestGate(MemoryLookupStore()),
+        )
+
+        with self.assertRaises(LookupFailedError) as raised:
+            await service.lookup("example.com", force_refresh=True)
+        self.assertEqual(raised.exception.retry_after, retry_after)
+
     async def test_uses_registry_related_rdap_for_registrar_expiration(self):
         requests: list[str] = []
 

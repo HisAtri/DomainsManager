@@ -4,6 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
+from secrets import randbelow
 from uuid import uuid4
 
 from domainsmanager_application.auth import UnitOfWorkFactory
@@ -12,7 +13,7 @@ from domainsmanager_application.tasks import RefreshTaskRecord
 
 @dataclass(frozen=True, slots=True)
 class SchedulerPolicy:
-    check_interval: timedelta = timedelta(days=1)
+    check_interval: timedelta = timedelta(days=7)
     batch_size: int = 100
 
 
@@ -25,10 +26,32 @@ class DomainSchedulerService:
         unit_of_work: UnitOfWorkFactory,
         policy: SchedulerPolicy | None = None,
         clock: Callable[[], datetime] | None = None,
+        random_offset_seconds: Callable[[int], int] | None = None,
     ) -> None:
         self._unit_of_work = unit_of_work
         self._policy = policy or SchedulerPolicy()
         self._clock = clock or (lambda: datetime.now(UTC))
+        self._random_offset_seconds = random_offset_seconds or (
+            lambda upper: randbelow(upper + 1)
+        )
+
+    async def spread_overdue(self) -> int:
+        """Spread restart backlog across one full checking interval."""
+        now = self._clock()
+        total = 0
+        while True:
+            async with self._unit_of_work() as uow:
+                count = await uow.domains.spread_due(
+                    now,
+                    self._policy.check_interval,
+                    self._policy.batch_size,
+                    self._random_offset_seconds,
+                )
+                if count:
+                    await uow.commit()
+            total += count
+            if count < self._policy.batch_size:
+                return total
 
     async def run_once(self) -> int:
         now = self._clock()
@@ -58,6 +81,7 @@ class DomainSchedulerService:
                         error_code=None,
                         error_message=None,
                         available_at=now,
+                        origin="scheduled",
                     ),
                     key,
                     fingerprint,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy import and_, delete, or_, select, update
@@ -8,8 +8,15 @@ from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from domainsmanager_lookup.store import LookupStore, RefreshLease, StoredLookupRecord
+from domainsmanager_lookup.store import (
+    EndpointGateLease,
+    EndpointGateState,
+    LookupStore,
+    RefreshLease,
+    StoredLookupRecord,
+)
 from domainsmanager_persistence.models import (
+    EndpointRequestGate,
     LookupCacheHead,
     LookupRecord,
     LookupRefreshLease,
@@ -39,7 +46,7 @@ class SqlAlchemyLookupStore(LookupStore):
             return self._to_record(row) if row is not None else None
 
     async def publish(self, record: StoredLookupRecord) -> None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         async with self._sessions() as session, session.begin():
             await session.execute(self._record_insert(session, record, now))
             effective_id = await self._effective_record_id(session, record)
@@ -70,7 +77,7 @@ class SqlAlchemyLookupStore(LookupStore):
         owner: str,
         ttl: timedelta,
     ) -> RefreshLease | None:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         token = uuid4()
         expires_at = now + ttl
         async with self._sessions() as session, session.begin():
@@ -99,6 +106,132 @@ class SqlAlchemyLookupStore(LookupStore):
                     LookupRefreshLease.lease_token == lease.token,
                 )
             )
+
+    async def try_acquire_endpoint_gate(
+        self,
+        protocol: str,
+        endpoint: str,
+        owner: str,
+        ttl: timedelta,
+    ) -> EndpointGateLease | None:
+        now = datetime.now(UTC)
+        token = uuid4()
+        expires_at = now + ttl
+        async with self._sessions() as session, session.begin():
+            statement = self._insert_for(session, EndpointRequestGate).values(
+                protocol=protocol,
+                endpoint=endpoint,
+                blocked_until=None,
+                failure_count=0,
+                lease_token=None,
+                lease_owner=None,
+                lease_until=None,
+                updated_at=now,
+            )
+            await session.execute(statement.on_conflict_do_nothing())
+            result = await session.execute(
+                update(EndpointRequestGate)
+                .where(
+                    EndpointRequestGate.protocol == protocol,
+                    EndpointRequestGate.endpoint == endpoint,
+                    or_(
+                        EndpointRequestGate.blocked_until.is_(None),
+                        EndpointRequestGate.blocked_until <= now,
+                    ),
+                    or_(
+                        EndpointRequestGate.lease_until.is_(None),
+                        EndpointRequestGate.lease_until <= now,
+                    ),
+                )
+                .values(
+                    lease_token=token,
+                    lease_owner=owner,
+                    lease_until=expires_at,
+                    updated_at=now,
+                )
+                .returning(EndpointRequestGate.lease_token)
+            )
+            if result.first() is None:
+                return None
+        return EndpointGateLease(protocol, endpoint, token, expires_at)
+
+    async def get_endpoint_gate_state(
+        self, protocol: str, endpoint: str
+    ) -> EndpointGateState | None:
+        async with self._sessions() as session:
+            row = await session.get(EndpointRequestGate, (protocol, endpoint))
+            if row is None:
+                return None
+            return EndpointGateState(
+                self._as_aware(row.blocked_until),
+                self._as_aware(row.lease_until),
+                row.failure_count,
+            )
+
+    async def release_endpoint_gate(
+        self, lease: EndpointGateLease, *, succeeded: bool
+    ) -> None:
+        values: dict[str, object] = {
+            "lease_token": None,
+            "lease_owner": None,
+            "lease_until": None,
+            "updated_at": datetime.now(UTC),
+        }
+        if succeeded:
+            values.update(blocked_until=None, failure_count=0)
+        async with self._sessions() as session, session.begin():
+            await session.execute(
+                update(EndpointRequestGate)
+                .where(
+                    EndpointRequestGate.protocol == lease.protocol,
+                    EndpointRequestGate.endpoint == lease.endpoint,
+                    EndpointRequestGate.lease_token == lease.token,
+                )
+                .values(**values)
+            )
+
+    async def block_endpoint_gate(
+        self,
+        lease: EndpointGateLease,
+        *,
+        retry_after: datetime | None,
+        retry_base: timedelta,
+        retry_max: timedelta,
+    ) -> datetime:
+        now = datetime.now(UTC)
+        async with self._sessions() as session, session.begin():
+            row = (
+                await session.execute(
+                    select(EndpointRequestGate)
+                    .where(
+                        EndpointRequestGate.protocol == lease.protocol,
+                        EndpointRequestGate.endpoint == lease.endpoint,
+                        EndpointRequestGate.lease_token == lease.token,
+                    )
+                    .with_for_update()
+                )
+            ).scalar_one_or_none()
+            if row is None:
+                current = await session.get(
+                    EndpointRequestGate, (lease.protocol, lease.endpoint)
+                )
+                return (
+                    self._as_aware(current.blocked_until)
+                    if current is not None and current.blocked_until is not None
+                    else now
+                )
+            failures = row.failure_count + 1
+            delay = min(retry_base * (2 ** (failures - 1)), retry_max)
+            blocked_until = retry_after if retry_after is not None else now + delay
+            blocked_until = max(now, blocked_until)
+            row.blocked_until = blocked_until
+            row.failure_count = failures
+            row.lease_token = None
+            row.lease_owner = None
+            row.lease_until = None
+            row.updated_at = now
+            await session.flush()
+            return blocked_until
 
     @staticmethod
     def _insert_for(session: AsyncSession, table):
@@ -265,4 +398,4 @@ class SqlAlchemyLookupStore(LookupStore):
     def _as_aware(value: datetime | None) -> datetime | None:
         if value is None or value.tzinfo is not None:
             return value
-        return value.replace(tzinfo=timezone.utc)
+        return value.replace(tzinfo=UTC)

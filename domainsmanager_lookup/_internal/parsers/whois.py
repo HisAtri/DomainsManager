@@ -1,7 +1,11 @@
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from domainsmanager_lookup._internal.errors import ResponseParseError, WhoisResponseError
+from domainsmanager_lookup._internal.errors import (
+    ResponseParseError,
+    UpstreamRateLimitError,
+    WhoisResponseError,
+)
 from domainsmanager_lookup._internal.models.domain import (
     DNSSECInfo,
     DomainDates,
@@ -10,8 +14,13 @@ from domainsmanager_lookup._internal.models.domain import (
     RegistrarInfo,
 )
 from domainsmanager_lookup._internal.models.response import RawLookupResponse
-from domainsmanager_lookup._internal.whois_profiles.defaults import get_default_whois_registry
-from domainsmanager_lookup._internal.whois_profiles.models import WhoisParseResult, WhoisResponseStatus
+from domainsmanager_lookup._internal.whois_profiles.defaults import (
+    get_default_whois_registry,
+)
+from domainsmanager_lookup._internal.whois_profiles.models import (
+    WhoisParseResult,
+    WhoisResponseStatus,
+)
 from domainsmanager_lookup._internal.whois_profiles.registry import WhoisProfileRegistry
 
 
@@ -35,6 +44,8 @@ class ProfiledWhoisParser:
         domain: NormalizedDomain,
     ) -> DomainInfo:
         result = self.parse_result(response, domain)
+        if result.status is WhoisResponseStatus.RATE_LIMITED:
+            raise UpstreamRateLimitError("whois", response.endpoint)
         if result.status is not WhoisResponseStatus.FOUND or result.info is None:
             raise WhoisResponseError(
                 f"WHOIS Profile {result.parser_key!r} 返回状态 {result.status.value!r}"
@@ -145,9 +156,9 @@ class WhoisParser:
             return None
         candidate = value.strip().rstrip(".")
         try:
-            parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(candidate)
         except ValueError:
             return None
         if parsed.tzinfo is None:
-            return parsed.replace(tzinfo=timezone.utc)
+            return parsed.replace(tzinfo=UTC)
         return parsed

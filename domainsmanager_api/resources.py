@@ -114,6 +114,10 @@ class Resources:
             seconds=effective.notification_retry_max_seconds
         )
         self.rate_limiter.update(effective)
+        self.lookup.configure_endpoint_retry(
+            base=timedelta(seconds=effective.task_retry_base_seconds),
+            maximum=timedelta(seconds=effective.task_retry_max_seconds),
+        )
         return effective
 
     async def database_ready(self) -> bool:
@@ -153,6 +157,10 @@ def create_resources(settings: Settings) -> Resources:
     sessions = create_session_factory(engine)
     store = SqlAlchemyLookupStore(sessions)
     lookup = DomainLookup(store=store)
+    lookup.configure_endpoint_retry(
+        base=timedelta(seconds=settings.task_retry_base_seconds),
+        maximum=timedelta(seconds=settings.task_retry_max_seconds),
+    )
     unit_of_work = SqlAlchemyUnitOfWorkFactory(sessions)
     auth = AuthService(
         unit_of_work=unit_of_work,

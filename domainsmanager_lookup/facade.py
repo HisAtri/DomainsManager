@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Sequence
+from datetime import timedelta
 
 from domainsmanager_lookup._internal.cache.stored import (
     StoredDomainResponseCache,
@@ -12,6 +13,7 @@ from domainsmanager_lookup._internal.errors import (
 from domainsmanager_lookup._internal.models.domain import DomainInfo, NormalizedDomain
 from domainsmanager_lookup._internal.normalization.domain import DomainNormalizer
 from domainsmanager_lookup._internal.services.domain_lookup import DomainLookupService
+from domainsmanager_lookup.endpoint_gate import EndpointRequestGate
 from domainsmanager_lookup.exceptions import InvalidDomainError
 from domainsmanager_lookup.memory_store import MemoryLookupStore
 from domainsmanager_lookup.store import LookupStore
@@ -37,10 +39,12 @@ class DomainLookup:
     ) -> None:
         if service is None:
             effective_store = store or MemoryLookupStore()
+            endpoint_gate = EndpointRequestGate(effective_store)
             service = DomainLookupService(
                 response_cache=StoredDomainResponseCache(effective_store),
                 endpoint_cache=StoredRegistryEndpointCache(effective_store),
                 normalizer=normalizer,
+                endpoint_gate=endpoint_gate,
             )
         self._service = service
         self._normalizer = normalizer or self._service._normalizer
@@ -85,9 +89,18 @@ class DomainLookup:
                     input_name=name,
                     error_code=self._classify_error(exc),
                     error_message=str(exc),
+                    retry_after=exc.retry_after,
                 )
 
         return list(await asyncio.gather(*(lookup_one(name) for name in names)))
+
+    def configure_endpoint_retry(
+        self, *, base: timedelta, maximum: timedelta
+    ) -> None:
+        gate = self._service._endpoint_gate
+        if gate is not None:
+            gate.retry_base = base
+            gate.retry_max = maximum
 
     @staticmethod
     def _identity(domain: NormalizedDomain) -> DomainIdentity:

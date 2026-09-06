@@ -1,6 +1,8 @@
 import asyncio
 from collections.abc import Callable
-from datetime import datetime, timezone
+from contextlib import suppress
+from datetime import UTC, datetime
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
@@ -19,7 +21,11 @@ from domainsmanager_lookup._internal.clients.base import (
 from domainsmanager_lookup._internal.clients.iana import IanaClient
 from domainsmanager_lookup._internal.clients.rdap import RdapClient
 from domainsmanager_lookup._internal.clients.whois import WhoisClient
-from domainsmanager_lookup._internal.errors import DomainManagerError, LookupFailedError
+from domainsmanager_lookup._internal.errors import (
+    DomainManagerError,
+    LookupFailedError,
+    UpstreamRateLimitError,
+)
 from domainsmanager_lookup._internal.lifecycle import determine_expiration_status
 from domainsmanager_lookup._internal.models.domain import (
     DNSSECInfo,
@@ -40,6 +46,7 @@ from domainsmanager_lookup._internal.parsers.whois import ProfiledWhoisParser
 from domainsmanager_lookup._internal.whois_profiles.defaults import (
     build_default_whois_registry,
 )
+from domainsmanager_lookup.endpoint_gate import EndpointRequestGate
 
 
 class DomainLookupService:
@@ -55,6 +62,7 @@ class DomainLookupService:
         parsers: dict[LookupProtocol, ResponseParser] | None = None,
         protocol_order: tuple[LookupProtocol, ...] = ("rdap", "whois"),
         clock: Callable[[], datetime] | None = None,
+        endpoint_gate: EndpointRequestGate | None = None,
     ) -> None:
         self._responses = response_cache or MemoryDomainResponseCache()
         self._endpoints = endpoint_cache or MemoryRegistryEndpointCache()
@@ -78,7 +86,8 @@ class DomainLookupService:
             }
         )
         self._protocol_order = protocol_order
-        self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._clock = clock or (lambda: datetime.now(UTC))
+        self._endpoint_gate = endpoint_gate
         self._endpoint_locks: dict[str, asyncio.Lock] = {}
 
         missing = [
@@ -98,6 +107,7 @@ class DomainLookupService:
     ) -> LookupResult:
         domain = self._normalizer.normalize(name)
         errors: list[str] = []
+        retry_times: list[datetime] = []
 
         if not force_refresh:
             for protocol in self._protocol_order:
@@ -156,21 +166,30 @@ class DomainLookupService:
             if protocol == "whois" and not endpoint.whois_server:
                 continue
             try:
-                response = await self._clients[protocol].query(domain, endpoint)
-                try:
-                    info = self._parse_response(protocol, response, domain)
-                except (DomainManagerError, ValueError, TypeError):
-                    mark_unusable = getattr(self._responses, "mark_unusable", None)
-                    if mark_unusable is not None:
-                        try:
-                            await mark_unusable(response, "response parsing failed")
-                        except Exception:
-                            pass
-                    raise
-                try:
+                async def query_and_parse(
+                    _protocol: LookupProtocol = protocol,
+                ) -> tuple[RawLookupResponse, DomainInfo]:
+                    response = await self._clients[_protocol].query(domain, endpoint)
+                    try:
+                        info = self._parse_response(_protocol, response, domain)
+                    except (DomainManagerError, ValueError, TypeError):
+                        mark_unusable = getattr(self._responses, "mark_unusable", None)
+                        if mark_unusable is not None:
+                            with suppress(Exception):
+                                await mark_unusable(response, "response parsing failed")
+                        raise
+                    return response, info
+
+                if self._endpoint_gate is None:
+                    response, info = await query_and_parse()
+                else:
+                    response, info = await self._endpoint_gate.run(
+                        protocol,
+                        self._endpoint_key(protocol, domain, endpoint),
+                        query_and_parse,
+                    )
+                with suppress(Exception):
                     await self._responses.save(response)
-                except Exception:
-                    pass
                 info, registrar_response = await self._finalize_lookup(
                     protocol, domain, info
                 )
@@ -181,6 +200,10 @@ class DomainLookupService:
                     registrar_response=registrar_response,
                     endpoint_cache_hit=endpoint_cache_hit,
                 )
+            except UpstreamRateLimitError as exc:
+                errors.append(str(exc))
+                if exc.retry_after is not None:
+                    retry_times.append(exc.retry_after)
             except (
                 DomainManagerError,
                 httpx.HTTPError,
@@ -192,7 +215,10 @@ class DomainLookupService:
                 errors.append(f"{protocol} 查询失败：{exc}")
 
         detail = "; ".join(errors) or "没有配置查询协议"
-        raise LookupFailedError(f"查询 {domain.registrable_domain} 失败：{detail}")
+        raise LookupFailedError(
+            f"查询 {domain.registrable_domain} 失败：{detail}",
+            retry_after=min(retry_times) if retry_times else None,
+        )
 
     async def lookup_many(
         self,
@@ -265,7 +291,16 @@ class DomainLookupService:
                 rdap_role="registrar",
             )
             if response is None:
-                response = await client.query_related(domain, related_url)
+                if self._endpoint_gate is None:
+                    response = await client.query_related(domain, related_url)
+                else:
+                    response = await self._endpoint_gate.run(
+                        "rdap",
+                        self._canonical_rdap_endpoint(
+                            related_url, domain.registrable_domain
+                        ),
+                        lambda: client.query_related(domain, related_url),
+                    )
                 await self._responses.save(response)
             registrar_info = parser.parse(response, domain)
         except (
@@ -331,3 +366,29 @@ class DomainLookupService:
                 parser_version=parser.VERSION,
             )
         return parser.parse(response, domain)
+
+    @classmethod
+    def _endpoint_key(
+        cls,
+        protocol: LookupProtocol,
+        domain: NormalizedDomain,
+        endpoint: RegistryEndpoint,
+    ) -> str:
+        if protocol == "whois":
+            server = (endpoint.whois_server or "").rstrip(".").casefold()
+            return f"{server}:43"
+        return cls._canonical_rdap_endpoint(
+            endpoint.rdap_urls[0], domain.registrable_domain
+        )
+
+    @staticmethod
+    def _canonical_rdap_endpoint(url: str, domain: str) -> str:
+        parsed = urlsplit(url)
+        hostname = (parsed.hostname or "").rstrip(".").casefold()
+        port = parsed.port
+        netloc = hostname if port in {None, 443} else f"{hostname}:{port}"
+        path = parsed.path.rstrip("/")
+        domain_suffix = f"/domain/{domain.casefold()}"
+        if path.casefold().endswith(domain_suffix):
+            path = path[: -len(domain_suffix)]
+        return urlunsplit((parsed.scheme.casefold(), netloc, path, "", ""))

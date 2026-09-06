@@ -8,6 +8,7 @@ from sqlalchemy import select, update
 from domainsmanager_application.auth import UserRecord
 from domainsmanager_application.domains import ManagedDomainRecord
 from domainsmanager_application.scheduler import DomainSchedulerService, SchedulerPolicy
+from domainsmanager_application.tasks import RefreshTaskRecord
 from domainsmanager_persistence.auth import SqlAlchemyUnitOfWorkFactory
 from domainsmanager_persistence.db import (
     create_engine,
@@ -115,5 +116,127 @@ async def test_scheduler_enqueues_due_domains_once(tmp_path: Path) -> None:
             disabled_next_check = disabled_next_check.replace(tzinfo=UTC)
         assert due_next_check == now + timedelta(hours=12)
         assert disabled_next_check == now - timedelta(minutes=1)
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_scheduler_spreads_restart_backlog_and_delays_scheduled_task(
+    tmp_path: Path,
+) -> None:
+    database = sqlite_database(tmp_path / "scheduler-spread.db")
+    await run_migrations(database)
+    engine = create_engine(database)
+    factory = SqlAlchemyUnitOfWorkFactory(create_session_factory(engine))
+    now = datetime(2026, 9, 6, tzinfo=UTC)
+    user_id = uuid4()
+    domain_ids = [uuid4(), uuid4()]
+    try:
+        async with factory() as uow:
+            await uow.users.add(
+                UserRecord(
+                    id=user_id,
+                    username="spread-user",
+                    username_normalized="spread-user",
+                    password_hash="hash",
+                    email=None,
+                    role="user",
+                    preferences={},
+                    is_active=True,
+                    banned_at=None,
+                    password_changed_at=now,
+                    last_login_at=None,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            for domain_id, name in zip(
+                domain_ids, ("example.com", "example.net"), strict=True
+            ):
+                await uow.domains.add(
+                    ManagedDomainRecord(
+                        id=domain_id,
+                        user_id=user_id,
+                        name_ascii=name,
+                        name_unicode=name,
+                        registrable_domain=name,
+                        public_suffix=name.rsplit(".", 1)[1],
+                        tld=name.rsplit(".", 1)[1],
+                        monitor_enabled=True,
+                        renewal_mode=None,
+                        notes=None,
+                        expires_at=None,
+                        last_check_at=None,
+                        last_outcome=None,
+                        version=1,
+                        created_at=now,
+                        updated_at=now,
+                        deleted_at=None,
+                    )
+                )
+            await uow.tasks.add(
+                RefreshTaskRecord(
+                    id=uuid4(),
+                    user_id=user_id,
+                    domain_id=domain_ids[0],
+                    domain_name="example.com",
+                    status="queued",
+                    force_refresh=False,
+                    attempt_count=0,
+                    created_at=now,
+                    updated_at=now,
+                    started_at=None,
+                    completed_at=None,
+                    check_id=None,
+                    error_code=None,
+                    error_message=None,
+                    available_at=now,
+                    origin="scheduled",
+                ),
+                "schedule:existing",
+                "fingerprint",
+                now + timedelta(days=7),
+            )
+            await uow.commit()
+        async with engine.begin() as connection:
+            await connection.execute(
+                update(ManagedDomain)
+                .where(ManagedDomain.id.in_(domain_ids))
+                .values(next_check_at=now - timedelta(days=1))
+            )
+
+        offsets = iter((60, 604_800))
+        scheduler = DomainSchedulerService(
+            unit_of_work=factory,
+            clock=lambda: now,
+            policy=SchedulerPolicy(
+                check_interval=timedelta(days=7), batch_size=100
+            ),
+            random_offset_seconds=lambda _: next(offsets),
+        )
+        assert await scheduler.spread_overdue() == 2
+        assert await scheduler.run_once() == 0
+
+        async with engine.connect() as connection:
+            schedules = dict(
+                (
+                    await connection.execute(
+                        select(ManagedDomain.id, ManagedDomain.next_check_at).where(
+                            ManagedDomain.id.in_(domain_ids)
+                        )
+                    )
+                ).all()
+            )
+            task_available_at = await connection.scalar(
+                select(DomainRefreshTask.available_at).where(
+                    DomainRefreshTask.managed_domain_id == domain_ids[0]
+                )
+            )
+        sqlite_now = now.replace(tzinfo=None)
+        assert set(schedules.values()) == {
+            sqlite_now + timedelta(seconds=60),
+            sqlite_now + timedelta(days=7),
+        }
+        assert task_available_at == schedules[domain_ids[0]]
     finally:
         await engine.dispose()

@@ -172,6 +172,14 @@ class ManagedDomainRepository(Protocol):
         self, now: datetime, next_check_at: datetime, limit: int
     ) -> list[ScheduledDomain]: ...
 
+    async def spread_due(
+        self,
+        now: datetime,
+        interval: timedelta,
+        limit: int,
+        offset_seconds: Callable[[int], int],
+    ) -> int: ...
+
     async def list_expiration_backfill_candidates(
         self, limit: int
     ) -> list[ScheduledDomain]: ...
@@ -369,6 +377,7 @@ class DomainService:
                 error_message=None,
                 available_at=now,
                 max_attempts=self._initial_task_max_attempts,
+                origin="monitor_enabled",
             ),
             key,
             sha256(b"monitor-enabled-initial-refresh").hexdigest(),
