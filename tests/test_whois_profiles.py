@@ -247,6 +247,29 @@ if __name__ == "__main__":
 
 
 class GenericWhoisExpiryTests(unittest.TestCase):
+    def test_normalizes_epp_statuses_and_ignores_description_urls(self):
+        parser = KeyValueWhoisParser(key="generic", version="1")
+        domain = DomainNormalizer().normalize("example.com")
+        response = RawLookupResponse(
+            domain="example.com",
+            protocol="whois",
+            endpoint="whois.example",
+            body="""Domain Name: example.com
+Domain Status: clientTransferProhibited https://icann.org/epp#clientTransferProhibited
+Domain Status: CLIENTTRANSFERPROHIBITED
+Domain Status: ok https://icann.org/epp#ok
+""",
+            fetched_at=NOW,
+            expires_at=NOW,
+        )
+
+        result = parser.parse(response, domain)
+
+        self.assertEqual(
+            result.info.statuses,
+            ["client transfer prohibited", "active"],
+        )
+
     def test_maps_registry_and_registrar_expiry(self):
         parser = KeyValueWhoisParser(key="generic", version="1")
         domain = DomainNormalizer().normalize("example.com")

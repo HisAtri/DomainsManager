@@ -32,7 +32,13 @@ class RdapParserTests(unittest.TestCase):
             "objectClassName": "DOMAIN",
             "ldhName": "EXAMPLE.COM.",
             "handle": 12345,
-            "status": ["ACTIVE", "active", None],
+            "status": [
+                "ACTIVE",
+                "active",
+                "client transfer prohibited",
+                "clientTransferProhibited",
+                None,
+            ],
             "events": [
                 {
                     "eventAction": "registration",
@@ -91,7 +97,10 @@ class RdapParserTests(unittest.TestCase):
 
         self.assertEqual(result.domain, "example.com")
         self.assertEqual(result.registry_handle, "12345")
-        self.assertEqual(result.statuses, ["active"])
+        self.assertEqual(
+            result.statuses,
+            ["active", "client transfer prohibited"],
+        )
         self.assertEqual(result.dates.registered_at.year, 2020)
         self.assertEqual(result.dates.updated_at.year, 2025)
         self.assertEqual(result.nameservers, ["ns1.example.com"])

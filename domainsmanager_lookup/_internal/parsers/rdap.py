@@ -14,6 +14,9 @@ from domainsmanager_lookup._internal.models.domain import (
     RegistrarInfo,
 )
 from domainsmanager_lookup._internal.models.response import RawLookupResponse
+from domainsmanager_lookup._internal.status_codes import (
+    DEFAULT_DOMAIN_STATUS_REGISTRY,
+)
 
 
 class RdapParser:
@@ -181,16 +184,11 @@ class RdapParser:
     @classmethod
     def _parse_statuses(cls, items: list[Any]) -> list[str]:
         statuses: list[str] = []
-        seen: set[str] = set()
         for item in items:
             status = cls._clean_text(item)
-            if status is None:
-                continue
-            normalized = status.casefold()
-            if normalized not in seen:
-                seen.add(normalized)
-                statuses.append(normalized)
-        return statuses
+            if status is not None:
+                statuses.append(status)
+        return DEFAULT_DOMAIN_STATUS_REGISTRY.normalize_many(statuses)
 
     @classmethod
     def _parse_registrar_rdap_url(cls, items: list[Any]) -> str | None:

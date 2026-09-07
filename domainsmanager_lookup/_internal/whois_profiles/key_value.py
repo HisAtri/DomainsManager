@@ -1,6 +1,6 @@
 import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from domainsmanager_lookup._internal.models.domain import (
     DNSSECInfo,
@@ -10,8 +10,14 @@ from domainsmanager_lookup._internal.models.domain import (
     RegistrarInfo,
 )
 from domainsmanager_lookup._internal.models.response import RawLookupResponse
+from domainsmanager_lookup._internal.status_codes import (
+    DEFAULT_DOMAIN_STATUS_REGISTRY,
+)
 from domainsmanager_lookup._internal.whois_profiles.base import WhoisResponseParser
-from domainsmanager_lookup._internal.whois_profiles.models import WhoisParseResult, WhoisResponseStatus
+from domainsmanager_lookup._internal.whois_profiles.models import (
+    WhoisParseResult,
+    WhoisResponseStatus,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -162,11 +168,11 @@ class KeyValueWhoisParser(WhoisResponseParser):
                 domain=(domain_name or domain.registrable_domain).lower(),
                 registry_handle=self._first(values, field.handle),
                 registrar=registrar,
-                statuses=[
+                statuses=DEFAULT_DOMAIN_STATUS_REGISTRY.normalize_many(
                     item.split()[0]
                     for item in self._all(values, field.status)
                     if item.strip()
-                ],
+                ),
                 dates=DomainDates(
                     registered_at=registered_at,
                     expires_at=expires_at,
@@ -207,18 +213,18 @@ class KeyValueWhoisParser(WhoisResponseParser):
         candidate = value.strip().rstrip(".")
         parsed = None
         try:
-            parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+            parsed = datetime.fromisoformat(candidate)
         except ValueError:
             for pattern in ("%Y-%m-%d", "%d-%b-%Y", "%Y.%m.%d", "%Y-%m-%d %H:%M:%S"):
                 try:
-                    parsed = datetime.strptime(candidate, pattern)
+                    parsed = datetime.strptime(candidate, pattern).replace(tzinfo=UTC)
                     break
                 except ValueError:
                     continue
         if parsed is None:
             return None
         if parsed.tzinfo is None:
-            return parsed.replace(tzinfo=timezone.utc)
+            return parsed.replace(tzinfo=UTC)
         return parsed
 
     @staticmethod

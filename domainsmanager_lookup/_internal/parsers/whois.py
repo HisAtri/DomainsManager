@@ -14,6 +14,9 @@ from domainsmanager_lookup._internal.models.domain import (
     RegistrarInfo,
 )
 from domainsmanager_lookup._internal.models.response import RawLookupResponse
+from domainsmanager_lookup._internal.status_codes import (
+    DEFAULT_DOMAIN_STATUS_REGISTRY,
+)
 from domainsmanager_lookup._internal.whois_profiles.defaults import (
     get_default_whois_registry,
 )
@@ -93,7 +96,9 @@ class WhoisParser:
                     r"Registrar Abuse Contact Phone:\s*(.+)",
                 ),
             ),
-            statuses=self._all(response.body, r"Domain Status:\s*(\S+)"),
+            statuses=DEFAULT_DOMAIN_STATUS_REGISTRY.normalize_many(
+                self._all(response.body, r"Domain Status:\s*(\S+)")
+            ),
             dates=DomainDates(
                 registered_at=self._date(
                     self._first(

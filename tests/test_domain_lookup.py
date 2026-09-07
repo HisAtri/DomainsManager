@@ -114,6 +114,31 @@ class DomainNormalizerTests(unittest.TestCase):
         self.assertEqual(result.tld, "cn")
 
 
+class LegacyWhoisParserTests(unittest.TestCase):
+    def test_normalizes_and_deduplicates_epp_statuses(self):
+        parser = WhoisParser()
+        domain = DomainNormalizer().normalize("example.com")
+        response = RawLookupResponse(
+            domain="example.com",
+            protocol="whois",
+            endpoint="whois.example",
+            body="""Domain Name: EXAMPLE.COM
+Domain Status: clientTransferProhibited https://icann.org/epp#clientTransferProhibited
+Domain Status: CLIENTTRANSFERPROHIBITED
+Domain Status: ok
+""",
+            fetched_at=NOW,
+            expires_at=NOW,
+        )
+
+        result = parser.parse(response, domain)
+
+        self.assertEqual(
+            result.statuses,
+            ["client transfer prohibited", "active"],
+        )
+
+
 class IanaClientTests(unittest.IsolatedAsyncioTestCase):
     async def test_uses_iana_whois_referral_and_suffix_as_cache_key(self):
         requested_paths: list[str] = []
