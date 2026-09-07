@@ -178,16 +178,18 @@ class ManagedDomain(TimestampMixin, Base):
         ),
         Index(
             "ix_managed_domain_admin_list",
-            "deleted_at",
             "created_at",
             "id",
+            postgresql_where=text("deleted_at IS NULL"),
+            sqlite_where=text("deleted_at IS NULL"),
         ),
         Index(
             "ix_managed_domain_admin_owner_created",
             "user_id",
-            "deleted_at",
             "created_at",
             "id",
+            postgresql_where=text("deleted_at IS NULL"),
+            sqlite_where=text("deleted_at IS NULL"),
         ),
         CheckConstraint("version >= 1", name="managed_domain_version_positive"),
     )

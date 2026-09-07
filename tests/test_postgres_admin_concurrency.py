@@ -101,7 +101,50 @@ async def test_admin_list_queries_use_dedicated_indexes() -> None:
     await run_migrations(config)
     engine, _ = make_auth_service(config)
     try:
+        owner_id = "00000000-0000-0000-0000-000000000001"
+        other_owner_id = "00000000-0000-0000-0000-000000000002"
         async with engine.begin() as connection:
+            # On an empty table the general list index is just as cheap as the
+            # owner-specific index, so give the planner representative statistics.
+            await connection.execute(
+                text(
+                    "INSERT INTO app_user ("
+                    "id, username, username_normalized, password_hash, role, "
+                    "totp_enabled, preferences, is_active, password_changed_at, "
+                    "created_at, updated_at"
+                    ") VALUES "
+                    "(:owner_id, 'index-owner', 'index-owner', 'unused', "
+                    "'user', false, '{}'::jsonb, true, CURRENT_TIMESTAMP, "
+                    "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), "
+                    "(:other_owner_id, 'index-other-owner', "
+                    "'index-other-owner', 'unused', 'user', false, '{}'::jsonb, "
+                    "true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
+                ),
+                {"owner_id": owner_id, "other_owner_id": other_owner_id},
+            )
+            for user_id, prefix, count in (
+                (owner_id, "owner", 20),
+                (other_owner_id, "other", 500),
+            ):
+                await connection.execute(
+                    text(
+                        "INSERT INTO managed_domain ("
+                        "id, user_id, name_ascii, name_unicode, "
+                        "registrable_domain, public_suffix, tld, statuses, "
+                        "nameservers, monitor_enabled, version, created_at, "
+                        "updated_at, expiration_status"
+                        ") SELECT gen_random_uuid(), :user_id, "
+                        "CAST(:prefix AS text) || series || '.test', "
+                        "CAST(:prefix AS text) || series || '.test', "
+                        "CAST(:prefix AS text) || series || '.test', 'test', 'test', "
+                        "'[]'::jsonb, '[]'::jsonb, false, 1, "
+                        "CURRENT_TIMESTAMP - series * INTERVAL '1 minute', "
+                        "CURRENT_TIMESTAMP, 'unknown' "
+                        "FROM generate_series(1, CAST(:count AS integer)) AS series"
+                    ),
+                    {"user_id": user_id, "prefix": prefix, "count": count},
+                )
+            await connection.execute(text("ANALYZE managed_domain"))
             await connection.execute(text("SET LOCAL enable_seqscan = off"))
             await connection.execute(text("SET LOCAL enable_sort = off"))
             plans = []
@@ -113,7 +156,7 @@ async def test_admin_list_queries_use_dedicated_indexes() -> None:
                 ),
                 (
                     "EXPLAIN SELECT id FROM managed_domain "
-                    "WHERE user_id = '00000000-0000-0000-0000-000000000001' "
+                    f"WHERE user_id = '{owner_id}' "
                     "AND deleted_at IS NULL "
                     "ORDER BY created_at DESC, id DESC LIMIT 20"
                 ),
