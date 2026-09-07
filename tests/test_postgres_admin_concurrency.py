@@ -103,6 +103,7 @@ async def test_admin_list_queries_use_dedicated_indexes() -> None:
     try:
         async with engine.begin() as connection:
             await connection.execute(text("SET LOCAL enable_seqscan = off"))
+            await connection.execute(text("SET LOCAL enable_sort = off"))
             plans = []
             for statement in (
                 (

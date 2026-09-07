@@ -46,6 +46,8 @@ async def test_fastapi_authentication_flow_against_postgresql() -> None:
             )
             assert registered.status_code == 201
             tokens = registered.json()["tokens"]
+            assert "refresh_token" not in tokens
+            assert client.cookies.get("domainsmanager_refresh") is not None
 
             me = client.get(
                 "/api/v1/auth/me",
@@ -54,16 +56,11 @@ async def test_fastapi_authentication_flow_against_postgresql() -> None:
             assert me.status_code == 200
             assert me.json()["username"] == "postgres-user"
 
-            rotated = client.post(
-                "/api/v1/auth/token/refresh",
-                json={"refresh_token": tokens["refresh_token"]},
-            )
+            rotated = client.post("/api/v1/auth/token/refresh")
             assert rotated.status_code == 200
+            assert "refresh_token" not in rotated.json()
 
-            logout = client.post(
-                "/api/v1/auth/logout",
-                json={"refresh_token": rotated.json()["refresh_token"]},
-            )
+            logout = client.post("/api/v1/auth/logout")
             assert logout.status_code == 204
 
             rejected = client.get(
@@ -79,9 +76,7 @@ async def test_fastapi_authentication_flow_against_postgresql() -> None:
 @pytest.mark.postgres
 @pytest.mark.api
 @pytest.mark.integration
-async def test_postgresql_admin_settings_are_versioned() -> (
-    None
-):
+async def test_postgresql_admin_settings_are_versioned() -> None:
     database = postgres_database()
     await clean_project_schema(database)
     await run_migrations(database)
