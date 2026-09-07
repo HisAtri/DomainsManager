@@ -37,6 +37,10 @@ async def run(
     worker_id = os.environ.get("DOMAINSMANAGER_WORKER_ID", default_worker_id())
     effective_stop = stop or Event()
     try:
+        if isinstance(resources, Resources):
+            await run_component_cycle(
+                "worker", worker_id, resources.scheduler.spread_overdue()
+            )
         while not effective_stop.is_set():
             if isinstance(resources, Resources):
                 effective_settings = await resources.reload_global_policies()

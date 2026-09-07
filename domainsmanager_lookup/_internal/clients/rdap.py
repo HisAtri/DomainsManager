@@ -14,6 +14,7 @@ from domainsmanager_lookup._internal.models.response import (
     RawLookupResponse,
     RdapResponseRole,
 )
+from domainsmanager_lookup.endpoint_gate import EndpointRequestGate, rdap_endpoint_key
 
 
 class RdapClient:
@@ -23,11 +24,13 @@ class RdapClient:
         timeout: float = 20.0,
         cache_ttl: timedelta = timedelta(hours=6),
         not_found_cache_ttl: timedelta = timedelta(minutes=30),
+        endpoint_gate: EndpointRequestGate | None = None,
     ) -> None:
         self._http_client = http_client
         self._timeout = timeout
         self._cache_ttl = cache_ttl
         self._not_found_cache_ttl = not_found_cache_ttl
+        self.endpoint_gate = endpoint_gate
 
     async def query(
         self,
@@ -62,16 +65,26 @@ class RdapClient:
         role: RdapResponseRole,
         follow_redirects: bool,
     ) -> RawLookupResponse:
-        response = await self._get(url, follow_redirects=follow_redirects)
+        max_redirects = (
+            self._http_client.max_redirects if self._http_client is not None else 20
+        )
+        for hop in range(max_redirects + 1):
+            if self.endpoint_gate is None:
+                response = await self._get_checked(url)
+            else:
+                response = await self.endpoint_gate.run(
+                    "rdap",
+                    rdap_endpoint_key(url),
+                    lambda url=url: self._get_checked(url),
+                )
+            if not follow_redirects or response.next_request is None:
+                break
+            if hop == max_redirects:
+                raise httpx.TooManyRedirects(
+                    "Exceeded maximum allowed redirects", request=response.request
+                )
+            url = str(response.next_request.url)
         now = datetime.now(UTC)
-        if response.status_code == 429:
-            raise UpstreamRateLimitError(
-                "rdap",
-                url,
-                retry_after=self._parse_retry_after(
-                    response.headers.get("retry-after"), now
-                ),
-            )
         if response.status_code != 404:
             response.raise_for_status()
         return RawLookupResponse(
@@ -90,6 +103,20 @@ class RdapClient:
             ),
             rdap_role=role,
         )
+
+    async def _get_checked(self, url: str) -> httpx.Response:
+        response = await self._get(url, follow_redirects=False)
+        if response.status_code == 429 or (
+            response.status_code == 503 and "retry-after" in response.headers
+        ):
+            raise UpstreamRateLimitError(
+                "rdap",
+                url,
+                retry_after=self._parse_retry_after(
+                    response.headers.get("retry-after"), datetime.now(UTC)
+                ),
+            )
+        return response
 
     async def _get(self, url: str, *, follow_redirects: bool) -> httpx.Response:
         headers = {"accept": "application/rdap+json, application/json"}
@@ -129,4 +156,7 @@ class RdapClient:
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=UTC)
             return parsed.astimezone(UTC)
-        return now + timedelta(seconds=max(0, seconds))
+        try:
+            return now + timedelta(seconds=max(0, seconds))
+        except OverflowError:
+            return datetime.max.replace(tzinfo=UTC)

@@ -114,7 +114,7 @@ async def test_scheduler_enqueues_due_domains_once(tmp_path: Path) -> None:
             due_next_check = due_next_check.replace(tzinfo=UTC)
         if disabled_next_check is not None and disabled_next_check.tzinfo is None:
             disabled_next_check = disabled_next_check.replace(tzinfo=UTC)
-        assert due_next_check == now + timedelta(hours=12)
+        assert due_next_check == now - timedelta(minutes=1) + timedelta(hours=12)
         assert disabled_next_check == now - timedelta(minutes=1)
     finally:
         await engine.dispose()
@@ -209,9 +209,7 @@ async def test_scheduler_spreads_restart_backlog_and_delays_scheduled_task(
         scheduler = DomainSchedulerService(
             unit_of_work=factory,
             clock=lambda: now,
-            policy=SchedulerPolicy(
-                check_interval=timedelta(days=7), batch_size=100
-            ),
+            policy=SchedulerPolicy(check_interval=timedelta(days=7), batch_size=100),
             random_offset_seconds=lambda _: next(offsets),
         )
         assert await scheduler.spread_overdue() == 2

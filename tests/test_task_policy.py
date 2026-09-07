@@ -113,7 +113,7 @@ async def test_enqueue_reuses_existing_active_task_even_for_force_refresh(
         )
 
         assert merged.id == first.id
-        assert merged.force_refresh is False
+        assert merged.force_refresh is True
         async with engine.connect() as connection:
             active_count = await connection.scalar(
                 select(func.count())

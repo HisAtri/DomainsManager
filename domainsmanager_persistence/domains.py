@@ -4,7 +4,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from sqlalchemy import asc, desc, func, or_, select, update
+from sqlalchemy import and_, asc, desc, exists, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -267,6 +267,10 @@ class SqlAlchemyDomainRepository:
                         ManagedDomain.deleted_at.is_(None),
                         ManagedDomain.next_check_at.is_not(None),
                         ManagedDomain.next_check_at <= now,
+                        ~exists().where(
+                            DomainRefreshTask.managed_domain_id == ManagedDomain.id,
+                            DomainRefreshTask.status.in_(("queued", "running")),
+                        ),
                     )
                     .order_by(ManagedDomain.next_check_at, ManagedDomain.id)
                     .limit(limit)
@@ -278,7 +282,9 @@ class SqlAlchemyDomainRepository:
         )
         claimed: list[ScheduledDomain] = []
         for domain in rows:
-            domain.next_check_at = next_check_at
+            interval = next_check_at - now
+            due_at = as_utc(domain.next_check_at)
+            domain.next_check_at = due_at + interval * ((now - due_at) // interval + 1)
             domain.updated_at = now
             domain.version += 1
             claimed.append(
@@ -305,8 +311,23 @@ class SqlAlchemyDomainRepository:
                     .where(
                         ManagedDomain.monitor_enabled.is_(True),
                         ManagedDomain.deleted_at.is_(None),
-                        ManagedDomain.next_check_at.is_not(None),
-                        ManagedDomain.next_check_at <= now,
+                        or_(
+                            ManagedDomain.next_check_at <= now,
+                            exists().where(
+                                DomainRefreshTask.managed_domain_id == ManagedDomain.id,
+                                DomainRefreshTask.origin == "scheduled",
+                                or_(
+                                    and_(
+                                        DomainRefreshTask.status == "queued",
+                                        DomainRefreshTask.available_at <= now,
+                                    ),
+                                    and_(
+                                        DomainRefreshTask.status == "running",
+                                        DomainRefreshTask.lease_until <= now,
+                                    ),
+                                ),
+                            ),
+                        ),
                     )
                     .order_by(ManagedDomain.next_check_at, ManagedDomain.id)
                     .limit(limit)
@@ -329,10 +350,23 @@ class SqlAlchemyDomainRepository:
                 update(DomainRefreshTask)
                 .where(
                     DomainRefreshTask.managed_domain_id == domain.id,
-                    DomainRefreshTask.status == "queued",
+                    or_(
+                        DomainRefreshTask.status == "queued",
+                        and_(
+                            DomainRefreshTask.status == "running",
+                            DomainRefreshTask.lease_until <= now,
+                        ),
+                    ),
                     DomainRefreshTask.origin == "scheduled",
                 )
-                .values(available_at=scheduled_at, updated_at=now)
+                .values(
+                    status="queued",
+                    available_at=scheduled_at,
+                    updated_at=now,
+                    lease_token=None,
+                    lease_owner=None,
+                    lease_until=None,
+                )
             )
         await self._session.flush()
         return len(rows)

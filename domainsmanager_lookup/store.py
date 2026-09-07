@@ -49,6 +49,20 @@ class EndpointGateState:
     failure_count: int
 
 
+def endpoint_retry_delay(
+    failures: int, base: timedelta, maximum: timedelta
+) -> timedelta:
+    """Saturate before multiplying, including after a prolonged upstream outage."""
+    delay = min(base, maximum)
+    if delay <= timedelta(0):
+        return timedelta(0)
+    for _ in range(max(0, failures - 1)):
+        if delay >= maximum - delay:
+            return maximum
+        delay += delay
+    return delay
+
+
 @runtime_checkable
 class LookupStore(Protocol):
     async def get_current(
@@ -86,6 +100,10 @@ class LookupStore(Protocol):
     async def release_endpoint_gate(
         self, lease: EndpointGateLease, *, succeeded: bool
     ) -> None: ...
+
+    async def renew_endpoint_gate(
+        self, lease: EndpointGateLease, ttl: timedelta
+    ) -> bool: ...
 
     async def block_endpoint_gate(
         self,

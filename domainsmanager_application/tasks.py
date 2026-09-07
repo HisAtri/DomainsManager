@@ -287,6 +287,7 @@ class RefreshTaskService:
                 completed,
                 fresh_after=completed - ttl,
                 fresh_until=completed + ttl,
+                next_check_at=completed + self._policy.successful_check_interval,
                 result_message=self._fresh_message(ttl),
             ):
                 await uow.commit()
@@ -319,14 +320,22 @@ class RefreshTaskService:
                     next_check_at=completed + self._policy.successful_check_interval,
                 )
             else:
-                retry_at = (
-                    (
-                        result.retry_after
-                        if result.error_code is not None
-                        and result.error_code.value == "rate_limited"
-                        and result.retry_after is not None
-                        else self._policy.retry_at(completed, task.attempt_count)
+                if (
+                    getattr(result.error_code, "value", None) == "rate_limited"
+                    and result.retry_after is not None
+                ):
+                    deferred = await uow.tasks.defer_rate_limited(
+                        task.id,
+                        task.lease_token,
+                        completed,
+                        max(result.retry_after, completed + timedelta(seconds=1)),
+                        result.error_message or "endpoint rate limited",
                     )
+                    if deferred:
+                        await uow.commit()
+                    return True
+                retry_at = (
+                    self._policy.retry_at(completed, task.attempt_count)
                     if self._is_retryable(result.error_code)
                     and task.attempt_count < task.max_attempts
                     else None

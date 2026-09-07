@@ -1,12 +1,13 @@
 import asyncio
-import socket
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from domainsmanager_lookup._internal.errors import ProtocolUnavailableError
 from domainsmanager_lookup._internal.models.domain import NormalizedDomain
 from domainsmanager_lookup._internal.models.registry import RegistryEndpoint
 from domainsmanager_lookup._internal.models.response import RawLookupResponse
-from domainsmanager_lookup._internal.whois_profiles.defaults import get_default_whois_registry
+from domainsmanager_lookup._internal.whois_profiles.defaults import (
+    get_default_whois_registry,
+)
 from domainsmanager_lookup._internal.whois_profiles.registry import WhoisProfileRegistry
 
 
@@ -35,13 +36,9 @@ class WhoisClient:
 
         profile = self._profiles.resolve(domain)
         query = profile.query_strategy.build_query(domain)
-        raw_body = await asyncio.to_thread(
-            self._query_sync,
-            query,
-            endpoint.whois_server,
-        )
+        raw_body = await self._query(query, endpoint.whois_server)
         body = profile.query_strategy.decode(raw_body)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         return RawLookupResponse(
             domain=domain.registrable_domain,
             protocol="whois",
@@ -52,18 +49,24 @@ class WhoisClient:
             content_type="text/plain",
         )
 
-    def _query_sync(self, query: bytes, server: str) -> bytes:
+    async def _query(self, query: bytes, server: str) -> bytes:
         chunks: list[bytes] = []
         received = 0
-        with socket.create_connection((server, 43), timeout=self._timeout) as sock:
-            sock.settimeout(self._timeout)
-            sock.sendall(query)
-            while True:
-                chunk = sock.recv(4096)
-                if not chunk:
-                    break
-                received += len(chunk)
-                if received > self._max_response_bytes:
-                    raise ValueError("WHOIS 响应超过允许的最大大小")
-                chunks.append(chunk)
+        # Bound the entire exchange, and close the connection before releasing
+        # the endpoint gate on cancellation (a to_thread socket outlives it).
+        async with asyncio.timeout(self._timeout):
+            reader, writer = await asyncio.open_connection(server, 43)
+            try:
+                writer.write(query)
+                await writer.drain()
+                while True:
+                    chunk = await reader.read(4096)
+                    if not chunk:
+                        break
+                    received += len(chunk)
+                    if received > self._max_response_bytes:
+                        raise ValueError("WHOIS 响应超过允许的最大大小")
+                    chunks.append(chunk)
+            finally:
+                writer.close()
         return b"".join(chunks)

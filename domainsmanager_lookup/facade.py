@@ -94,9 +94,7 @@ class DomainLookup:
 
         return list(await asyncio.gather(*(lookup_one(name) for name in names)))
 
-    def configure_endpoint_retry(
-        self, *, base: timedelta, maximum: timedelta
-    ) -> None:
+    def configure_endpoint_retry(self, *, base: timedelta, maximum: timedelta) -> None:
         gate = self._service._endpoint_gate
         if gate is not None:
             gate.retry_base = base
@@ -138,6 +136,8 @@ class DomainLookup:
 
     @staticmethod
     def _classify_error(error: LookupFailedError) -> LookupErrorCode:
+        if error.retry_after is not None:
+            return LookupErrorCode.RATE_LIMITED
         message = str(error).casefold()
         if "not_found" in message or "not found" in message or "未注册" in message:
             return LookupErrorCode.NOT_FOUND

@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,11 +57,22 @@ class SqlAlchemyTaskRepository:
         fingerprint: str,
         expires_at: datetime,
     ) -> RefreshTaskRecord:
+        await self._lock_domain(task.domain_id)
+        replay = await self.get_idempotent(
+            task.user_id, "domain_refresh", task.domain_id, key
+        )
+        if replay is not None:
+            if replay.request_fingerprint != fingerprint:
+                raise IdempotencyConflictError(
+                    "idempotency key has a different request"
+                )
+            existing_task = await self.get(task.user_id, replay.task_id)
+            if existing_task is not None:
+                return existing_task
         existing = await self._active_for_domain(task.domain_id, for_update=True)
         if existing is not None:
-            await self._add_idempotency(
-                task, existing.id, key, fingerprint, expires_at
-            )
+            self._merge_queued_request(existing, task)
+            await self._add_idempotency(task, existing.id, key, fingerprint, expires_at)
             return self._task_record(existing, task.domain_name)
 
         row = DomainRefreshTask(
@@ -89,13 +100,47 @@ class SqlAlchemyTaskRepository:
             existing = await self._active_for_domain(task.domain_id, for_update=True)
             if existing is None:
                 raise
-            await self._add_idempotency(
-                task, existing.id, key, fingerprint, expires_at
-            )
+            self._merge_queued_request(existing, task)
+            await self._add_idempotency(task, existing.id, key, fingerprint, expires_at)
             return self._task_record(existing, task.domain_name)
 
         await self._add_idempotency(task, task.id, key, fingerprint, expires_at)
         return task
+
+    async def _lock_domain(self, domain_id: UUID) -> None:
+        # Always lock parent before task. SQLite's no-op write also starts a real
+        # transaction before SAVEPOINT, avoiding a task committed without its key.
+        if self._session.bind.dialect.name == "sqlite":
+            await self._session.execute(
+                update(ManagedDomain)
+                .where(ManagedDomain.id == domain_id)
+                .values(version=ManagedDomain.version)
+                .execution_options(synchronize_session=False)
+            )
+        else:
+            await self._session.execute(
+                select(ManagedDomain.id)
+                .where(ManagedDomain.id == domain_id)
+                .with_for_update()
+            )
+
+    @staticmethod
+    def _merge_queued_request(
+        existing: DomainRefreshTask, incoming: RefreshTaskRecord
+    ) -> None:
+        # A running request has already chosen its lookup options. Queued work can
+        # still honor a stronger request without introducing a second task.
+        if existing.status == "queued":
+            existing.force_refresh = existing.force_refresh or incoming.force_refresh
+            if incoming.origin != "scheduled" and existing.origin == "scheduled":
+                existing.origin = incoming.origin
+                # Only expedite untouched scheduled work, never a retry cooldown.
+                if existing.attempt_count == 0 and existing.error_code is None:
+                    existing.available_at = min(
+                        as_utc(existing.available_at),
+                        incoming.available_at or incoming.created_at,
+                    )
+            existing.updated_at = incoming.updated_at
 
     async def _add_idempotency(
         self,
@@ -219,21 +264,34 @@ class SqlAlchemyTaskRepository:
             .where(claimable)
             .order_by(DomainRefreshTask.created_at)
             .limit(1)
-            .with_for_update(skip_locked=True)
+            .with_for_update(skip_locked=True, of=DomainRefreshTask)
         )
         row = (await self._session.execute(statement)).one_or_none()
         if row is None:
             return None
-        task, domain_name = row
+        candidate, domain_name = row
         token = uuid4()
-        task.status = "running"
-        task.lease_token = token
-        task.lease_owner = worker_id
-        task.lease_until = lease_until
-        task.started_at = task.started_at or now
-        task.updated_at = now
-        task.attempt_count += 1
-        await self._session.flush()
+        # SQLite ignores FOR UPDATE; a conditional write also fences competing
+        # readers there, so only one worker can start the external lookup.
+        task = (
+            await self._session.execute(
+                update(DomainRefreshTask)
+                .where(DomainRefreshTask.id == candidate.id, claimable)
+                .values(
+                    status="running",
+                    lease_token=token,
+                    lease_owner=worker_id,
+                    lease_until=lease_until,
+                    started_at=func.coalesce(DomainRefreshTask.started_at, now),
+                    updated_at=now,
+                    attempt_count=DomainRefreshTask.attempt_count + 1,
+                )
+                .returning(DomainRefreshTask)
+                .execution_options(populate_existing=True, synchronize_session="fetch")
+            )
+        ).scalar_one_or_none()
+        if task is None:
+            return None
         return self._task_record(task, domain_name)
 
     async def heartbeat(
@@ -312,10 +370,20 @@ class SqlAlchemyTaskRepository:
             domain.last_successful_check_at = at
             domain.last_check_at = at
             domain.last_outcome = "success"
-            domain.next_check_at = next_check_at
+            if task.origin == "scheduled" and domain.next_check_at is not None:
+                interval = next_check_at - at
+                due_at = as_utc(domain.next_check_at)
+                if due_at <= at:
+                    domain.next_check_at = due_at + interval * (
+                        (at - due_at) // interval + 1
+                    )
+            else:
+                domain.next_check_at = next_check_at
             domain.updated_at = at
             domain.version += 1
         task.status = "success"
+        task.error_code = None
+        task.error_message = None
         task.domain_check_id = check.id
         task.result_code = "refreshed"
         task.result_message = None
@@ -340,6 +408,7 @@ class SqlAlchemyTaskRepository:
         *,
         fresh_after: datetime,
         fresh_until: datetime,
+        next_check_at: datetime,
         result_message: str,
     ) -> bool:
         task = await self._locked_task(task_id, lease_token)
@@ -360,7 +429,20 @@ class SqlAlchemyTaskRepository:
         ).one_or_none()
         if latest is None:
             return False
+        if task.origin == "scheduled":
+            domain = await self._session.get(ManagedDomain, task.managed_domain_id)
+            if domain is not None and domain.next_check_at is not None:
+                due_at = as_utc(domain.next_check_at)
+                if due_at <= at:
+                    interval = next_check_at - at
+                    domain.next_check_at = due_at + interval * (
+                        (at - due_at) // interval + 1
+                    )
+                    domain.updated_at = at
+                    domain.version += 1
         task.status = "info"
+        task.error_code = None
+        task.error_message = None
         task.domain_check_id = None
         task.source_check_id = latest.id
         task.result_code = "data_fresh"
@@ -424,6 +506,30 @@ class SqlAlchemyTaskRepository:
         await self._session.flush()
         await self._queue_notifications(task, check, "domain.query_failed", at)
         return self._check_record(check)
+
+    async def defer_rate_limited(
+        self,
+        task_id: UUID,
+        lease_token: UUID | None,
+        at: datetime,
+        retry_at: datetime,
+        message: str,
+    ) -> bool:
+        """Queue endpoint cooldowns without spending attempts or reporting a check."""
+        task = await self._locked_task(task_id, lease_token)
+        if task is None:
+            return False
+        task.status = "queued"
+        task.attempt_count = max(0, task.attempt_count - 1)
+        task.available_at = retry_at
+        task.error_code = "rate_limited"
+        task.error_message = message[:512]
+        task.lease_token = None
+        task.lease_owner = None
+        task.lease_until = None
+        task.updated_at = at
+        await self._session.flush()
+        return True
 
     async def _queue_notifications(
         self, task: DomainRefreshTask, check: DomainCheck, event_type: str, at: datetime
@@ -621,6 +727,14 @@ class SqlAlchemyTaskRepository:
     async def _locked_task(
         self, task_id: UUID, lease_token: UUID | None
     ) -> DomainRefreshTask | None:
+        domain_id = await self._session.scalar(
+            select(DomainRefreshTask.managed_domain_id).where(
+                DomainRefreshTask.id == task_id
+            )
+        )
+        if domain_id is None:
+            return None
+        await self._lock_domain(domain_id)
         result = await self._session.execute(
             select(DomainRefreshTask)
             .where(

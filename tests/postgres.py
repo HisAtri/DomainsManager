@@ -18,6 +18,7 @@ PROJECT_TABLES = {
     "auth_session",
     "domain_check",
     "domain_refresh_task",
+    "endpoint_request_gate",
     "email_verification_challenge",
     "global_setting",
     "idempotency_record",
@@ -104,6 +105,5 @@ async def clean_project_schema(config: DatabaseConfig) -> None:
     project_remaining = remaining & PROJECT_TABLES
     if project_remaining:
         pytest.fail(
-            "PostgreSQL cleanup left project tables: "
-            f"{sorted(project_remaining)}"
+            f"PostgreSQL cleanup left project tables: {sorted(project_remaining)}"
         )

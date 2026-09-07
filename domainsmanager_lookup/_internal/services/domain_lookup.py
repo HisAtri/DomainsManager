@@ -2,7 +2,6 @@ import asyncio
 from collections.abc import Callable
 from contextlib import suppress
 from datetime import UTC, datetime
-from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
@@ -46,7 +45,7 @@ from domainsmanager_lookup._internal.parsers.whois import ProfiledWhoisParser
 from domainsmanager_lookup._internal.whois_profiles.defaults import (
     build_default_whois_registry,
 )
-from domainsmanager_lookup.endpoint_gate import EndpointRequestGate
+from domainsmanager_lookup.endpoint_gate import EndpointRequestGate, rdap_endpoint_key
 
 
 class DomainLookupService:
@@ -88,6 +87,9 @@ class DomainLookupService:
         self._protocol_order = protocol_order
         self._clock = clock or (lambda: datetime.now(UTC))
         self._endpoint_gate = endpoint_gate
+        rdap_client = self._clients.get("rdap")
+        if isinstance(rdap_client, RdapClient) and endpoint_gate is not None:
+            rdap_client.endpoint_gate = endpoint_gate
         self._endpoint_locks: dict[str, asyncio.Lock] = {}
 
         missing = [
@@ -154,7 +156,12 @@ class DomainLookupService:
             TimeoutError,
             ValueError,
         ) as exc:
-            errors.append(f"端点发现失败：{exc}")
+            reason = (
+                "temporary timeout"
+                if isinstance(exc, (TimeoutError, httpx.TimeoutException))
+                else str(exc)
+            )
+            errors.append(f"端点发现失败：{reason}")
             detail = "; ".join(errors)
             raise LookupFailedError(
                 f"查询 {domain.registrable_domain} 失败：{detail}"
@@ -166,6 +173,7 @@ class DomainLookupService:
             if protocol == "whois" and not endpoint.whois_server:
                 continue
             try:
+
                 async def query_and_parse(
                     _protocol: LookupProtocol = protocol,
                 ) -> tuple[RawLookupResponse, DomainInfo]:
@@ -180,7 +188,9 @@ class DomainLookupService:
                         raise
                     return response, info
 
-                if self._endpoint_gate is None:
+                if self._endpoint_gate is None or isinstance(
+                    self._clients[protocol], RdapClient
+                ):
                     response, info = await query_and_parse()
                 else:
                     response, info = await self._endpoint_gate.run(
@@ -212,7 +222,12 @@ class DomainLookupService:
                 ValueError,
                 TypeError,
             ) as exc:
-                errors.append(f"{protocol} 查询失败：{exc}")
+                reason = (
+                    "temporary timeout"
+                    if isinstance(exc, (TimeoutError, httpx.TimeoutException))
+                    else str(exc)
+                )
+                errors.append(f"{protocol} 查询失败：{reason}")
 
         detail = "; ".join(errors) or "没有配置查询协议"
         raise LookupFailedError(
@@ -291,16 +306,7 @@ class DomainLookupService:
                 rdap_role="registrar",
             )
             if response is None:
-                if self._endpoint_gate is None:
-                    response = await client.query_related(domain, related_url)
-                else:
-                    response = await self._endpoint_gate.run(
-                        "rdap",
-                        self._canonical_rdap_endpoint(
-                            related_url, domain.registrable_domain
-                        ),
-                        lambda: client.query_related(domain, related_url),
-                    )
+                response = await client.query_related(domain, related_url)
                 await self._responses.save(response)
             registrar_info = parser.parse(response, domain)
         except (
@@ -377,18 +383,4 @@ class DomainLookupService:
         if protocol == "whois":
             server = (endpoint.whois_server or "").rstrip(".").casefold()
             return f"{server}:43"
-        return cls._canonical_rdap_endpoint(
-            endpoint.rdap_urls[0], domain.registrable_domain
-        )
-
-    @staticmethod
-    def _canonical_rdap_endpoint(url: str, domain: str) -> str:
-        parsed = urlsplit(url)
-        hostname = (parsed.hostname or "").rstrip(".").casefold()
-        port = parsed.port
-        netloc = hostname if port in {None, 443} else f"{hostname}:{port}"
-        path = parsed.path.rstrip("/")
-        domain_suffix = f"/domain/{domain.casefold()}"
-        if path.casefold().endswith(domain_suffix):
-            path = path[: -len(domain_suffix)]
-        return urlunsplit((parsed.scheme.casefold(), netloc, path, "", ""))
+        return rdap_endpoint_key(endpoint.rdap_urls[0])

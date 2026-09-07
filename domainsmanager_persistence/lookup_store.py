@@ -14,6 +14,7 @@ from domainsmanager_lookup.store import (
     LookupStore,
     RefreshLease,
     StoredLookupRecord,
+    endpoint_retry_delay,
 )
 from domainsmanager_persistence.models import (
     EndpointRequestGate,
@@ -221,7 +222,7 @@ class SqlAlchemyLookupStore(LookupStore):
                     else now
                 )
             failures = row.failure_count + 1
-            delay = min(retry_base * (2 ** (failures - 1)), retry_max)
+            delay = endpoint_retry_delay(failures, retry_base, retry_max)
             blocked_until = retry_after if retry_after is not None else now + delay
             blocked_until = max(now, blocked_until)
             row.blocked_until = blocked_until
@@ -232,6 +233,22 @@ class SqlAlchemyLookupStore(LookupStore):
             row.updated_at = now
             await session.flush()
             return blocked_until
+
+    async def renew_endpoint_gate(
+        self, lease: EndpointGateLease, ttl: timedelta
+    ) -> bool:
+        now = datetime.now(UTC)
+        async with self._sessions() as session, session.begin():
+            result = await session.execute(
+                update(EndpointRequestGate)
+                .where(
+                    EndpointRequestGate.protocol == lease.protocol,
+                    EndpointRequestGate.endpoint == lease.endpoint,
+                    EndpointRequestGate.lease_token == lease.token,
+                )
+                .values(lease_until=now + ttl, updated_at=now)
+            )
+            return result.rowcount == 1
 
     @staticmethod
     def _insert_for(session: AsyncSession, table):

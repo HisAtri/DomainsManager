@@ -10,6 +10,7 @@ from domainsmanager_lookup.store import (
     LookupStore,
     RefreshLease,
     StoredLookupRecord,
+    endpoint_retry_delay,
 )
 
 
@@ -151,7 +152,7 @@ class MemoryLookupStore(LookupStore):
                 return now
             state = item[0]
             failures = state.failure_count + 1
-            delay = min(retry_base * (2 ** (failures - 1)), retry_max)
+            delay = endpoint_retry_delay(failures, retry_base, retry_max)
             blocked_until = retry_after if retry_after is not None else now + delay
             blocked_until = max(now, blocked_until)
             self._endpoint_gates[key] = (
@@ -159,6 +160,25 @@ class MemoryLookupStore(LookupStore):
                 None,
             )
             return blocked_until
+
+    async def renew_endpoint_gate(
+        self, lease: EndpointGateLease, ttl: timedelta
+    ) -> bool:
+        key = (lease.protocol, lease.endpoint)
+        async with self._lock:
+            item = self._endpoint_gates.get(key)
+            if item is None or item[1] is None or item[1].token != lease.token:
+                return False
+            expires_at = datetime.now(UTC) + ttl
+            self._endpoint_gates[key] = (
+                EndpointGateState(
+                    item[0].blocked_until, expires_at, item[0].failure_count
+                ),
+                EndpointGateLease(
+                    lease.protocol, lease.endpoint, lease.token, expires_at
+                ),
+            )
+            return True
 
     @staticmethod
     def _is_newer(candidate: StoredLookupRecord, current: StoredLookupRecord) -> bool:

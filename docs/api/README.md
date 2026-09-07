@@ -2,9 +2,13 @@
 
 ## 刷新任务执行策略
 
-Worker 在外部查询期间以任务租约三分之一的间隔续约。成功检查会记录稳定快照哈希和变更字段，并将下次常规检查时间设置为 `DOMAINSMANAGER_CHECK_INTERVAL_SECONDS`（默认 604800 秒）之后；失败检查不会覆盖最近一次成功快照。`changed_fields` 仅比较注册商、状态、注册/到期/注册局更新时间、名称服务器和 DNSSEC 状态。该内部调度时间当前不通过普通用户域名 API 暴露。
+Worker 在外部查询期间以任务租约三分之一的间隔续约。默认检查间隔 `DOMAINSMANAGER_CHECK_INTERVAL_SECONDS` 为 604800 秒（7 天），已有显式配置继续生效。Scheduler 和 Worker 在启动领取任务前，将逾期域名及遗留的自动刷新队列随机分散到一个检查周期内。自动检查沿该随机时间点递推，执行延迟不会改变周期相位；手动刷新成功则从完成时间计算下次检查。失败检查不会覆盖最近一次成功快照。成功检查记录稳定快照哈希，`changed_fields` 比较注册商、状态、注册/到期/注册局更新时间、名称服务器和 DNSSEC 状态。该内部调度时间当前不通过普通用户域名 API 暴露。
 
-刷新任务默认最多尝试 5 次。`rate_limited` 与 `temporary_failure` 使用指数退避重新排队；其他错误或达到重试上限后进入 `failed`。可通过 `DOMAINSMANAGER_TASK_MAX_ATTEMPTS`、`DOMAINSMANAGER_TASK_RETRY_BASE_SECONDS`、`DOMAINSMANAGER_TASK_RETRY_MAX_SECONDS` 和 `DOMAINSMANAGER_TASK_LEASE_SECONDS` 调整策略。Worker 租约保持由后续 Worker 心跳实现。
+相同域名记录的 `queued` / `running` 任务合并，新的幂等键映射到同一个任务；排队中的强制刷新标志取并集，运行中的请求继续完成。手动请求可提前尚未尝试的自动任务，但不会绕过重试冷却或成功刷新 TTL。
+
+同一 WHOIS 主机的 43 端口共享冷却，RDAP 按服务 URL 共享冷却（包含重定向后的目标和注册商查询）；两种协议、不同端点互不阻塞。端点租约与冷却持久化到数据库，并在长请求期间续约。RDAP 的 429 以及带 `Retry-After` 的 503 按秒数或 HTTP 日期设置冷却；缺少有效时间的限流响应使用有上限的指数退避。具有明确冷却时间的任务继续排队，不消耗失败重试次数、不生成失败检查或通知。
+
+其他可重试失败默认最多尝试 5 次，`temporary_failure` 使用指数退避；其他错误或达到重试上限后进入 `failed`。可通过 `DOMAINSMANAGER_TASK_MAX_ATTEMPTS`、`DOMAINSMANAGER_TASK_RETRY_BASE_SECONDS`、`DOMAINSMANAGER_TASK_RETRY_MAX_SECONDS` 和 `DOMAINSMANAGER_TASK_LEASE_SECONDS` 调整策略。
 
 [openapi.yaml](openapi.yaml) 是 FastAPI 后端契约，采用 OpenAPI 3.1，统一前缀为
 `/api/v1`。当前已实现应用骨架、根级健康检查、本地认证、当前用户、用户域名 CRUD、刷新任务、检查历史、Scheduler、通知规则/投递历史，以及管理员用户、会话撤销、全局域名、全局检查/统计和全局运行配置接口。OAuth2 仅提供 Provider 空配置状态。契约中的管理员密码重置仍属 M5 预留，不能仅因已写入 OpenAPI 就视为可用。

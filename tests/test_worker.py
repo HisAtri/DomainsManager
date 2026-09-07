@@ -1,9 +1,10 @@
 from asyncio import Event
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from domainsmanager_api.resources import Resources
 from domainsmanager_api.settings import Settings
 from domainsmanager_api.worker import default_worker_id, run
 
@@ -38,4 +39,31 @@ async def test_worker_uses_configured_polling_and_closes_resources() -> None:
     await run(settings=settings, stop=stop, resource_factory=factory)
 
     factory.assert_awaited_once_with(settings)
+    resources.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_worker_spreads_backlog_before_claiming_tasks():
+    stop = Event()
+    calls = []
+    settings = Settings(_env_file=None, jwt_secret_key="x", refresh_token_pepper="y")
+    resources = Mock(spec=Resources)
+    resources.reload_global_policies = AsyncMock(return_value=settings)
+    resources.close = AsyncMock()
+
+    async def spread():
+        calls.append("spread")
+        return 1
+
+    async def claim(_worker):
+        calls.append("claim")
+        stop.set()
+        return True
+
+    resources.scheduler = SimpleNamespace(spread_overdue=spread)
+    resources.tasks = SimpleNamespace(run_once=claim)
+    await run(
+        settings=settings, stop=stop, resource_factory=AsyncMock(return_value=resources)
+    )
+    assert calls == ["spread", "claim"]
     resources.close.assert_awaited_once()
