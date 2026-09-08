@@ -9,6 +9,7 @@ from domainsmanager_lookup._internal.whois_profiles.builtin import (
     create_eu_profile,
     create_fr_profile,
     create_hk_profile,
+    create_io_profile,
     create_sh_profile,
     create_tw_profile,
     create_us_profile,
@@ -28,6 +29,7 @@ def build_default_whois_registry() -> WhoisProfileRegistry:
         create_eu_profile,
         create_fr_profile,
         create_hk_profile,
+        create_io_profile,
         create_tw_profile,
         create_sh_profile,
     ):

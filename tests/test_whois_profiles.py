@@ -6,6 +6,7 @@ from domainsmanager_lookup._internal.normalization.domain import DomainNormalize
 from domainsmanager_lookup._internal.parsers.whois import ProfiledWhoisParser
 from domainsmanager_lookup._internal.whois_profiles.base import WhoisProfile
 from domainsmanager_lookup._internal.whois_profiles.builtin.cn import create_cn_profile
+from domainsmanager_lookup._internal.whois_profiles.builtin.io import create_io_profile
 from domainsmanager_lookup._internal.whois_profiles.defaults import (
     build_default_whois_registry,
 )
@@ -118,6 +119,81 @@ DNSSEC: signed
 
 
 class BuiltinWhoisProfileTests(unittest.TestCase):
+    def test_io_query_matches_registry_wire_format(self):
+        profile = create_io_profile()
+        domain = DomainNormalizer().normalize("github.io")
+
+        self.assertEqual(profile.query_strategy.build_query(domain), b"github.io\r\n")
+
+    def test_io_parser_reads_live_registry_response_format(self):
+        parser = ProfiledWhoisParser(build_default_whois_registry())
+        domain = DomainNormalizer().normalize("github.io")
+        result = parser.parse_result(
+            RawLookupResponse(
+                domain="github.io",
+                protocol="whois",
+                endpoint="whois.nic.io",
+                body="""Domain Name: github.io
+Registry Domain ID: REDACTED
+Registrar WHOIS Server: whois.markmonitor.com
+Registrar URL: http://www.markmonitor.com
+Updated Date: 2026-08-12T09:08:04Z
+Creation Date: 2013-03-08T19:12:48Z
+Registry Expiry Date: 2027-03-08T19:12:48Z
+Registrar: MarkMonitor Inc.
+Registrar IANA ID: 292
+Registrar Abuse Contact Email: abusecomplaints@markmonitor.com
+Registrar Abuse Contact Phone: +1.2083895740
+Domain Status: clientDeleteProhibited https://icann.org/epp#clientDeleteProhibited
+Domain Status: clientTransferProhibited https://icann.org/epp#clientTransferProhibited
+Name Server: ns-692.awsdns-22.net
+Name Server: ns-1622.awsdns-10.co.uk
+DNSSEC: unsigned
+""",
+                fetched_at=NOW,
+                expires_at=NOW,
+            ),
+            domain,
+        )
+
+        self.assertEqual(result.status, WhoisResponseStatus.FOUND)
+        self.assertEqual(result.info.domain, "github.io")
+        self.assertEqual(result.info.registrar.name, "MarkMonitor Inc.")
+        self.assertEqual(result.info.registrar.iana_id, 292)
+        self.assertEqual(
+            result.info.statuses,
+            ["client delete prohibited", "client transfer prohibited"],
+        )
+        self.assertEqual(
+            result.info.nameservers,
+            ["ns-1622.awsdns-10.co.uk", "ns-692.awsdns-22.net"],
+        )
+        self.assertEqual(result.info.dates.registered_at.year, 2013)
+        self.assertEqual(result.info.dates.expires_at.year, 2027)
+        self.assertEqual(result.info.dates.updated_at.year, 2026)
+        self.assertFalse(result.info.dnssec.enabled)
+
+    def test_io_parser_classifies_live_registry_not_found_response(self):
+        parser = ProfiledWhoisParser(build_default_whois_registry())
+        domain = DomainNormalizer().normalize("codex-probe-20260908-7f3c91.io")
+        result = parser.parse_result(
+            RawLookupResponse(
+                domain=domain.registrable_domain,
+                protocol="whois",
+                endpoint="whois.nic.io",
+                body="""Domain not found.
+
+>>> Last update of WHOIS database: 2026-09-08T14:32:09Z <<<
+""",
+                fetched_at=NOW,
+                expires_at=NOW,
+            ),
+            domain,
+        )
+
+        self.assertEqual(result.status, WhoisResponseStatus.NOT_FOUND)
+        self.assertIsNone(result.info)
+
     def test_co_terms_rate_limited_text_does_not_mask_registered_domain(self):
         parser = ProfiledWhoisParser(build_default_whois_registry())
         domain = DomainNormalizer().normalize("huggingface.co")
@@ -179,7 +255,19 @@ Registrar Name: WEST263 INTERNATIONAL LIMITED
     ):
         registry = build_default_whois_registry()
         normalizer = DomainNormalizer()
-        for suffix in ("us", "co", "cc", "ca", "do", "eu", "fr", "hk", "tw", "sh"):
+        for suffix in (
+            "us",
+            "co",
+            "cc",
+            "ca",
+            "do",
+            "eu",
+            "fr",
+            "hk",
+            "io",
+            "tw",
+            "sh",
+        ):
             self.assertEqual(
                 registry.resolve(normalizer.normalize(f"example.{suffix}")).key, suffix
             )

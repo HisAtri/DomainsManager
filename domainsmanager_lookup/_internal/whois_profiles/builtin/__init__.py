@@ -6,6 +6,7 @@ from domainsmanager_lookup._internal.whois_profiles.builtin.do import create_do_
 from domainsmanager_lookup._internal.whois_profiles.builtin.eu import create_eu_profile
 from domainsmanager_lookup._internal.whois_profiles.builtin.fr import create_fr_profile
 from domainsmanager_lookup._internal.whois_profiles.builtin.hk import create_hk_profile
+from domainsmanager_lookup._internal.whois_profiles.builtin.io import create_io_profile
 from domainsmanager_lookup._internal.whois_profiles.builtin.sh import create_sh_profile
 from domainsmanager_lookup._internal.whois_profiles.builtin.tw import create_tw_profile
 from domainsmanager_lookup._internal.whois_profiles.builtin.us import create_us_profile
@@ -19,6 +20,7 @@ __all__ = [
     "create_eu_profile",
     "create_fr_profile",
     "create_hk_profile",
+    "create_io_profile",
     "create_sh_profile",
     "create_tw_profile",
     "create_us_profile",
