@@ -786,6 +786,9 @@ tbody tr:hover { background: var(--dm-soft); }
 .picasso-setting-editor .stacked-editor { display: grid; gap: 8px; }
 .picasso-setting-editor input, .picasso-setting-editor textarea { box-sizing: border-box; width: 100%; border: 1px solid var(--dm-border-strong); border-radius: 8px; color: var(--dm-text); background: var(--dm-raised); outline: none; font-size: 14px; line-height: 20px; }
 .picasso-setting-editor input { padding: 8px 12px; }
+.picasso-setting-editor .setting-input-with-unit { position: relative; display: block; }
+.picasso-setting-editor .setting-input-with-unit input { padding-right: 42px; }
+.picasso-setting-editor .setting-unit { position: absolute; top: 10px; right: 12px; margin: 0; color: var(--dm-muted); font-size: 12px; line-height: 20px; pointer-events: none; }
 .picasso-setting-editor textarea { min-height: 98px; padding: 8px 12px; resize: vertical; }
 .picasso-setting-editor .code-editor { min-height: 98px; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 14px; }
 .picasso-setting-editor input:focus, .picasso-setting-editor textarea:focus { border-color: var(--dm-accent); box-shadow: 0 0 0 3px var(--dm-focus); }
