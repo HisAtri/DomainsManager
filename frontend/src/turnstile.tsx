@@ -65,7 +65,7 @@ export function TurnstileChallenge({ siteKey, action, onChange }: {
     onChange(null);
     setError(null);
     if (!siteKey) {
-      setError("Turnstile Site key 未配置");
+      setError("人机验证暂不可用，请联系管理员。");
       return;
     }
     loadTurnstile().then((turnstile) => {
@@ -77,10 +77,10 @@ export function TurnstileChallenge({ siteKey, action, onChange }: {
         theme: "auto",
         callback: (token) => { setError(null); onChange(token); },
         "expired-callback": () => onChange(null),
-        "error-callback": () => { onChange(null); setError("Turnstile 校验失败，请重试"); },
+        "error-callback": () => { onChange(null); setError("人机验证失败，请重试"); },
       });
     }).catch(() => {
-      if (!cancelled) setError("Turnstile 加载失败，请检查网络后重试");
+      if (!cancelled) setError("人机验证加载失败，请检查网络后重试");
     });
     return () => {
       cancelled = true;

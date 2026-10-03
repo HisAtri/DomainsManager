@@ -15,7 +15,7 @@ const errorMessages: Record<string, string> = {
   oauth_inactive_identity: "该第三方账号当前不可用，请使用其他登录方式。",
   oauth_session_changed: "登录会话已变化，请重新登录后再操作。",
   account_banned: "账号已被禁用。",
-  configuration_encryption_unavailable: "服务器尚未配置设置加密密钥，无法保存密码设置。",
+  configuration_encryption_unavailable: "当前无法保存密码设置，请联系管理员。",
   domain_already_managed: "该域名已在您的列表中。",
   idempotency_conflict: "该操作与先前请求冲突，请刷新后重试。",
   invalid_credentials: "用户名或密码不正确。",

@@ -13,11 +13,11 @@ type SettingsSection = { title?: string; keys: readonly string[]; enabledKey?: s
 type SettingsGroup = { id: string; title: string; description: string; sections: readonly SettingsSection[] };
 
 const SITE_GROUPS: readonly SettingsGroup[] = [
-  { id: "site", title: "站点信息", description: "站点名称、Logo 和 Favicon", sections: [{ title: "基本信息", keys: ["site_name", "site_url", "site_logo", "site_favicon"] }] },
-  { id: "security", title: "安全设置", description: "反机器人保护", sections: [{ title: "反机器人", keys: ["anti_bot_mode"] }, { title: "图形验证码", keys: ["captcha_rotate", "captcha_offset", "captcha_warp", "pow_difficulty"] }, { title: "Cloudflare Turnstile", keys: ["turnstile_site_key", "turnstile_secret_key"] }] },
-  { id: "oauth", title: "第三方登录", description: "允许用户通过 GitHub 或 LinuxDo 账号登录。", sections: [{ title: "GitHub OAuth App", enabledKey: "github_enabled", keys: ["github_client_id", "github_client_secret"] }, { title: "LinuxDo Connect", enabledKey: "linuxdo_enabled", keys: ["linuxdo_client_id", "linuxdo_client_secret"] }, { title: "授权流程", keys: ["oauth_attempt_ttl_seconds"] }] },
-  { id: "footer", title: "页脚配置", description: "页脚链接、版权和备案信息", sections: [{ title: "页脚内容", keys: ["footer_links", "footer_copyright"] }, { title: "备案信息", keys: ["icp_number", "police_record_number"] }] },
-  { id: "inject", title: "代码注入", description: "自定义样式、脚本与 HTML 注入", sections: [{ title: "样式与脚本", keys: ["custom_css", "custom_javascript"] }, { title: "HTML 注入", keys: ["head_html", "body_end_html"] }, { title: "网站统计", keys: ["analytics_code"] }] },
+  { id: "site", title: "站点信息", description: "站点名称、Logo 与对外访问地址", sections: [{ title: "基本信息", keys: ["site_name", "site_url", "site_logo", "site_favicon"] }] },
+  { id: "security", title: "安全设置", description: "登录与高风险操作的人机验证方式", sections: [{ keys: ["anti_bot_mode"] }, { title: "图形验证码样式", keys: ["captcha_rotate", "captcha_offset", "captcha_warp", "pow_difficulty"] }, { title: "Cloudflare Turnstile", keys: ["turnstile_site_key", "turnstile_secret_key"] }] },
+  { id: "oauth", title: "第三方登录", description: "允许用户通过 GitHub 或 LinuxDo 账号登录。", sections: [{ title: "GitHub OAuth App", enabledKey: "github_enabled", keys: ["github_client_id", "github_client_secret"] }, { title: "LinuxDo Connect", enabledKey: "linuxdo_enabled", keys: ["linuxdo_client_id", "linuxdo_client_secret"] }, { title: "登录授权时效", keys: ["oauth_attempt_ttl_seconds"] }] },
+  { id: "footer", title: "页脚配置", description: "页脚展示的链接、版权与备案信息", sections: [{ title: "页脚内容", keys: ["footer_links", "footer_copyright"] }, { title: "备案信息", keys: ["icp_number", "police_record_number"] }] },
+  { id: "inject", title: "代码注入", description: "向所有前台页面加入自定义样式、脚本与 HTML", sections: [{ title: "样式与脚本", keys: ["custom_css", "custom_javascript"] }, { title: "HTML 注入", keys: ["head_html", "body_end_html"] }, { title: "网站统计", keys: ["analytics_code"] }] },
 ];
 
 const NOTIFICATION_GROUP = "通知设置";
@@ -32,8 +32,8 @@ const SMTP_DEFAULT_PORTS: Record<(typeof SMTP_ENCRYPTION_OPTIONS)[number]["value
   ssl_tls: "465",
 };
 const RATE_LIMIT_POLICIES = [
-  { title: "普通接口", description: "适用于已认证用户的常规业务请求。", attemptsKey: "normal_rate_limit_attempts", windowKey: "normal_rate_limit_window_seconds" },
-  { title: "高成本接口", description: "适用于新增域名和手动刷新等高成本操作。", attemptsKey: "expensive_rate_limit_attempts", windowKey: "expensive_rate_limit_window_seconds" },
+  { title: "日常操作", description: "限制每位用户日常操作（浏览、查看与修改设置）的频率，超出后会被暂时限制。", attemptsKey: "normal_rate_limit_attempts", windowKey: "normal_rate_limit_window_seconds" },
+  { title: "添加域名与刷新", description: "限制添加域名与手动刷新的频率；这些操作会查询注册局，超出后会被暂时限制。", attemptsKey: "expensive_rate_limit_attempts", windowKey: "expensive_rate_limit_window_seconds" },
 ] as const;
 type RateLimitKey = (typeof RATE_LIMIT_POLICIES)[number]["attemptsKey" | "windowKey"];
 const RATE_LIMIT_KEYS: ReadonlySet<string> = new Set(RATE_LIMIT_POLICIES.flatMap((policy) => [policy.attemptsKey, policy.windowKey]));
@@ -70,14 +70,14 @@ function RateLimitSettings({ settings, draft, onChange }: { settings: GlobalSett
     const attempts = byKey.get(policy.attemptsKey);
     const window = byKey.get(policy.windowKey);
     if (!attempts || !window) return null;
-    return <section className="rate-limit-policy" key={policy.attemptsKey}><div className="rate-limit-policy-copy"><b>{policy.title}</b><small>{policy.description}</small></div><div className="rate-limit-fields"><label><span>允许</span><input aria-label={`${policy.title}请求次数`} type="number" min={attempts.minimum ?? undefined} max={attempts.maximum ?? undefined} value={String(draft[attempts.key] ?? "")} onChange={(event) => onChange(policy.attemptsKey, event.target.value)} /><em>次请求</em></label><span className="rate-limit-connector">在</span><label><input aria-label={`${policy.title}时间窗口`} type="number" min={window.minimum ?? undefined} max={window.maximum ?? undefined} value={String(draft[window.key] ?? "")} onChange={(event) => onChange(policy.windowKey, event.target.value)} /><em>秒时间窗口内</em></label></div></section>;
+    return <section className="rate-limit-policy" key={policy.attemptsKey}><div className="rate-limit-policy-copy"><b>{policy.title}</b><small>{policy.description}</small></div><div className="rate-limit-fields"><label><span>每</span><input aria-label={`${policy.title}统计周期`} type="number" min={window.minimum ?? undefined} max={window.maximum ?? undefined} value={String(draft[window.key] ?? "")} onChange={(event) => onChange(policy.windowKey, event.target.value)} /><em>秒</em></label><span className="rate-limit-connector">最多</span><label><input aria-label={`${policy.title}次数上限`} type="number" min={attempts.minimum ?? undefined} max={attempts.maximum ?? undefined} value={String(draft[attempts.key] ?? "")} onChange={(event) => onChange(policy.attemptsKey, event.target.value)} /><em>次</em></label></div></section>;
   })}</div>;
 }
 
 function TestEmailControl({ onMessage }: { onMessage: (message: string) => void }) {
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
-  return <section className="picasso-setting-section"><header><h2>发送测试邮件</h2></header><div className="picasso-setting-list"><div className="picasso-setting-row"><div className="picasso-setting-copy"><b>测试邮箱</b><small>使用已保存的当前 SMTP 配置发送一封测试邮件。</small></div><div className="picasso-setting-editor inline-field-action"><div className="setting-input-wrap"><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="test@example.com" /></div><button className="primary" disabled={busy || !email} onClick={async () => { setBusy(true); try { await api.sendTestEmail(email); onMessage("测试邮件已提交发送"); } catch (error) { onMessage(error instanceof Error ? error.message : "测试邮件发送失败"); } finally { setBusy(false); } }}>{busy ? "发送中…" : "发送"}</button></div></div></div></section>;
+  return <section className="picasso-setting-section"><header><h2>发送测试邮件</h2></header><div className="picasso-setting-list"><div className="picasso-setting-row"><div className="picasso-setting-copy"><b>测试邮箱</b><small>向该地址发送一封测试邮件，用于检查邮件通知能否正常送达。</small></div><div className="picasso-setting-editor inline-field-action"><div className="setting-input-wrap"><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="test@example.com" /></div><button className="primary" disabled={busy || !email} onClick={async () => { setBusy(true); try { await api.sendTestEmail(email); onMessage("测试邮件已发送，请查收"); } catch (error) { onMessage(error instanceof Error ? error.message : "测试邮件发送失败"); } finally { setBusy(false); } }}>{busy ? "发送中…" : "发送"}</button></div></div></div></section>;
 }
 
 export function AdminSettingsV2({ onMessage, onDirtyChange }: { onMessage: (message: string) => void; onDirtyChange: (dirty: boolean) => void }) {
@@ -97,7 +97,7 @@ export function AdminSettingsV2({ onMessage, onDirtyChange }: { onMessage: (mess
     return {
       id: "runtime",
       title: "系统运行",
-      description: "域名监控、任务执行和调度配置",
+      description: "账户注册、操作频率、域名自动检查与后台处理参数",
       sections: names.map((name) => ({ title: name, keys: runtimeSettings.filter((item) => item.group === name).map((item) => item.key) })),
     };
   }, [settings]);
@@ -107,9 +107,9 @@ export function AdminSettingsV2({ onMessage, onDirtyChange }: { onMessage: (mess
     return {
       id: "notifications",
       title: NOTIFICATION_GROUP,
-      description: "配置 Webhook 投递策略、专用代理和 SMTP 邮件服务",
+      description: "配置通知发送方式、专用网络与邮件服务",
       sections: [
-        { title: "Webhook 投递", keys: notificationSettings.filter((item) => !item.key.startsWith("smtp_")).map((item) => item.key) },
+        { title: "Webhook 通知", keys: notificationSettings.filter((item) => !item.key.startsWith("smtp_")).map((item) => item.key) },
         { title: "邮件设置", keys: notificationSettings.filter((item) => item.key.startsWith("smtp_")).map((item) => item.key) },
       ],
     };

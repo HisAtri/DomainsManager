@@ -22,7 +22,7 @@ export async function solvePow(operation: PowOperation, signal: AbortSignal): Pr
   const challenge = await api.powChallenge(operation) as unknown as Challenge;
   if (signal.aborted) throw abortedError();
   if (challenge.parameters?.algorithm !== "PBKDF2/SHA-256") {
-    throw new Error("不支持的校验算法");
+    throw new Error("安全校验失败，请刷新页面后重试");
   }
   const controller = new AbortController();
   const onAbort = () => controller.abort();
