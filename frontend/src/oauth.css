@@ -1,0 +1,49 @@
+/* OAuth 入口沿用站点的中性色与强调色；平台标识负责辨认，不复制外部站点的按钮样式。 */
+.oauth-login { margin-top: 24px; }
+.oauth-divider { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; color: var(--dm-muted); font-size: 12px; white-space: nowrap; }
+.oauth-divider::before, .oauth-divider::after { content: ""; flex: 1; height: 1px; background: var(--dm-border); }
+.oauth-buttons { display: grid; gap: 9px; }
+.oauth-login-button { display: grid; grid-template-columns: 22px 1fr 22px; align-items: center; gap: 10px; width: 100%; min-height: 44px; padding: 9px 13px; border: 1px solid var(--dm-border-strong); border-radius: 8px; color: var(--dm-text-soft); background: var(--dm-surface); font-size: 13px; font-weight: 600; transition: border-color .15s ease, background-color .15s ease, transform .15s ease; }
+.oauth-login-button::after { content: ""; }
+.oauth-login-button:hover:not(:disabled) { border-color: var(--dm-accent-border); background: var(--dm-accent-soft); transform: translateY(-1px); }
+.oauth-login-button:focus-visible, .oauth-account-action:focus-visible, .oauth-availability-note button:focus-visible, .oauth-load-note button:focus-visible { outline: 2px solid var(--dm-accent); outline-offset: 2px; }
+.oauth-login-button:disabled { cursor: wait; }
+.oauth-logo { display: block; width: 22px; height: 22px; flex: 0 0 auto; object-fit: contain; }
+[data-theme="dark"] .oauth-logo-github { filter: invert(1); }
+.oauth-availability-note, .oauth-load-note { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--dm-muted); font-size: 12px; line-height: 1.5; }
+.oauth-availability-note button, .oauth-load-note button { display: inline-flex; align-items: center; gap: 5px; flex: 0 0 auto; padding: 3px 0; color: var(--dm-accent); background: transparent; font-size: 12px; font-weight: 600; }
+.oauth-availability-note button:hover, .oauth-load-note button:hover { color: var(--dm-accent-hover); }
+.oauth-feedback { display: flex; align-items: flex-start; gap: 9px; margin: 0 0 16px; padding: 10px 12px; border: 1px solid var(--dm-error-border); border-radius: 8px; color: var(--dm-error-text); background: var(--dm-error-bg); font-size: 12px; line-height: 1.5; }
+.oauth-feedback svg { flex: 0 0 auto; margin-top: 1px; }
+.oauth-feedback-success { border-color: var(--dm-ok-border); color: var(--dm-ok-text); background: var(--dm-ok-bg); }
+
+/* 关联账号是“平台 + 当前连接 + 操作”的一行，不复用普通设置表单的三栏网格。 */
+.oauth-accounts-section .oauth-feedback { margin-top: 12px; margin-bottom: 4px; }
+.oauth-load-note { margin: 12px 0; padding: 10px 12px; border: 1px solid var(--dm-border); border-radius: 8px; background: var(--dm-raised); }
+.oauth-account-row { display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 72px; padding: 14px 0; border-bottom: 1px solid var(--dm-border); }
+.oauth-account-icon { display: grid; width: 38px; height: 38px; place-items: center; border-radius: 9px; background: var(--dm-soft); }
+.oauth-account-icon .oauth-logo { width: 24px; height: 24px; }
+.oauth-account-details { display: grid; min-width: 0; gap: 3px; }
+.oauth-account-details b { color: var(--dm-text); font-size: 14px; font-weight: 600; line-height: 20px; }
+.oauth-account-details span { overflow: hidden; color: var(--dm-muted); font-size: 12px; line-height: 17px; text-overflow: ellipsis; white-space: nowrap; }
+.oauth-account-details em { font-style: normal; }
+.oauth-account-actions { position: relative; display: inline-flex; align-items: center; }
+.oauth-account-action { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 36px; padding: 0 12px; border: 1px solid var(--dm-border-strong); border-radius: 7px; color: var(--dm-text-soft); background: var(--dm-surface); font-size: 12px; font-weight: 600; white-space: nowrap; transition: border-color .15s ease, background-color .15s ease, color .15s ease; }
+.oauth-account-connect { border-color: var(--dm-accent-border); color: var(--dm-accent); }
+.oauth-account-connect:hover:not(:disabled) { background: var(--dm-accent-soft); }
+.oauth-account-disconnect:hover:not(:disabled) { border-color: var(--dm-error-border); color: var(--dm-danger); background: var(--dm-error-bg); }
+.oauth-account-action:disabled { cursor: wait; opacity: .55; }
+.oauth-account-action:disabled:has(.spin) { cursor: wait; opacity: .8; }
+.oauth-account-action[aria-disabled="true"] { cursor: help; opacity: .55; }
+.oauth-account-tooltip { position: absolute; z-index: 2; right: 0; bottom: calc(100% + 8px); width: max-content; max-width: min(230px, calc(100vw - 32px)); padding: 8px 10px; border: 1px solid var(--dm-border); border-radius: 7px; color: var(--dm-text-soft); background: var(--dm-surface); box-shadow: 0 8px 24px var(--dm-shadow-strong); font-size: 12px; line-height: 1.5; pointer-events: none; opacity: 0; visibility: hidden; transform: translateY(4px); transition: opacity .15s ease, transform .15s ease, visibility .15s ease; }
+.oauth-account-action[aria-disabled="true"]:hover + .oauth-account-tooltip, .oauth-account-actions[data-help-open="true"] .oauth-account-tooltip { opacity: 1; visibility: visible; transform: translateY(0); }
+.oauth-accounts-empty { margin: 0; padding: 20px 0; color: var(--dm-muted); font-size: 13px; }
+.oauth-disconnect-dialog { width: min(410px, calc(100vw - 32px)); }
+.oauth-provider-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.username-onboarding .username-help { margin: -5px 0 20px; color: var(--dm-muted); font-size: 12px; line-height: 1.6; }
+
+@media (max-width: 399px) {
+  .oauth-account-row { grid-template-columns: 34px minmax(0, 1fr) auto; gap: 9px; }
+  .oauth-account-icon { width: 34px; height: 34px; }
+  .oauth-account-action { padding-inline: 9px; }
+}

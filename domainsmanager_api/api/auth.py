@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from domainsmanager_api.anti_bot import verify as verify_anti_bot
 from domainsmanager_api.dependencies import (
     AuthContextDependency,
     AuthServiceDependency,
@@ -14,7 +15,6 @@ from domainsmanager_api.dependencies import (
     get_session,
 )
 from domainsmanager_api.email_verification import begin as begin_email_verification
-from domainsmanager_api.anti_bot import verify as verify_anti_bot
 from domainsmanager_api.email_verification import confirm as confirm_email_verification
 from domainsmanager_api.email_verification import (
     resend_available,
@@ -55,6 +55,18 @@ from domainsmanager_persistence.models import AppUser
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+AUTH_ERRORS = (
+    RegistrationDisabledError,
+    UsernameTakenError,
+    PasswordReusedError,
+    AccountBannedError,
+    AuthenticationError,
+    InvalidTokenError,
+    PasswordMismatchError,
+    InvalidUsernameError,
+    InvalidPasswordError,
+)
+
 
 def no_store(response: Response) -> None:
     response.headers["Cache-Control"] = "no-store"
@@ -68,8 +80,12 @@ def user_response(user: UserRecord) -> UserResponse:
         email=user.email,
         pending_email=user.pending_email,
         email_verified_at=user.email_verified_at,
+        password_auth_enabled=user.password_auth_enabled,
+        username_setup_required=user.username_setup_required,
         role=user.role,
-        status="banned" if user.banned_at is not None or not user.is_active else "active",
+        status="banned"
+        if user.banned_at is not None or not user.is_active
+        else "active",
         last_login_at=user.last_login_at,
         created_at=user.created_at,
         updated_at=user.updated_at,
@@ -153,9 +169,16 @@ async def register(
     response: Response,
     auth: AuthServiceDependency,
     context: AuthContextDependency,
-    session: Annotated[AsyncSession, Depends(get_session)],
+    anti_bot_session: Annotated[AsyncSession, Depends(get_session)],
 ) -> AuthResultResponse:
-    await verify_anti_bot(request, session, "register", captcha_token=body.captcha_token, captcha_answer=body.captcha_answer, turnstile_token=body.turnstile_token)
+    await verify_anti_bot(
+        request,
+        anti_bot_session,
+        "register",
+        captcha_token=body.captcha_token,
+        captcha_answer=body.captcha_answer,
+        turnstile_token=body.turnstile_token,
+    )
     try:
         # Email is persisted as pending until the message link is confirmed.
         # This is deliberately performed after account/session creation.
@@ -165,21 +188,42 @@ async def register(
             str(body.email) if body.email is not None else None,
             context,
         )
-    except Exception as error:
+    except AUTH_ERRORS as error:
         raise_auth_error(error)
     session_factory = request.app.state.resources.sessions
     async with session_factory() as session:
         config = await setting_values(session, request.app.state.settings)
         if bool(config["email_verification_enabled"]) and body.email is None:
-            raise HTTPException(status_code=422, detail={"code": "email_verification_required", "message": "email is required when verification is enabled"})
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "email_verification_required",
+                    "message": "email is required when verification is enabled",
+                },
+            )
         if bool(config["email_verification_enabled"]) and body.email is not None:
             validate_allowlist(str(body.email), str(config["email_domain_allowlist"]))
             try:
-                link = await begin_email_verification(session, user_id=result.user.id, email=str(body.email), site_url=validate_site_url(str(config["site_url"])))
-                await send_verification_email(str(body.email), link, request.app.state.settings, session_factory)
+                link = await begin_email_verification(
+                    session,
+                    user_id=result.user.id,
+                    email=str(body.email),
+                    site_url=validate_site_url(str(config["site_url"])),
+                )
+                await send_verification_email(
+                    str(body.email), link, request.app.state.settings, session_factory
+                )
             except ValueError as error:
-                raise HTTPException(status_code=422, detail={"code": "email_verification_configuration_error", "message": str(error)}) from error
-            result = AuthenticationResult(user=await auth.get_user(result.user.id), tokens=result.tokens)
+                raise HTTPException(
+                    status_code=422,
+                    detail={
+                        "code": "email_verification_configuration_error",
+                        "message": str(error),
+                    },
+                ) from error
+            result = AuthenticationResult(
+                user=await auth.get_user(result.user.id), tokens=result.tokens
+            )
     no_store(response)
     response.headers["Location"] = str(request.url_for("getCurrentUser"))
     set_refresh_cookie(response, result.tokens.refresh_token, request)
@@ -205,10 +249,17 @@ async def login(
     turnstile_token: str | None = Form(default=None),
 ) -> AuthResultResponse:
     del scope
-    await verify_anti_bot(request, session, "login", captcha_token=captcha_token, captcha_answer=captcha_answer, turnstile_token=turnstile_token)
+    await verify_anti_bot(
+        request,
+        session,
+        "login",
+        captcha_token=captcha_token,
+        captcha_answer=captcha_answer,
+        turnstile_token=turnstile_token,
+    )
     try:
         result = await auth.login(username, password, context)
-    except Exception as error:
+    except AUTH_ERRORS as error:
         raise_auth_error(error)
     no_store(response)
     set_refresh_cookie(response, result.tokens.refresh_token, request)
@@ -248,7 +299,7 @@ async def refresh_token(
         raise_auth_error(InvalidTokenError("refresh token is required"))
     try:
         tokens = await auth.rotate_refresh_token(token, context)
-    except Exception as error:
+    except AUTH_ERRORS as error:
         raise_auth_error(error)
     no_store(response)
     set_refresh_cookie(response, tokens.refresh_token, request)
@@ -290,10 +341,23 @@ async def update_me(
     if bool(config["email_verification_enabled"]) and request.email is not None:
         validate_allowlist(str(request.email), str(config["email_domain_allowlist"]))
         try:
-            link = await begin_email_verification(session, user_id=current.user.id, email=str(request.email), site_url=validate_site_url(str(config["site_url"])))
-            await send_verification_email(str(request.email), link, settings, resources.sessions)
+            link = await begin_email_verification(
+                session,
+                user_id=current.user.id,
+                email=str(request.email),
+                site_url=validate_site_url(str(config["site_url"])),
+            )
+            await send_verification_email(
+                str(request.email), link, settings, resources.sessions
+            )
         except ValueError as error:
-            raise HTTPException(status_code=422, detail={"code": "email_verification_configuration_error", "message": str(error)}) from error
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": "email_verification_configuration_error",
+                    "message": str(error),
+                },
+            ) from error
         return user_response(await auth.get_user(current.user.id))
     try:
         user = await auth.update_profile(
@@ -301,18 +365,29 @@ async def update_me(
             str(request.email) if request.email is not None else None,
             context,
         )
-    except Exception as error:
+    except AUTH_ERRORS as error:
         raise_auth_error(error)
     return user_response(user)
 
 
-@router.post("/email-verifications/confirm", response_model=EmailVerificationResponse, operation_id="confirmEmailVerification")
-async def confirm_email(body: EmailVerificationConfirmRequest, session: Annotated[AsyncSession, Depends(get_session)]) -> EmailVerificationResponse:
+@router.post(
+    "/email-verifications/confirm",
+    response_model=EmailVerificationResponse,
+    operation_id="confirmEmailVerification",
+)
+async def confirm_email(
+    body: EmailVerificationConfirmRequest,
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> EmailVerificationResponse:
     user = await confirm_email_verification(session, body.token)
     return EmailVerificationResponse(status="verified", email=user.email)
 
 
-@router.post("/me/email-verifications/resend", response_model=EmailVerificationResponse, operation_id="resendEmailVerification")
+@router.post(
+    "/me/email-verifications/resend",
+    response_model=EmailVerificationResponse,
+    operation_id="resendEmailVerification",
+)
 async def resend_email_verification(
     current: CurrentUserDependency,
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -321,15 +396,41 @@ async def resend_email_verification(
 ) -> EmailVerificationResponse:
     user = await session.get(AppUser, current.user.id)
     if user is None or not user.pending_email:
-        raise HTTPException(status_code=409, detail={"code": "email_verification_not_pending", "message": "there is no pending email verification"})
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "email_verification_not_pending",
+                "message": "there is no pending email verification",
+            },
+        )
     if not await resend_available(session, user.id):
-        raise HTTPException(status_code=429, detail={"code": "email_verification_resend_cooldown", "message": "please wait before requesting another verification email"}, headers={"Retry-After": "60"})
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "code": "email_verification_resend_cooldown",
+                "message": "please wait before requesting another verification email",
+            },
+            headers={"Retry-After": "60"},
+        )
     config = await setting_values(session, settings)
     try:
-        link = await begin_email_verification(session, user_id=user.id, email=user.pending_email, site_url=validate_site_url(str(config["site_url"])))
-        await send_verification_email(user.pending_email, link, settings, resources.sessions)
+        link = await begin_email_verification(
+            session,
+            user_id=user.id,
+            email=user.pending_email,
+            site_url=validate_site_url(str(config["site_url"])),
+        )
+        await send_verification_email(
+            user.pending_email, link, settings, resources.sessions
+        )
     except ValueError as error:
-        raise HTTPException(status_code=422, detail={"code": "email_verification_configuration_error", "message": str(error)}) from error
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "code": "email_verification_configuration_error",
+                "message": str(error),
+            },
+        ) from error
     return EmailVerificationResponse(status="pending", pending_email=user.pending_email)
 
 
@@ -352,7 +453,7 @@ async def change_password(
             request.new_password,
             context,
         )
-    except Exception as error:
+    except AUTH_ERRORS as error:
         raise_auth_error(error)
 
 
@@ -393,9 +494,7 @@ async def update_settings(
             },
         )
     existing = UserSettings.model_validate(current.user.preferences)
-    updated = UserSettings.model_validate(
-        {**existing.model_dump(), **supplied}
-    )
+    updated = UserSettings.model_validate({**existing.model_dump(), **supplied})
     user = await auth.update_settings(
         current.user.id,
         updated.model_dump(),

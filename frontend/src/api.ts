@@ -1,9 +1,19 @@
 import type { AdminCheckPage, AdminDomain, AdminDomainPage, AdminSession, AdminUser, AdminUserPage, AuthResult, Check, Domain, DomainStats, GlobalSetting, NotificationDelivery, NotificationRule, NotificationRuleInput, NotificationRuleUpdate, OperationalMetrics, Page, PublicSiteConfig, SecurityAuditEvent, Settings, Task, Tokens, User } from "./types";
 
+import type { OAuthAccounts, OAuthAvailability, OAuthProvider } from "./types";
+
 type ApiErrorDetail = { location?: string; message?: string; code?: string };
 type ApiErrorBody = { code?: string; message?: string; details?: ApiErrorDetail[]; request_id?: string };
 
 const errorMessages: Record<string, string> = {
+  oauth_reauthentication_required: "请退出后重新登录，再进行此操作",
+  oauth_invalid_state: "授权已过期，请重新尝试。",
+  oauth_provider_error: "第三方授权服务暂不可用，请稍后重试。",
+  oauth_identity_in_use: "该第三方账号已被其他用户绑定。",
+  oauth_provider_already_linked: "已绑定该提供商的账号，请先解除原绑定。",
+  oauth_last_login_method: "无法解除最后一个登录方式，请先设置密码或绑定其他账号。",
+  oauth_inactive_identity: "该第三方账号当前不可用，请使用其他登录方式。",
+  oauth_session_changed: "登录会话已变化，请重新登录后再操作。",
   account_banned: "账号已被禁用。",
   configuration_encryption_unavailable: "服务器尚未配置设置加密密钥，无法保存密码设置。",
   domain_already_managed: "该域名已在您的列表中。",
@@ -98,6 +108,13 @@ class ApiClient {
   register(username: string, password: string, email?: string, captcha?: { token: string; answer: string }, turnstileToken?: string) { return this.request<AuthResult>("/auth/register", { method: "POST", body: JSON.stringify({ username, password, email: email || null, ...(captcha ? { captcha_token: captcha.token, captcha_answer: captcha.answer } : {}), ...(turnstileToken ? { turnstile_token: turnstileToken } : {}) }) }).then((r) => r.data); }
   async logout() { await this.request<void>("/auth/logout", { method: "POST" }, false).catch(() => undefined); this.setTokens(null); }
   me() { return this.request<User>("/auth/me").then((r) => r.data); }
+  setInitialUsername(username: string) { return this.request<User>("/auth/me/username", { method: "POST", body: JSON.stringify({ username }) }).then((r) => r.data); }
+  oauthAvailability() { return this.request<OAuthAvailability>("/auth/oauth2/availability", {}, false).then((r) => r.data); }
+  oauthLogin(provider: OAuthProvider["key"]) { location.assign(provider === "github" ? "/api/v1/auth/oauth2/github/authorize" : "/api/v1/auth/oauth2/linuxdo/authorize"); }
+  oauthLink(provider: OAuthProvider["key"]) { const path = provider === "github" ? "/auth/oauth2/github/authorize" : "/auth/oauth2/linuxdo/authorize"; return this.request<{ authorization_url: string }>(path, { method: "POST" }).then((r) => r.data); }
+  oauthAccounts() { return this.request<OAuthAccounts>("/auth/oauth2/accounts").then((r) => r.data); }
+  oauthUnlink(provider: OAuthProvider["key"]) { const path = provider === "github" ? "/auth/oauth2/github" : "/auth/oauth2/linuxdo"; return this.request<void>(path, { method: "DELETE" }); }
+  setPassword(new_password: string) { return this.request<void>("/auth/me/password/set", { method: "POST", body: JSON.stringify({ new_password }) }); }
   updateMe(email: string) { return this.request<User>("/auth/me", { method: "PATCH", body: JSON.stringify({ email: email || null }) }).then((r) => r.data); }
   changePassword(current_password: string, new_password: string) { return this.request<void>("/auth/me/password", { method: "POST", body: JSON.stringify({ current_password, new_password }) }); }
   settings() { return this.request<Settings>("/auth/me/settings").then((r) => r.data); }

@@ -10,7 +10,7 @@ from domainsmanager_persistence.db import (
     downgrade_migrations,
     run_migrations,
 )
-from domainsmanager_persistence.models import AppUser, ManagedDomain
+from domainsmanager_persistence.models import ManagedDomain
 from tests.database import sqlite_database
 
 NOW = datetime(2026, 1, 1, tzinfo=UTC)
@@ -28,16 +28,10 @@ async def test_managed_domain_soft_delete_migration_round_trip(tmp_path: Path) -
     try:
         async with engine.begin() as connection:
             await connection.execute(
-                AppUser.__table__.insert().values(
-                    id=user_id,
-                    username="migration-user",
-                    username_normalized="migration-user",
-                    password_hash="hash",
-                    role="user",
-                    password_changed_at=NOW,
-                    created_at=NOW,
-                    updated_at=NOW,
-                )
+                text(
+                    "INSERT INTO app_user (id,username,username_normalized,password_hash,role,totp_enabled,preferences,is_active,password_changed_at,created_at,updated_at) VALUES (:id,'migration-user','migration-user','hash','user',false,'{}',true,:now,:now,:now)"
+                ),
+                {"id": user_id.hex, "now": NOW},
             )
             await connection.execute(
                 text(

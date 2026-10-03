@@ -5,9 +5,7 @@ from typing import Any, Literal
 
 from domainsmanager_api.settings import Settings
 
-ValueKind = Literal[
-    "integer", "number", "boolean", "string", "choice", "json"
-]
+ValueKind = Literal["integer", "number", "boolean", "string", "choice", "json"]
 _MISSING = object()
 
 
@@ -142,11 +140,77 @@ def site_setting(
 
 
 GLOBAL_SETTINGS = (
-    choice("anti_bot_mode", "安全设置", "反机器人", "保护公开认证和高成本操作。", ("disabled", "image_captcha", "turnstile")),
+    GlobalSettingDefinition(
+        "github_enabled",
+        "第三方登录",
+        "启用 GitHub 登录",
+        "允许用户使用 GitHub 账号登录本站。",
+        "boolean",
+        live=True,
+        default_value=True,
+    ),
+    GlobalSettingDefinition(
+        "linuxdo_enabled",
+        "第三方登录",
+        "启用 LinuxDo 登录",
+        "允许用户使用 LinuxDo 账号登录本站。",
+        "boolean",
+        live=True,
+        default_value=True,
+    ),
+    site_setting(
+        "github_client_id",
+        "第三方登录",
+        "Client ID",
+        "GitHub OAuth App 的客户端 ID。",
+    ),
+    site_setting(
+        "github_client_secret",
+        "第三方登录",
+        "Client Secret",
+        "GitHub OAuth App 的客户端密钥。",
+    ),
+    site_setting(
+        "linuxdo_client_id",
+        "第三方登录",
+        "Client ID",
+        "LinuxDo Connect 的客户端 ID。",
+    ),
+    site_setting(
+        "linuxdo_client_secret",
+        "第三方登录",
+        "Client Secret",
+        "LinuxDo Connect 的客户端密钥。",
+    ),
+    GlobalSettingDefinition(
+        "oauth_attempt_ttl_seconds",
+        "第三方登录",
+        "授权尝试有效期",
+        "用户完成第三方登录授权的有效时长。",
+        "integer",
+        minimum=60,
+        maximum=3600,
+        unit="秒",
+        live=True,
+        default_value=600,
+    ),
+    choice(
+        "anti_bot_mode",
+        "安全设置",
+        "反机器人",
+        "保护公开认证和高成本操作。",
+        ("disabled", "image_captcha", "turnstile"),
+    ),
     boolean("captcha_rotate", "安全设置", "字符旋转", ""),
     boolean("captcha_offset", "安全设置", "字符偏移", ""),
     boolean("captcha_warp", "安全设置", "字符形变", ""),
-    choice("pow_difficulty", "安全设置", "PoW 难度", "更高的值耗时更长", ("easy", "medium", "hard")),
+    choice(
+        "pow_difficulty",
+        "安全设置",
+        "PoW 难度",
+        "更高的值耗时更长",
+        ("easy", "medium", "hard"),
+    ),
     string("turnstile_site_key", "安全设置", "Turnstile Site key", "站点密钥"),
     string("turnstile_secret_key", "安全设置", "Turnstile Secret Key", "密钥"),
     boolean(

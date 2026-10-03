@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from types import TracebackType
+from typing import Self
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, update
@@ -83,6 +84,8 @@ class SqlAlchemyUserRepository:
                 username=user.username,
                 username_normalized=user.username_normalized,
                 password_hash=user.password_hash,
+                password_auth_enabled=user.password_auth_enabled,
+                username_setup_required=user.username_setup_required,
                 email=user.email,
                 pending_email=user.pending_email,
                 email_verified_at=user.email_verified_at,
@@ -104,6 +107,20 @@ class SqlAlchemyUserRepository:
     async def set_last_login(self, user_id: UUID, at: datetime) -> None:
         await self._update_user(user_id, last_login_at=at, updated_at=at)
 
+    async def complete_username_setup(
+        self, user_id: UUID, username: str, normalized: str, at: datetime
+    ) -> None:
+        try:
+            await self._update_user(
+                user_id,
+                username=username,
+                username_normalized=normalized,
+                username_setup_required=False,
+                updated_at=at,
+            )
+        except IntegrityError as error:
+            raise DuplicateRecordError("username already exists") from error
+
     async def update_profile(
         self,
         user_id: UUID,
@@ -113,7 +130,10 @@ class SqlAlchemyUserRepository:
         updated_at: datetime,
     ) -> None:
         await self._update_user(
-            user_id, email=email, email_verified_at=email_verified_at, updated_at=updated_at
+            user_id,
+            email=email,
+            email_verified_at=email_verified_at,
+            updated_at=updated_at,
         )
 
     async def update_preferences(
@@ -174,6 +194,8 @@ class SqlAlchemyUserRepository:
             username=row.username,
             username_normalized=row.username_normalized,
             password_hash=row.password_hash,
+            password_auth_enabled=row.password_auth_enabled,
+            username_setup_required=row.username_setup_required,
             email=row.email,
             pending_email=row.pending_email,
             email_verified_at=as_utc(row.email_verified_at),
@@ -426,7 +448,7 @@ class SqlAlchemyUnitOfWork:
         self._session: AsyncSession | None = None
         self._transaction = None
 
-    async def __aenter__(self) -> SqlAlchemyUnitOfWork:
+    async def __aenter__(self) -> Self:
         self._session = self._sessions()
         self._transaction = await self._session.begin()
         self.users = SqlAlchemyUserRepository(self._session)
@@ -436,6 +458,9 @@ class SqlAlchemyUnitOfWork:
         self.domains = SqlAlchemyDomainRepository(self._session)
         self.tasks = SqlAlchemyTaskRepository(self._session)
         self.notifications = SqlAlchemyNotificationRuleRepository(self._session)
+        from domainsmanager_persistence.oauth import SqlAlchemyOAuthRepository
+
+        self.oauth = SqlAlchemyOAuthRepository(self._session)
         return self
 
     async def __aexit__(

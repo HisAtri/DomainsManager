@@ -1,5 +1,9 @@
 export type Role = "user" | "admin";
-export type User = { id: string; username: string; email: string | null; pending_email: string | null; email_verified_at: string | null; role: Role; status: "active" | "banned"; last_login_at: string | null; created_at: string; updated_at: string };
+export type User = { id: string; username: string; email: string | null; pending_email: string | null; email_verified_at: string | null; role: Role; status: "active" | "banned"; password_auth_enabled: boolean; username_setup_required: boolean; last_login_at: string | null; created_at: string; updated_at: string };
+export type OAuthProvider = { key: "github" | "linuxdo"; display_name: string };
+export type OAuthAvailability = { github: boolean; linuxdo: boolean };
+export type OAuthAccount = { provider_key: string; provider_username: string | null; display_name: string | null; created_at: string };
+export type OAuthAccounts = { items: OAuthAccount[]; password_auth_enabled: boolean };
 export type Tokens = { access_token: string; expires_in: number };
 export type AuthResult = { user: User; tokens: Tokens };
 export type ExpirationStatus = "active" | "grace_period" | "expired" | "released" | "unknown";

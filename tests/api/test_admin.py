@@ -50,6 +50,56 @@ def login(client: TestClient, username: str) -> dict[str, str]:
 
 @pytest.mark.asyncio
 @pytest.mark.api
+async def test_oauth_switch_preserves_credentials_and_updates_availability(
+    tmp_path: Path,
+) -> None:
+    with await make_client(tmp_path) as client:
+        headers = login(client, "admin")
+        response = client.put(
+            "/api/v1/admin/settings",
+            headers=headers,
+            json={
+                "settings": [
+                    {"key": "site_url", "value": "http://localhost:5173", "version": 0},
+                    {"key": "github_client_id", "value": "test-client", "version": 0},
+                    {
+                        "key": "github_client_secret",
+                        "value": "test-secret",
+                        "version": 0,
+                    },
+                ]
+            },
+        )
+        assert response.status_code == 200
+        assert client.get("/api/v1/auth/oauth2/availability").json() == {
+            "github": True,
+            "linuxdo": False,
+        }
+        for version, enabled in enumerate([False, True]):
+            saved = client.put(
+                "/api/v1/admin/settings",
+                headers=headers,
+                json={
+                    "settings": [
+                        {"key": "github_enabled", "value": enabled, "version": version},
+                    ]
+                },
+            )
+            assert saved.status_code == 200
+            assert (
+                client.get("/api/v1/auth/oauth2/availability").json()["github"]
+                is enabled
+            )
+            settings = {
+                item["key"]: item
+                for item in client.get("/api/v1/admin/settings", headers=headers).json()
+            }
+            assert settings["github_client_secret"]["value"] == "test-secret"
+            assert settings["github_enabled"]["value"] is enabled
+
+
+@pytest.mark.asyncio
+@pytest.mark.api
 async def test_admin_security_audit_events_are_filterable_and_sanitized(
     tmp_path: Path,
 ) -> None:

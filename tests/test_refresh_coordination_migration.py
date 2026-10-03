@@ -10,7 +10,6 @@ from domainsmanager_persistence.db import (
     run_migrations,
 )
 from domainsmanager_persistence.models import (
-    AppUser,
     DomainRefreshTask,
     IdempotencyRecord,
     ManagedDomain,
@@ -27,16 +26,12 @@ async def test_upgrade_preserves_and_merges_existing_refresh_requests(tmp_path):
     user_id, domain_id, survivor_id, duplicate_id = [uuid4() for _ in range(4)]
     try:
         async with sessions() as session, session.begin():
-            session.add(
-                AppUser(
-                    id=user_id,
-                    username="legacy",
-                    username_normalized="legacy",
-                    password_hash="hash",
-                    password_changed_at=now,
-                    created_at=now,
-                    updated_at=now,
-                )
+            # 旧版 schema 的夹具不能使用包含新列的当前 ORM 模型。
+            await session.execute(
+                text(
+                    "INSERT INTO app_user (id,username,username_normalized,password_hash,role,totp_enabled,preferences,is_active,password_changed_at,created_at,updated_at) VALUES (:id,'legacy','legacy','hash','user',false,'{}',true,:now,:now,:now)"
+                ),
+                {"id": user_id.hex, "now": now},
             )
             await session.flush()
             session.add(

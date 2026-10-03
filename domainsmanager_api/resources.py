@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from domainsmanager_api.global_setting_registry import GLOBAL_SETTING_BY_KEY
 from domainsmanager_api.notifier import deliver
+from domainsmanager_api.oauth_providers import build_oauth_providers
 from domainsmanager_api.rate_limit import RateLimiter, create_rate_limiter
 from domainsmanager_api.settings import Settings
 from domainsmanager_application.domains import DomainService
@@ -19,6 +20,7 @@ from domainsmanager_application.notifications import (
     NotificationOutboxService,
     NotificationRuleService,
 )
+from domainsmanager_application.oauth import OAuthService
 from domainsmanager_application.scheduler import DomainSchedulerService, SchedulerPolicy
 from domainsmanager_application.security import (
     AccessTokenService,
@@ -54,6 +56,7 @@ class Resources:
     notifications: NotificationRuleService
     notifier: NotificationOutboxService
     rate_limiter: RateLimiter
+    oauth: OAuthService | None = None
 
     async def reload_global_policies(self) -> Settings:
         """Refresh runtime policies from persisted settings without restarting the process."""
@@ -155,6 +158,32 @@ def create_resources(settings: Settings) -> Resources:
     database = settings.database_config()
     engine = create_engine(database)
     sessions = create_session_factory(engine)
+
+    async def load_oauth_configuration():
+        # 凭据以现有全局设置表持久化；每次 OAuth 请求读取，避免多进程配置不同步。
+        keys = (
+            "site_url",
+            "github_enabled",
+            "linuxdo_enabled",
+            "github_client_id",
+            "github_client_secret",
+            "linuxdo_client_id",
+            "linuxdo_client_secret",
+            "oauth_attempt_ttl_seconds",
+        )
+        async with sessions() as session:
+            rows = (
+                await session.execute(
+                    select(GlobalSetting).where(GlobalSetting.key.in_(keys))
+                )
+            ).scalars()
+            values = {row.key: row.value for row in rows}
+        return (
+            build_oauth_providers(values),
+            values.get("site_url", "").rstrip("/"),
+            int(values.get("oauth_attempt_ttl_seconds", "600")),
+        )
+
     store = SqlAlchemyLookupStore(sessions)
     lookup = DomainLookup(store=store)
     lookup.configure_endpoint_retry(
@@ -187,6 +216,15 @@ def create_resources(settings: Settings) -> Resources:
         sessions=sessions,
         lookup=lookup,
         auth=auth,
+        oauth=OAuthService(
+            unit_of_work,
+            auth,
+            {},
+            None,
+            settings.api_prefix,
+            600,
+            configuration_loader=load_oauth_configuration,
+        ),
         domains=DomainService(
             unit_of_work=unit_of_work,
             lookup=lookup,

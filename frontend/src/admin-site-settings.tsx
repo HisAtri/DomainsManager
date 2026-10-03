@@ -9,12 +9,13 @@ import { SelectMenu } from "./select-menu";
 
 type Draft = Record<string, unknown>;
 
-type SettingsSection = { title?: string; keys: readonly string[] };
+type SettingsSection = { title?: string; keys: readonly string[]; enabledKey?: string };
 type SettingsGroup = { id: string; title: string; description: string; sections: readonly SettingsSection[] };
 
 const SITE_GROUPS: readonly SettingsGroup[] = [
   { id: "site", title: "站点信息", description: "站点名称、Logo 和 Favicon", sections: [{ title: "基本信息", keys: ["site_name", "site_url", "site_logo", "site_favicon"] }] },
   { id: "security", title: "安全设置", description: "反机器人保护", sections: [{ title: "反机器人", keys: ["anti_bot_mode"] }, { title: "图形验证码", keys: ["captcha_rotate", "captcha_offset", "captcha_warp", "pow_difficulty"] }, { title: "Cloudflare Turnstile", keys: ["turnstile_site_key", "turnstile_secret_key"] }] },
+  { id: "oauth", title: "第三方登录", description: "允许用户通过 GitHub 或 LinuxDo 账号登录。", sections: [{ title: "GitHub OAuth App", enabledKey: "github_enabled", keys: ["github_client_id", "github_client_secret"] }, { title: "LinuxDo Connect", enabledKey: "linuxdo_enabled", keys: ["linuxdo_client_id", "linuxdo_client_secret"] }, { title: "授权流程", keys: ["oauth_attempt_ttl_seconds"] }] },
   { id: "footer", title: "页脚配置", description: "页脚链接、版权和备案信息", sections: [{ title: "页脚内容", keys: ["footer_links", "footer_copyright"] }, { title: "备案信息", keys: ["icp_number", "police_record_number"] }] },
   { id: "inject", title: "代码注入", description: "自定义样式、脚本与 HTML 注入", sections: [{ title: "样式与脚本", keys: ["custom_css", "custom_javascript"] }, { title: "HTML 注入", keys: ["head_html", "body_end_html"] }, { title: "网站统计", keys: ["analytics_code"] }] },
 ];
@@ -90,7 +91,7 @@ export function AdminSettingsV2({ onMessage, onDirtyChange }: { onMessage: (mess
   }).catch((error: unknown) => onMessage(error instanceof Error ? error.message : "设置加载失败")), [onMessage]);
   useEffect(() => { load(); }, [load]);
   const runtimeGroup: SettingsGroup | null = useMemo(() => {
-    const runtimeSettings = settings.filter((item) => item.group !== "站点信息" && item.group !== "页面配置" && item.group !== "安全设置" && item.group !== NOTIFICATION_GROUP);
+    const runtimeSettings = settings.filter((item) => item.group !== "站点信息" && item.group !== "页面配置" && item.group !== "安全设置" && item.group !== "第三方登录" && item.group !== NOTIFICATION_GROUP);
     if (!runtimeSettings.length) return null;
     const names = Array.from(new Set(runtimeSettings.map((item) => item.group)));
     return {
@@ -116,7 +117,7 @@ export function AdminSettingsV2({ onMessage, onDirtyChange }: { onMessage: (mess
   const groups: readonly SettingsGroup[] = [...SITE_GROUPS, ...(runtimeGroup ? [runtimeGroup] : []), ...(notificationGroup ? [notificationGroup] : [])];
   const activeGroup = groups.find((group) => group.id === activeId) ?? groups[0];
   const antiBotMode = String(draft.anti_bot_mode ?? "disabled");
-  const sections = (activeGroup?.sections ?? []).map((section) => ({ title: section.title, settings: section.keys.map((key) => settings.find((item) => item.key === key)).filter((item): item is GlobalSetting => Boolean(item)).filter((setting) => activeGroup?.id !== "security" || setting.key === "anti_bot_mode" || (antiBotMode === "image_captcha" && ["captcha_rotate", "captcha_offset", "captcha_warp", "pow_difficulty"].includes(setting.key)) || (antiBotMode === "turnstile" && ["turnstile_site_key", "turnstile_secret_key"].includes(setting.key))) })).filter((section) => section.settings.length);
+  const sections = (activeGroup?.sections ?? []).map((section) => ({ title: section.title, enabledKey: section.enabledKey, settings: section.keys.map((key) => settings.find((item) => item.key === key)).filter((item): item is GlobalSetting => Boolean(item)).filter((setting) => activeGroup?.id !== "security" || setting.key === "anti_bot_mode" || (antiBotMode === "image_captcha" && ["captcha_rotate", "captcha_offset", "captcha_warp", "pow_difficulty"].includes(setting.key)) || (antiBotMode === "turnstile" && ["turnstile_site_key", "turnstile_secret_key"].includes(setting.key))) })).filter((section) => section.settings.length);
   const dirtySettings = settings.filter((item) => !same(draft[item.key], displayValue(item)));
   const dirty = dirtySettings.length > 0;
   useEffect(() => { onDirtyChange(dirty); return () => onDirtyChange(false); }, [dirty, onDirtyChange]);
@@ -140,5 +141,8 @@ export function AdminSettingsV2({ onMessage, onDirtyChange }: { onMessage: (mess
       onMessage("设置已保存");
     } catch (error) { onMessage(error instanceof Error ? error.message : "设置保存失败"); } finally { setSaving(false); }
   };
-  return <div className="settings-route-shell picasso-settings"><aside className="settings-index" aria-label="系统设置分类"><div className="settings-index-title"><b>系统设置</b></div><nav>{groups.map((group) => <button key={group.id} className={group.id === activeGroup?.id ? "active" : ""} onClick={() => setActiveId(group.id)}><span>{group.title}</span></button>)}</nav></aside><div className="settings-route-main"><header className="picasso-settings-head"><div><h1>{activeGroup?.title || "系统设置"}</h1><p>{activeGroup?.description}</p></div><div className="admin-settings-actions">{dirty && <span className="unsaved-indicator"><i />有未保存的修改</span>}<button className="primary" onClick={save} disabled={saving || !dirty}>{saving && <LoaderCircle className="spin" size={16} />}保存设置</button></div></header><section className="picasso-settings-form">{sections.map((section) => <section className="picasso-setting-section" key={section.title || "default"}>{section.title && <header><h2>{section.title}</h2></header>}{section.settings.some((setting) => RATE_LIMIT_KEYS.has(setting.key)) ? <RateLimitSettings settings={section.settings} draft={draft} onChange={change} /> : <div className="picasso-setting-list">{section.settings.map((setting) => <div className={`picasso-setting-row editor-${setting.editor}`} key={setting.key}><div className="picasso-setting-copy"><b>{setting.label}</b><small>{setting.description}</small></div><div className="picasso-setting-editor"><SettingEditor setting={setting} value={draft[setting.key]} onChange={(value) => change(setting.key, value)} /></div></div>)}</div>}</section>)}{activeGroup?.id === "notifications" && <TestEmailControl onMessage={onMessage} />}{!settings.length && <div className="empty">正在读取设置…</div>}</section></div></div>;
+  return <div className="settings-route-shell picasso-settings"><aside className="settings-index" aria-label="系统设置分类"><div className="settings-index-title"><b>系统设置</b></div><nav>{groups.map((group) => <button key={group.id} className={group.id === activeGroup?.id ? "active" : ""} onClick={() => setActiveId(group.id)}><span>{group.title}</span></button>)}</nav></aside><div className="settings-route-main"><header className="picasso-settings-head"><div><h1>{activeGroup?.title || "系统设置"}</h1><p>{activeGroup?.description}</p></div><div className="admin-settings-actions">{dirty && <span className="unsaved-indicator"><i />有未保存的修改</span>}<button className="primary" onClick={save} disabled={saving || !dirty}>{saving && <LoaderCircle className="spin" size={16} />}保存设置</button></div></header><section className="picasso-settings-form">{sections.map((section) => <section className="picasso-setting-section" key={section.title || "default"}>
+    {section.title && <header className={section.enabledKey ? "oauth-provider-heading" : undefined}><h2>{section.title}</h2>{section.enabledKey && <Switch.Root className="switch" aria-label={`启用 ${section.title} 登录`} checked={Boolean(draft[section.enabledKey])} disabled={saving} onCheckedChange={(value) => change(section.enabledKey!, value)}><Switch.Thumb className="switch-thumb" /></Switch.Root>}</header>}
+    {section.settings.some((setting) => RATE_LIMIT_KEYS.has(setting.key)) ? <RateLimitSettings settings={section.settings} draft={draft} onChange={change} /> : <div className="picasso-setting-list">{section.settings.map((setting) => <div className={`picasso-setting-row editor-${setting.editor}`} key={setting.key}><div className="picasso-setting-copy"><b>{setting.label}</b><small>{setting.description}</small></div><div className="picasso-setting-editor"><SettingEditor setting={setting} value={draft[setting.key]} onChange={(value) => change(setting.key, value)} /></div></div>)}</div>}
+  </section>)}{activeGroup?.id === "notifications" && <TestEmailControl onMessage={onMessage} />}{!settings.length && <div className="empty">正在读取设置…</div>}</section></div></div>;
 }

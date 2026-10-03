@@ -12,7 +12,7 @@ def frontend_directory(tmp_path: Path) -> Path:
     directory = tmp_path / "frontend"
     assets = directory / "assets"
     assets.mkdir(parents=True)
-    (directory / "index.html").write_text("<div id=\"root\">app</div>", encoding="utf-8")
+    (directory / "index.html").write_text('<div id="root">app</div>', encoding="utf-8")
     (assets / "app-123.js").write_text("console.log('app')", encoding="utf-8")
     (directory / "default.svg").write_text("<svg />", encoding="utf-8")
     return directory
@@ -41,9 +41,9 @@ def test_oauth_empty_state_and_cors(tmp_path: Path) -> None:
         cors_origins=["http://localhost:5173"],
     )
     with TestClient(create_app(settings)) as client:
-        providers = client.get("/api/v1/auth/oauth2/providers")
+        providers = client.get("/api/v1/auth/oauth2/availability")
         assert providers.status_code == 200
-        assert providers.json() == {"items": []}
+        assert providers.json() == {"github": False, "linuxdo": False}
         unavailable = client.get("/api/v1/auth/oauth2/github/authorize")
         assert unavailable.status_code == 404
         assert unavailable.json()["code"] == "oauth_provider_not_found"

@@ -19,6 +19,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         env_prefix="DOMAINSMANAGER_",
         extra="ignore",
+        hide_input_in_errors=True,
     )
 
     app_name: str = "DomainsManager"
@@ -102,7 +103,6 @@ class Settings(BaseSettings):
     request_id_header: str = "X-Request-ID"
     docs_enabled: bool = False
     cors_origins: list[str] = Field(default_factory=list)
-    oauth_providers: list[str] = Field(default_factory=list)
     api_prefix: str = Field(default="/api/v1", pattern=r"^/[a-z0-9/_-]+$")
     frontend_dist_path: Path | None = None
 
@@ -131,7 +131,10 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def validate_settings(self) -> "Settings":
-        if "smtp_encryption" not in self.model_fields_set and "smtp_starttls" in self.model_fields_set:
+        if (
+            "smtp_encryption" not in self.model_fields_set
+            and "smtp_starttls" in self.model_fields_set
+        ):
             self.smtp_encryption = "starttls" if self.smtp_starttls else "none"
         self.smtp_starttls = self.smtp_encryption == "starttls"
         username_set = self.bootstrap_admin_username is not None
@@ -141,7 +144,9 @@ class Settings(BaseSettings):
                 "bootstrap admin username and password must be configured together"
             )
         if "*" in self.cors_origins:
-            raise ValueError("cors_origins cannot include '*' when credentials are enabled")
+            raise ValueError(
+                "cors_origins cannot include '*' when credentials are enabled"
+            )
         if self.task_retry_max_seconds < self.task_retry_base_seconds:
             raise ValueError(
                 "task retry max seconds must not be less than the base delay"

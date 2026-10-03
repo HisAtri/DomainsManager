@@ -3,8 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 from types import TracebackType
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, Self
 from uuid import UUID
+
+if TYPE_CHECKING:
+    from domainsmanager_application.oauth import OAuthRepository
 
 
 class DuplicateRecordError(RuntimeError):
@@ -32,6 +35,8 @@ class UserRecord:
     updated_at: datetime
     pending_email: str | None = None
     email_verified_at: datetime | None = None
+    password_auth_enabled: bool = True
+    username_setup_required: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +78,10 @@ class AuditEvent:
 
 
 class UserRepository(Protocol):
+    async def complete_username_setup(
+        self, user_id: UUID, username: str, normalized: str, at: datetime
+    ) -> None: ...
+
     async def count(self) -> int: ...
 
     async def get_by_id(
@@ -207,8 +216,9 @@ class UnitOfWork(Protocol):
     domains: DomainRepository
     tasks: TaskRepository
     notifications: NotificationRepository
+    oauth: OAuthRepository
 
-    async def __aenter__(self) -> UnitOfWork: ...
+    async def __aenter__(self) -> Self: ...
 
     async def __aexit__(
         self,

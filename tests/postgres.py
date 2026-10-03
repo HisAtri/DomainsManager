@@ -16,6 +16,8 @@ PROJECT_TABLES = {
     "app_user",
     "auth_refresh_token",
     "auth_session",
+    "user_auth_identity",
+    "oauth_authorization_attempt",
     "domain_check",
     "domain_refresh_task",
     "endpoint_request_gate",

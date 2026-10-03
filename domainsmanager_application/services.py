@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
@@ -169,7 +169,7 @@ class AuthService:
 
         async with self._unit_of_work() as uow:
             user = await uow.users.get_by_username(normalized)
-            if user is None:
+            if user is None or not user.password_auth_enabled:
                 await self._verify_dummy_password(password)
                 raise AuthenticationError("credentials are invalid")
             if not await self._verify_password(password, user.password_hash):
@@ -198,18 +198,29 @@ class AuthService:
         except InvalidRefreshTokenError as error:
             raise InvalidTokenError("refresh token is invalid") from error
 
+        resolved = await self._resolve_refresh_session(token_id, digest)
+        if resolved is None:
+            raise InvalidTokenError("refresh token is unavailable")
+
         replay_session_id: UUID | None = None
         try:
             async with self._unit_of_work() as uow:
+                # 与 OAuth 凭据变更统一先锁用户，避免令牌锁与用户锁交叉等待。
+                # 预读仅用于定位锁；所有授权状态必须在锁内重新读取。
+                await uow.oauth.lock_user(resolved.user_id)
                 token = await uow.sessions.get_token(token_id, for_update=True)
                 if token is None or not self._refresh_tokens.matches(
                     token.token_hash, digest
                 ):
                     raise InvalidTokenError("refresh token is invalid")
+                if token.session_id != resolved.id:
+                    raise InvalidTokenError("refresh token is unavailable")
                 session = await uow.sessions.get_session(
                     token.session_id,
                     for_update=True,
                 )
+                if session is None or session.user_id != resolved.user_id:
+                    raise InvalidTokenError("refresh token is unavailable")
                 now = self._clock()
                 if token.consumed_at is not None:
                     replay_session_id = token.session_id
@@ -266,14 +277,25 @@ class AuthService:
             token_id, digest = self._refresh_tokens.parse(value)
         except InvalidRefreshTokenError:
             return
+        resolved = await self._resolve_refresh_session(token_id, digest)
+        if resolved is None:
+            return
         async with self._unit_of_work() as uow:
+            # 注销也修改会话及令牌，必须参与同一用户级串行化。
+            await uow.oauth.lock_user(resolved.user_id)
             token = await uow.sessions.get_token(token_id)
             if token is None or not self._refresh_tokens.matches(
                 token.token_hash, digest
             ):
                 return
+            if token.session_id != resolved.id:
+                return
             session = await uow.sessions.get_session(token.session_id)
-            if session is None or session.revoked_at is not None:
+            if (
+                session is None
+                or session.user_id != resolved.user_id
+                or session.revoked_at is not None
+            ):
                 return
             now = self._clock()
             await uow.sessions.revoke_session(session.id, now, "logout")
@@ -309,6 +331,27 @@ class AuthService:
                 raise InvalidTokenError("access token predates password change")
             return AuthenticatedUser(user=user, session=session)
 
+    async def validate_refresh_session(
+        self, value: str, expected_session_id: UUID
+    ) -> None:
+        """绑定回调只验证当前 cookie，不轮换 token，避免与前端恢复会话竞争。"""
+        try:
+            token_id, digest = self._refresh_tokens.parse(value)
+        except InvalidRefreshTokenError:
+            raise InvalidTokenError("linking session is unavailable") from None
+        async with self._unit_of_work() as uow:
+            token = await uow.sessions.get_token(token_id)
+            session = await uow.sessions.get_session(expected_session_id)
+            if (
+                token is None
+                or session is None
+                or token.session_id != expected_session_id
+                or token.consumed_at is not None
+                or not self._refresh_tokens.matches(token.token_hash, digest)
+                or not self._token_is_active(token, session, self._clock())
+            ):
+                raise InvalidTokenError("linking session is unavailable")
+
     async def get_user(self, user_id: UUID) -> UserRecord:
         async with self._unit_of_work() as uow:
             user = await uow.users.get_by_id(user_id)
@@ -330,7 +373,10 @@ class AuthService:
                 raise InvalidTokenError("user is unavailable")
             self._ensure_user_active(user)
             await uow.users.update_profile(
-                user.id, email=email, email_verified_at=now if email is not None else None, updated_at=now
+                user.id,
+                email=email,
+                email_verified_at=now if email is not None else None,
+                updated_at=now,
             )
             await uow.audits.add(
                 self._audit("user.profile_updated", now, context, user.id, user.id)
@@ -503,6 +549,18 @@ class AuthService:
             expires_in=int(self._configuration.access_ttl.total_seconds()),
         )
 
+    async def _resolve_refresh_session(
+        self, token_id: UUID, digest: bytes
+    ) -> SessionRecord | None:
+        # 独立只读事务在取写锁前结束，避免 SQLite 读事务升级及旧快照问题。
+        async with self._unit_of_work() as uow:
+            token = await uow.sessions.get_token(token_id)
+            if token is None or not self._refresh_tokens.matches(
+                token.token_hash, digest
+            ):
+                return None
+            return await uow.sessions.get_session(token.session_id)
+
     async def _session_id_for_token(self, token_id: UUID) -> UUID | None:
         async with self._unit_of_work() as uow:
             token = await uow.sessions.get_token(token_id)
@@ -513,11 +571,17 @@ class AuthService:
         session_id: UUID,
         context: AuthContext,
     ) -> None:
-        now = self._clock()
         async with self._unit_of_work() as uow:
+            resolved = await uow.sessions.get_session(session_id)
+        if resolved is None:
+            return
+        async with self._unit_of_work() as uow:
+            # 重放后的补偿撤销同样先锁用户，不能重新引入会话到用户的反向锁序。
+            await uow.oauth.lock_user(resolved.user_id)
             session = await uow.sessions.get_session(session_id, for_update=True)
-            if session is None:
+            if session is None or session.user_id != resolved.user_id:
                 return
+            now = self._clock()
             await uow.sessions.revoke_session(
                 session.id,
                 now,
@@ -555,21 +619,7 @@ class AuthService:
 
     @staticmethod
     def _replace_user_last_login(user: UserRecord, at: datetime) -> UserRecord:
-        return UserRecord(
-            id=user.id,
-            username=user.username,
-            username_normalized=user.username_normalized,
-            password_hash=user.password_hash,
-            email=user.email,
-            role=user.role,
-            preferences=user.preferences,
-            is_active=user.is_active,
-            banned_at=user.banned_at,
-            password_changed_at=user.password_changed_at,
-            last_login_at=at,
-            created_at=user.created_at,
-            updated_at=at,
-        )
+        return replace(user, last_login_at=at, updated_at=at)
 
     async def _hash_password(self, password: str) -> str:
         return await asyncio.to_thread(self._passwords.hash, password)

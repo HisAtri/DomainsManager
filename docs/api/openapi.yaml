@@ -4,7 +4,7 @@ info:
   version: 0.1.0
   summary: DomainsManager 后端 API 初版契约
   description: |
-    本文档定义 FastAPI HTTP 接口。健康检查、本地认证、当前用户、用户域名、刷新任务、检查历史和基础管理员接口已实现。OAuth2 仅提供 Provider 配置状态；真实第三方授权和账号绑定仍待实现。
+    本文档定义 FastAPI HTTP 接口，包括健康检查、本地认证、当前用户、用户域名、刷新任务、检查历史、管理员接口，以及 OAuth2 第三方登录和账号绑定。
     所有时间均为 UTC RFC 3339 时间；除公开认证端点外均使用 Bearer Access Token。
 servers:
   - url: /api/v1
@@ -300,6 +300,52 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '422': { $ref: '#/components/responses/ValidationError' }
         '429': { $ref: '#/components/responses/RateLimited' }
+  /auth/me/username:
+    post:
+      tags: [OAuth2]
+      operationId: setInitialUsername
+      summary: 首次 OAuth 开户后一次性设置本站用户名
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [username]
+              properties:
+                username: { type: string, minLength: 3, maxLength: 128, pattern: '^[A-Za-z0-9_.-]+$' }
+      responses:
+        '200':
+          description: 用户名已设置，引导已完成
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /auth/me/password/set:
+    post:
+      tags: [Current user]
+      operationId: setInitialPassword
+      summary: 为尚未启用密码登录的当前用户设置初始密码
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SetInitialPasswordRequest' }
+      responses:
+        '204': { description: 初始密码已设置 }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/RateLimited' }
   /auth/me/settings:
     get:
       tags: [Current user]
@@ -329,97 +375,108 @@ paths:
               schema: { $ref: '#/components/schemas/UserSettings' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/ValidationError' }
-  /auth/oauth2/providers:
+  /auth/oauth2/availability:
     get:
       tags: [OAuth2]
-      operationId: listOAuth2Providers
-      summary: 列出启用的第三方登录 Provider
+      operationId: getOAuth2Availability
+      summary: 查询 GitHub 与 LinuxDo 是否已配置
       security: []
       responses:
         '200':
-          description: Provider 列表，未配置时为空
+          description: 两种固定接入的可用状态
           content:
             application/json:
               schema:
                 type: object
-                required: [items]
+                required: [github, linuxdo]
                 properties:
-                  items:
-                    type: array
-                    items: { $ref: '#/components/schemas/OAuth2Provider' }
-  /auth/oauth2/{provider}/authorize:
+                  github: { type: boolean }
+                  linuxdo: { type: boolean }
+  /auth/oauth2/github/authorize:
     get:
       tags: [OAuth2]
-      operationId: beginOAuth2Authorization
-      summary: 开始第三方登录授权
+      operationId: beginGitHubAuthorization
+      summary: 发起 GitHub 登录
       security: []
-      parameters:
-        - $ref: '#/components/parameters/Provider'
-        - name: redirect_uri
-          in: query
-          required: true
-          schema: { type: string, format: uri }
+      responses:
+        '302': { description: 跳转 GitHub 授权页 }
+    post:
+      tags: [OAuth2]
+      operationId: beginGitHubLink
+      summary: 绑定 GitHub 账号
+      security: [{ bearerAuth: [] }]
       responses:
         '200':
-          description: 短时有效的授权地址和一次性 state
+          description: 返回 GitHub 授权地址
           content:
             application/json:
               schema: { $ref: '#/components/schemas/OAuth2Authorization' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '422': { $ref: '#/components/responses/ValidationError' }
-        '429': { $ref: '#/components/responses/RateLimited' }
-  /auth/oauth2/{provider}/callback:
+  /auth/oauth2/github/callback:
     get:
       tags: [OAuth2]
-      operationId: completeOAuth2Authorization
-      summary: 处理第三方登录回调
+      operationId: completeGitHubAuthorization
+      summary: 处理 GitHub 回调
       security: []
-      parameters:
-        - $ref: '#/components/parameters/Provider'
-        - { name: code, in: query, required: true, schema: { type: string, minLength: 1 } }
-        - { name: state, in: query, required: true, schema: { type: string, minLength: 16 } }
       responses:
-        '200':
-          description: 第三方登录成功
-          content:
-            application/json:
-              schema: { $ref: '#/components/schemas/AuthResult' }
-        '401': { $ref: '#/components/responses/AuthenticationFailed' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '429': { $ref: '#/components/responses/RateLimited' }
-  /auth/me/oauth2/{provider}:
+        '303': { description: 完成后跳回站点 }
+  /auth/oauth2/linuxdo/authorize:
+    get:
+      tags: [OAuth2]
+      operationId: beginLinuxDoAuthorization
+      summary: 发起 LinuxDo 登录
+      security: []
+      responses:
+        '302': { description: 跳转 LinuxDo 授权页 }
     post:
       tags: [OAuth2]
-      operationId: bindOAuth2Identity
-      summary: 绑定第三方身份
-      parameters:
-        - $ref: '#/components/parameters/Provider'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/OAuth2BindRequest' }
+      operationId: beginLinuxDoLink
+      summary: 绑定 LinuxDo 账号
+      security: [{ bearerAuth: [] }]
       responses:
-        '201':
-          description: 绑定成功
+        '200':
+          description: 返回 LinuxDo 授权地址
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/OAuth2Identity' }
+              schema: { $ref: '#/components/schemas/OAuth2Authorization' }
+  /auth/oauth2/linuxdo/callback:
+    get:
+      tags: [OAuth2]
+      operationId: completeLinuxDoAuthorization
+      summary: 处理 LinuxDo 回调
+      security: []
+      responses:
+        '303': { description: 完成后跳回站点 }
+  /auth/oauth2/accounts:
+    get:
+      tags: [OAuth2]
+      operationId: listOAuth2Accounts
+      summary: 列出当前用户绑定的第三方账号及密码登录状态
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 已绑定账号列表
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuth2Accounts' }
         '401': { $ref: '#/components/responses/Unauthorized' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/Conflict' }
-        '422': { $ref: '#/components/responses/ValidationError' }
+  /auth/oauth2/github:
     delete:
       tags: [OAuth2]
-      operationId: unbindOAuth2Identity
-      summary: 解绑第三方身份
-      description: 若解绑后用户没有任何可用登录方式，则返回冲突。
-      parameters:
-        - $ref: '#/components/parameters/Provider'
+      operationId: unlinkGitHubIdentity
+      summary: 解绑 GitHub 身份
+      security: [{ bearerAuth: [] }]
       responses:
-        '204': { description: 已解绑或原本未绑定 }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        '204': { description: 已解绑 }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /auth/oauth2/linuxdo:
+    delete:
+      tags: [OAuth2]
+      operationId: unlinkLinuxDoIdentity
+      summary: 解绑 LinuxDo 身份
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: 已解绑 }
         '409': { $ref: '#/components/responses/Conflict' }
   /admin/users:
     get:
@@ -1065,7 +1122,6 @@ components:
     DomainId: { name: domain_id, in: path, required: true, schema: { type: string, format: uuid } }
     CheckId: { name: check_id, in: path, required: true, schema: { type: string, format: uuid } }
     TaskId: { name: task_id, in: path, required: true, schema: { type: string, format: uuid } }
-    Provider: { name: provider, in: path, required: true, schema: { type: string, pattern: '^[a-z][a-z0-9_-]{1,31}$' } }
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -1238,8 +1294,10 @@ components:
     User:
       type: object
       additionalProperties: false
-      required: [id, username, role, status, created_at, updated_at]
+      required: [id, username, role, status, created_at, updated_at, password_auth_enabled, username_setup_required]
       properties:
+        password_auth_enabled: { type: boolean }
+        username_setup_required: { type: boolean, description: 是否需要完成一次性用户名引导 }
         id: { type: string, format: uuid }
         username: { type: string }
         email: { type: [string, 'null'], format: email }
@@ -1292,6 +1350,12 @@ components:
       properties:
         current_password: { type: string, format: password, minLength: 1, maxLength: 256 }
         new_password: { type: string, format: password, minLength: 6, maxLength: 256 }
+    SetInitialPasswordRequest:
+      type: object
+      additionalProperties: false
+      required: [new_password]
+      properties:
+        new_password: { type: string, format: password, minLength: 6, maxLength: 256 }
     UserSettings:
       type: object
       additionalProperties: false
@@ -1318,36 +1382,30 @@ components:
           uniqueItems: true
           maxItems: 10
           items: { type: integer, minimum: 0, maximum: 365 }
-    OAuth2Provider:
-      type: object
-      additionalProperties: false
-      required: [key, display_name]
-      properties:
-        key: { type: string }
-        display_name: { type: string }
     OAuth2Authorization:
       type: object
       additionalProperties: false
-      required: [authorization_url, state, expires_at]
+      required: [authorization_url]
       properties:
         authorization_url: { type: string, format: uri }
-        state: { type: string }
-        expires_at: { type: string, format: date-time }
-    OAuth2BindRequest:
+    OAuth2Accounts:
       type: object
       additionalProperties: false
-      required: [code, state]
+      required: [items, password_auth_enabled]
       properties:
-        code: { type: string, minLength: 1 }
-        state: { type: string, minLength: 16 }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/OAuth2Identity' }
+        password_auth_enabled: { type: boolean }
     OAuth2Identity:
       type: object
       additionalProperties: false
-      required: [provider, provider_username, bound_at]
+      required: [provider_key, provider_username, display_name, created_at]
       properties:
-        provider: { type: string }
+        provider_key: { type: string }
         provider_username: { type: [string, 'null'] }
-        bound_at: { type: string, format: date-time }
+        display_name: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
     AdminUser:
       type: object
       additionalProperties: false

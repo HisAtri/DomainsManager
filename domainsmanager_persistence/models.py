@@ -70,6 +70,12 @@ class AppUser(TimestampMixin, Base):
         String(128), unique=True, nullable=False
     )
     password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
+    password_auth_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true"), nullable=False
+    )
+    username_setup_required: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("false"), nullable=False
+    )
     email: Mapped[str | None] = mapped_column(String(320))
     pending_email: Mapped[str | None] = mapped_column(String(320))
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -91,6 +97,61 @@ class AppUser(TimestampMixin, Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class UserAuthIdentity(TimestampMixin, Base):
+    __tablename__ = "user_auth_identity"
+    __table_args__ = (
+        UniqueConstraint("provider_key", "provider_subject"),
+        UniqueConstraint("user_id", "provider_key"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("app_user.id", ondelete="CASCADE"), nullable=False
+    )
+    provider_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider_subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    provider_username: Mapped[str | None] = mapped_column(String(255))
+    display_name: Mapped[str | None] = mapped_column(String(255))
+    avatar_url: Mapped[str | None] = mapped_column(String(2048))
+    profile_json: Mapped[dict[str, Any]] = mapped_column(
+        JSON_TYPE, default=dict, nullable=False
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OAuthAuthorizationAttempt(Base):
+    __tablename__ = "oauth_authorization_attempt"
+    __table_args__ = (
+        CheckConstraint("intent IN ('login', 'link')", name="oauth_intent"),
+        CheckConstraint(
+            "(intent = 'login' AND user_id IS NULL AND session_id IS NULL) OR (intent = 'link' AND user_id IS NOT NULL AND session_id IS NOT NULL)",
+            name="oauth_link_owner",
+        ),
+        Index("ix_oauth_attempt_expires", "expires_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default=uuid4)
+    provider_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    intent: Mapped[str] = mapped_column(String(16), nullable=False)
+    state_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    browser_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("app_user.id", ondelete="CASCADE")
+    )
+    session_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("auth_session.id", ondelete="CASCADE")
+    )
+    return_to: Mapped[str] = mapped_column(String(128), nullable=False)
+    code_verifier: Mapped[bytes | None] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class EmailVerificationChallenge(Base):
     __tablename__ = "email_verification_challenge"
     __table_args__ = (
@@ -104,8 +165,12 @@ class EmailVerificationChallenge(Base):
     )
     email: Mapped[str] = mapped_column(String(320), nullable=False)
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
@@ -323,7 +388,9 @@ class EndpointRequestGate(Base):
     lease_token: Mapped[UUID | None] = mapped_column(Uuid)
     lease_owner: Mapped[str | None] = mapped_column(String(128))
     lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
 
 class IdempotencyRecord(Base):

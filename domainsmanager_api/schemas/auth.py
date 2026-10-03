@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Annotated, Literal
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -36,6 +36,10 @@ class ChangePasswordRequest(StrictModel):
     new_password: str = Field(min_length=6, max_length=256)
 
 
+class SetUsernameRequest(StrictModel):
+    username: str = Field(min_length=3, max_length=128, pattern=r"^[A-Za-z0-9_.-]+$")
+
+
 class UserSettings(StrictModel):
     locale: Literal["zh-CN", "en-US"] = "zh-CN"
     timezone: str = Field(default="UTC", min_length=1, max_length=64)
@@ -66,9 +70,9 @@ class UserSettingsPatch(StrictModel):
     locale: Literal["zh-CN", "en-US"] | None = None
     timezone: str | None = Field(default=None, min_length=1, max_length=64)
     default_monitor_enabled: bool | None = None
-    expiration_warning_days: list[
-        Annotated[int, Field(ge=0, le=365)]
-    ] | None = Field(default=None, max_length=10)
+    expiration_warning_days: list[Annotated[int, Field(ge=0, le=365)]] | None = Field(
+        default=None, max_length=10
+    )
 
     @field_validator("timezone")
     @classmethod
@@ -95,6 +99,8 @@ class UserResponse(StrictModel):
     email: EmailStr | None
     pending_email: EmailStr | None = None
     email_verified_at: datetime | None = None
+    password_auth_enabled: bool = True
+    username_setup_required: bool = False
     role: Literal["user", "admin"]
     status: Literal["active", "banned"]
     last_login_at: datetime | None

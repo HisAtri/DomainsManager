@@ -10,11 +10,30 @@ REQUEST_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]{8,128}$")
 logger = logging.getLogger("domainsmanager.access")
 
 
+class OAuthAccessLogFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        # Uvicorn 的访问日志包含完整查询串；授权码与 state 不应进入日志。
+        if isinstance(record.args, tuple) and len(record.args) == 5:
+            path = record.args[2]
+            if isinstance(path, str) and "/auth/oauth2/" in path:
+                record.args = (
+                    *record.args[:2],
+                    path.split("?", 1)[0],
+                    *record.args[3:],
+                )
+        return True
+
+
 class RequestIdMiddleware:
     def __init__(self, app: ASGIApp, header_name: str = "X-Request-ID") -> None:
         self.app = app
         self.header_name = header_name
         self.header_bytes = header_name.lower().encode("ascii")
+        access_logger = logging.getLogger("uvicorn.access")
+        if not any(
+            isinstance(item, OAuthAccessLogFilter) for item in access_logger.filters
+        ):
+            access_logger.addFilter(OAuthAccessLogFilter())
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -22,9 +41,7 @@ class RequestIdMiddleware:
             return
 
         headers = dict(scope.get("headers", []))
-        supplied = headers.get(self.header_bytes, b"").decode(
-            "ascii", errors="ignore"
-        )
+        supplied = headers.get(self.header_bytes, b"").decode("ascii", errors="ignore")
         request_id = supplied if REQUEST_ID_PATTERN.fullmatch(supplied) else uuid4().hex
         scope.setdefault("state", {})["request_id"] = request_id
         started_at = perf_counter()
